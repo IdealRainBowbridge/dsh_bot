@@ -25,6 +25,7 @@ const COMMANDS = {
   'bili-me': '她的账号台：bili-me 看自己是谁（B站mid/等级/签名/QQ两号）| bili-me sign 看签名 | bili-me sign --set 文字 改签名（B站号的签名，归她管）',
   'bili-submit': 'B站自动投稿：bili-submit video.mp4 --title 标题 --tid 21 --tags a,b --desc 简介 [--cover 封面] [--dry]。preupload→分片→合并→提交全自动',
   'bili-del': '删除她自己的B站投稿：bili-del BV号 [--go]（默认干跑）。她自己清理测试稿/不满意的作品用',
+  wander: '自主探索：wander check 看念头原材料 ｜ wander 直接做一个（LLM自主产生念头+执行）',
   tattle: '打小报告：tattle --title 标题 --bvid BV号 --score 分 --reason 理由——看完好视频后 QQ 私信汇报给笨蛋老爹（每天最多3条，config.tattle.dailyMax 可调）',
   nav: '登录验证 / 我是谁',
   feed: '选题：热门+搜索，偏好加权',

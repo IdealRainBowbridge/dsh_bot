@@ -1479,6 +1479,12 @@ export async function run(argv = []) {
         }).catch((e) => console.log("[qq] 睡眠钩子失败：" + String(e && e.message || e).slice(0, 80)))
       }
       // share-queue consumer (10-31): fun non-report events -> timed casual share.
+      import('../lib/wander.mjs').then(async ({ doWander }) => {
+        try {
+          const wr = await doWander()
+          if (wr) log('[qq] ð 自主探索：' + wr.want.slice(0, 60))
+        } catch {}
+      }).catch(() => {})
       import('../lib/share-queue.mjs').then(async ({ shareTick }) => {
         try {
           const r = await shareTick()
