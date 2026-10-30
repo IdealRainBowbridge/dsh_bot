@@ -304,7 +304,7 @@ export function brief(r) {
     // 官方 credit 口径（10-30 v2）：宿主聚合器算好的「此刻可用」。
     // 单位是官方积分（credit），不是钱也不是次数；每日会随账号刷新回血。
     const u = r.balance.usableNow ?? r.balance.usableToday ?? r.balance.total
-    p.push(`现在可用 ${u} 积分`)
+    p.push(u < 100 ? `额度快见底了（剩 ${u} 积分），今天省着点用` : `现在可用 ${u} 积分`)
   } else if (r.balance) p.push(`钱包余额 ¥${r.balance.total}（按这个花法还能撑 ${r.runwayDays} 天）`)
   return p.join(' ； ')
 }
