@@ -1214,6 +1214,33 @@ export async function run(argv = []) {
         if (dg) hooks.push('你最近写给主人的日记里那句：' + dg.replace(/^[-#\s]+/, '').slice(0, 50))
       } catch {}
       try { const li = memory.loreInterests(1); if (li.length) hooks.push('最近挂在心上：' + String(li[0]).slice(0, 40)) } catch {}
+
+      // ── 智能钩子（10-31 升级）─────────────────────────────────────
+      // ① brain 多路召回：按当前时段+情绪，从统一记忆里捞出真正相关的旧事
+      try {
+        const br = await import('../brain/recall.mjs')
+        const B = br.bundle({ platform: 'qq', chatId: 'qq:' + ownerQQ, userId: ownerQQ, userText: '', limit: 3 })
+        if (B.lines && B.lines.length) hooks.push('记忆里浮上来的（可自然提起）：' + B.lines.slice(0, 2).join('；').slice(0, 120))
+      } catch {}
+      // ② 梦境钩子：昨晚的梦（30% 概率以梦为由头）
+      if (Math.random() < 0.3) {
+        try {
+          const { dreamToMention } = await import('./dream.mjs')
+          const d = dreamToMention()
+          if (d) hooks.push('你昨晚做了个梦（可以讲给他听，说明是梦不是真事）：' + d.text.replace(/^【梦】/, '').slice(0, 80))
+        } catch {}
+      }
+      // ③ 时间语义：周几+节假日感
+      {
+        const dow = new Date().getDay()
+        const dowText = dow === 0 ? '周日' : dow === 6 ? '周六' : ['周一','周二','周三','周四','周五'][dow-1]
+        hooks.push('今天' + dowText + (dow === 0 || dow === 6 ? '（周末，他可能在家休息）' : dow === 1 ? '（新的一周开始了）' : dow === 5 ? '（周五，快熬出头了）' : '（工作日）'))
+      }
+      // ④ 小报告节流：刚打完小报告 2h 内不再主动搭话（防连发骚扰）
+      try {
+        const tt = JSON.parse(fs.readFileSync(dataPath('tattle.json'), 'utf8'))
+        if (tt.lastAt && Date.now() - Number(tt.lastAt) < 2 * 3600_000) return
+      } catch {}
       const lastProact = readProact()
       const lastType = String(lastProact.lastType || '')
 
