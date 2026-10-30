@@ -2,6 +2,7 @@
 // 用途：抖音/B站看到有意思的视频，直接发一条 QQ 给主人，附链接 + 她自己的吐槽。
 // ⚠️ 发出去的话必须同步写进 QQ 对话记忆（10-24 实锤的脱节坑）：不记的话，
 // 鱼看自己的 QQ 聊天流不知道"我刚分享过"，主人问起就一脸懵。
+import fs from 'node:fs'
 import { config } from './config.mjs'
 import * as memory from './memory.mjs'
 import * as brainDelivery from '../brain/delivery.mjs'
@@ -26,6 +27,25 @@ export async function sendOwnerQQ(text) {
   for (let attempt = 0; attempt < waits.length; attempt++) {
     if (waits[attempt]) await new Promise((s) => setTimeout(s, waits[attempt]))
     try {
+      // 跨窗口去重（10-31）：如果同一文本 5 秒内已在另一个 chatId 发过，跳过。
+      // 场景：老爹同时私聊+群里说同一件事，她两边都在回复——内容可能撞车。
+      try {
+        const ddPath = dataPath('send-dedup.json')
+        let dd = {}
+        try { dd = JSON.parse(fs.readFileSync(ddPath, 'utf8')) } catch {}
+        const fp = String(content).slice(0, 30)
+        const now2 = Date.now()
+        for (const [k, v] of Object.entries(dd)) {
+          if (v.fp === fp && now2 - v.at < 5000 && v.from !== 'qq:' + ownerQQ) {
+            console.log('[notify] 跨窗口去重：5秒内已在 ' + v.from + ' 发过类似内容，跳过')
+            return { ok: true, deduped: true }
+          }
+        }
+        dd[now2] = { fp, from: 'qq:' + ownerQQ }
+        // 清理 >10s 的旧记录
+        for (const [k, v] of Object.entries(dd)) { if (now2 - Number(k) > 10000) delete dd[k] }
+        fs.writeFileSync(ddPath, JSON.stringify(dd))
+      } catch {}
       // 打字标识（10-31）：推送也是"她在打字"—— 先显示输入状态，发完停止
       try {
         await fetch(`${napcat}/set_input_status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: Number(ownerQQ), event_type: 1 }), signal: AbortSignal.timeout(4000) })

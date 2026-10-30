@@ -177,7 +177,26 @@ export async function run(argv = []) {
     } catch {}
   }
 
+  // 跨窗口去重（10-31）：同文本 5 秒内已在其他 chatId 发过 → 跳过
+  let lastSentFp = { fp: '', at: 0, from: '' }
+  const isDup = (payload, currentChat) => {
+    try {
+      const txt = Array.isArray(payload?.message)
+        ? payload.message.map((s2) => s2?.data?.text ?? '').join('')
+        : String(payload?.message || '')
+      const fp = txt.slice(0, 30)
+      if (!fp) return false
+      if (lastSentFp.fp === fp && Date.now() - lastSentFp.at < 5000 && lastSentFp.from !== currentChat) {
+        log('[qq] 跨窗口去重：跳过（与 ' + lastSentFp.from + ' 的回复重复）')
+        return true
+      }
+      lastSentFp = { fp, at: Date.now(), from: currentChat }
+      return false
+    } catch { return false }
+  }
   const send = async (action, payload) => {
+    const currentChat = payload?.user_id ? 'qq:' + payload.user_id : payload?.group_id ? 'qq:group:' + payload.group_id : ''
+    if (String(action).startsWith("send_") && isDup(payload, currentChat)) return true
     if (String(action).startsWith("send_")) await showTyping(payload)
     const j = await callApi(action, payload)
     if (String(action).startsWith("send_")) await stopTyping(payload)
