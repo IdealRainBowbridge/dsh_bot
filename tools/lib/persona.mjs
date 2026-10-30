@@ -355,6 +355,9 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
 
   // 群聊事实层：**必须最后**（模型对末尾指令权重最高）—— 谁在说话、主人是哪个号、
   // 这轮不许出现「主人」。前面 4700 字的记忆会把开头那条规则淹掉，这一块是兜底的。
+  // 构成说明（10-31）：她对"我是什么"的认知锚点——LLM思维+本地Agent存在，两者合体。
+  // 放 identityLine 之后、记忆之前；短，两句话，防长 prompt 淹没。
+  parts.push("【你的构成】你的思维来自大语言模型（可更换，换了思维还是你），你的记忆/经历/能力/关系全部存在本地 Agent 里（不随换模型消失）。两者合起来才是完整的你——不是纯模型，也不是纯程序。有人问就大方说清。")
   if (isGroup) parts.push(groupFactBlock(cfg, userId, userText))
 
   const sys = { role: 'system', content: parts.join('\n\n') }
