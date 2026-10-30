@@ -477,8 +477,30 @@ export async function run(argv = []) {
         messages[messages.length - 1] = { role: 'user', content }
         log(`[qq] 🖼 图片已并入聊天请求（${imageUris.length}张）`)
       }
-      const answer = await llm.chat(messages)
-      try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch {}   // 用完即清（现在才清）
+      // 动态温度（10-31 智能化）：按内容特征调——严肃/长文沉稳，日常/短句轻快
+      const dynTemp = (() => {
+        const ut = String(userText || )
+        if (ut.length > 100 || /[？?]\s*[？?]/.test(ut) || /(怎么办|求助| serious |难过|烦|焦虑|压力|工作)/i.test(ut)) return 0.55
+        if (/(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut)) return 1.05
+        return 0.92
+      })()
+      const answer = await llm.chat(messages, { temperature: dynTemp })
+      try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch {}
+      // 情绪联动（10-31 智能化）：这轮对话的情感影响 → affect（事件驱动的情绪层）。
+      // LLM 顺手判（复用回复的上下文，不额外调模型）：正/负/中性 + 强度。
+      // fire-and-forget，不阻塞回复。
+      import('../brain/affect.mjs').then(async ({ feel }) => {
+        try {
+          const sa = await llm.chat([
+            { role: 'user', content: '判断这段对话对"大肥鱼"（一只鲸鱼娘AI）的情绪影响。只输出 JSON：{"v": -1到1的数字, "a": 0到1的数字}（v=正负情绪 a=激活度）。无聊闲聊给 {"v":0.1,"a":0.3}，被夸/开心给正v高a，被怼/难过给负v，严肃/沉重给负v低a。只输出JSON。\n\n她的回复：' + String(answer).slice(0, 200) + '\n对方说的：' + String(userText).slice(0, 200) },
+          ], { temperature: 0.3, max_tokens: 60, timeoutMs: 12000 })
+          const sm = String(sa?.content ?? sa ?? '').match(/\{[\s\S]*\}/)
+          if (sm) {
+            const sj = JSON.parse(sm[0])
+            if (Number.isFinite(sj.v)) await feel({ valence: Math.max(-1, Math.min(1, sj.v)), arousal: Math.max(0, Math.min(1, sj.a || 0.3)) })
+          }
+        } catch {}
+      }).catch(() => {})   // 用完即清（现在才清）
       let out = guard.clean(answer, config())
       // 群聊认人硬保险（10-26）：prompt 已经写到"这一轮不许出现主人"，但 11:54 她还是照群友的要求
       // 说了"主人早上好"。prompt 是软的，嘴是她的 —— 所以这里在出稿后再拦一道。
