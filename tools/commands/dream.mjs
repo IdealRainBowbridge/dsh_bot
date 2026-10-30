@@ -20,7 +20,6 @@ import { dataPath } from '../lib/paths.mjs'
 import { config } from '../lib/config.mjs'
 import * as brain from '../brain/index.mjs'
 import { readJsonl } from '../brain/json.mjs'
-import { episodePath } from '../brain/paths.mjs'
 
 const DREAMS = () => dataPath('dreams.jsonl')
 
@@ -43,11 +42,10 @@ export function dreamToMention() {
   } catch {}
   return d
 }
-/** 熑码种子：独立串板刊走走的细生相面、爱隔的粮通重的相面、溃分特统的相面、专越了的相面�*/
+/** 熑码种子：独立串板刊走走的细生相面、爱隔的粮通重的相面、溃分特统的相面、专越了的相面�*/
 async function seeds(now = Date.now()) {
   const pool = []
   try {
-    const eps = readJsonl(episodePath(), { limit: 40 }).filter((e) => now - Number(e.ts || 0) < 48 * 3600_000 && e.summary)
     for (const e of eps) pool.push(String(e.summary).slice(0, 50))
   } catch {}
   try {
@@ -80,7 +78,7 @@ function pickSeeds(pool) {
 }
 
 const DREAM_SYS = [
-  '你在不要�I鱼娘（大肥鱼）写一个梦。这是纯粹的虚构创作——梦里的东西没有一件真的发生过，也不许当成真的。',
+  '你在不要�I鱼娘（大肥鱼）写一个梦。这是纯粹的虚构创作——梦里的东西没有一件真的发生过，也不许当成真的。',
   '要求：',
   '- 天马行空，凭空生造，逻辑跳跃，超现实意象随便用',
   '- 可以大胆、可以怪诞、可以黑暗、可以有欲望和恐惧的意象、可以荒诞幽默',
@@ -126,7 +124,7 @@ export async function dream() {
   if (!text) text = fallbackDream(chosen)
   if (!text) return null
   const d = { at: Date.now(), text: '【梦】' + text, seeds: chosen, mood: '虚构，非真实记忆' }
-  appenDream(d)
+  appendDream(d)
   return d
 }
 
