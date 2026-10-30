@@ -70,6 +70,12 @@ export async function setSign(rawText) {
     signal: AbortSignal.timeout(10000),
   })
   const j = await r.json().catch(() => ({}))
+  if (j?.code === 0) {
+    try {
+      const { emit } = await import('../brain/event.mjs')
+      emit({ proc: 'bili-me', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant', text: '改了B站签名：' + String(text).slice(0, 40) })
+    } catch {}
+  }
   return { ok: j?.code === 0, code: j?.code, why: j?.message || '', text }
 }
 
