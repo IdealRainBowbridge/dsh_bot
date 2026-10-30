@@ -190,6 +190,9 @@ export async function balance(cfg = config(), opts = {}) {
     if (localFile) {
       const j = JSON.parse(fs.readFileSync(localFile, 'utf8'))
       const avail = j?.usableNow ?? j?.usableToday
+      // staleness 防护（10-30）：聚合器 30 分钟没刷新就当作账本不可用（宁可不报数，不报旧数）
+      const fresh = j?.at && (Date.now() - Number(j.at)) < 30 * 60_000
+      if (!fresh) return null
       if (j?.total != null && avail != null) {
         return {
           currency: 'A2A', total: Number(j.total), usableNow: Number(avail),

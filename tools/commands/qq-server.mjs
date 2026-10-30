@@ -1355,7 +1355,7 @@ export async function run(argv = []) {
               p.unref()
             }
           } catch {}
-        }).catch(() => {})
+        }).catch((e) => console.log("[qq] 睡眠钩子失败：" + String(e && e.message || e).slice(0, 80)))
       }
       if (t.shouldConsolidate && !brainConsolidating) {
         brainConsolidating = true

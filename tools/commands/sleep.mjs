@@ -13,6 +13,7 @@ import { backlog as inboxBacklog } from "../brain/event.mjs"
 // progress via stdout
 
 const SLEEP_STATE = () => dataPath("sleep-state.json")
+const now0 = () => Date.now()
 const ROOT = path.resolve(import.meta.dirname, "..", "..")
 function readJson(p, d) { try { return JSON.parse(fs.readFileSync(p, "utf8")) ?? d } catch { return d } }
 function writeJson(p, v) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(v, null, 1)) }
@@ -89,7 +90,15 @@ export async function shouldSleep(now = Date.now()) {
 export async function sleepNow(opts = {}) {
   const force = !!(opts && opts.force)
   const st = readJson(SLEEP_STATE(), {})
-  if (st.sleeping && !force) return { ok: false, reason: "上次睡眠没收尾（卡在：" + (st.phase || "?") + "）。检查后用 --force 收尾。" }
+  if (st.sleeping && !force) {
+    // 卡死自救：sleeping 状态超 30 分钟视为上一次进程死了，自动解锁重跑
+    const stuckMs = now0() - Number(st.started || 0)
+    if (stuckMs > 30 * 60_000) {
+      console.log("[sleep] 上次睡眠卡了 " + Math.round(stuckMs / 60000) + " 分钟，判定进程已死，自动解锁")
+    } else {
+      return { ok: false, reason: "上次睡眠进行中（阶段：" + (st.phase || "?") + "，" + Math.round(stuckMs / 60000) + " 分钟）。等它跑完，或确认卡死后 --force。" }
+    }
+  }
   let sp, why
   if (force) { sp = { total: 100, parts: {}, detail: {} }; why = "强制" }
   else {
