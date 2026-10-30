@@ -162,8 +162,25 @@ export async function run(argv = []) {
     } catch (e) { logErr(`[qq] ${action} 异常: ${e.message}`); return null }
   }
 
+  // 打字标识（10-31）：凡是给她要回话的对象发消息，先显示"正在输入…"，
+  // 真正发出去后立刻停止 —— 像真人打完字就发。所有发送路径统一走这里，一处挂全局生效。
+  const showTyping = async (payload) => {
+    try {
+      if (!payload?.user_id) return
+      if (uid) await callApi("set_input_status", { user_id: uid, event_type: 1 })
+    } catch {}
+  }
+  const stopTyping = async (payload) => {
+    try {
+      if (!payload?.user_id) return
+      if (uid) await callApi("set_input_status", { user_id: uid, event_type: 0 })
+    } catch {}
+  }
+
   const send = async (action, payload) => {
+    if (String(action).startsWith("send_")) await showTyping(payload)
     const j = await callApi(action, payload)
+    if (String(action).startsWith("send_")) await stopTyping(payload)
     if (!j) return false
     if (j.status && j.status !== 'ok') {
       logErr(`[qq] ${action} 返回 ${j.status}/${j.retcode}: ${j.message || j.wording || ''}`)
