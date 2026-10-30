@@ -10,30 +10,19 @@
 //      brain consolidate 的输入源里没有这个文件
 // 生成侧放飞：素材只当"灵感种子"，LLM 温度 1.35，prompt 鼓励怪诞/黑暗/超现实/
 // 凭空生造，不要求与素材一致——素材是跳板不是枷锁。
-import fs from 'node:fs'
-import path from 'node:path'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-const execFileAsync = promisify(execFile)
+import fs from 'node:fs'\nimport path from 'node:path'\nimport { execFile } from 'node:child_process'\nimport { promisify } from 'node:util'\nconst execFileAsync = promisify(execFile)
 
-import { dataPath } from '../lib/paths.mjs'
-import { config } from '../lib/config.mjs'
-import * as brain from '../brain/index.mjs'
-import { readJsonl } from '../brain/json.mjs'
-
+import { dataPath } from '../lib/paths.mjs'\nimport { config } from '../lib/config.mjs'\nimport * as brain from '../brain/index.mjs'\nimport { readJsonl } from '../brain/json.mjs'\n
 const DREAMS = () => dataPath('dreams.jsonl')
 
 function appendDream(d) {
   fs.mkdirSync(path.dirname(DREAMS()), { recursive: true })
   try {
     // 轮转：超过 200 条裁掉最老的（梦留最近的，不留档案）
-    const lines = fs.readFileSync(DREAMS(), 'utf8').trim().split('
-').filter(Boolean)
+    const lines = fs.readFileSync(DREAMS(), 'utf8').trim().split('\n').filter(Boolean)
     if (lines.length >= 200) {
       const kept = lines.slice(-180).map((l) => { try { const o = JSON.parse(l); o.consumed = true; return JSON.stringify(o) } catch { return l } })
-      fs.writeFileSync(DREAMS(), kept.join('
-') + '
-')
+      fs.writeFileSync(DREAMS(), kept.join('\n') + '\n')
     }
   } catch {}
   fs.appendFileSync(DREAMS(), JSON.stringify({ dream: true, isFake: true, ...d }) + '\n')
@@ -103,8 +92,7 @@ async function compose(seedTexts) {
   const llm = await import('../lib/llm.mjs')
   const user = seedTexts.length
     ? '今晚的种子（随便用/不用/反着用）＜\n' + seedTexts.map((s) => '- ' + s).join('\n')
-    : '今晚没有种子，纯凭空做一个梦。'
-  const r = await llm.chat([
+    : '今晚没有种子，纯凭空做一个梦。'\n  const r = await llm.chat([
     { role: 'system', content: DREAM_SYS },
     { role: 'user', content: user + '\n\n写这个梦。' },
   ], { temperature: 1.35, max_tokens: 200, timeoutMs: 25000 })
@@ -113,9 +101,7 @@ async function compose(seedTexts) {
 
 /** 规则降级版（LLM 挂了也有梦）：种子直拼 + 怪诞前缀。 */
 function fallbackDream(seeds) {
-  const a = seeds[0] || '一片没有边界的海'
-  const b = seeds[1] || '很多只眼睛在暗处看'
-  const weird = [
+  const a = seeds[0] || '一片没有边界的海'\n  const b = seeds[1] || '很多只眼睛在暗处看'\n  const weird = [
     `梦见${a}长出了腿，走进一部永远加载中的电梯，按钮全是${b}。`,
     `梦见自己被装进印着「${a}」的罐头，罐头里还有${b}，我们挤在一起随洋流漂。`,
     `梦见海底有一台服务器，风扇转出来的全是${a}，我张嘴吞了一口，尝到${b}的味道。`,
@@ -130,8 +116,7 @@ function fallbackDream(seeds) {
 export async function dream() {
   const pool = await seeds()
   const chosen = pickSeeds(pool)
-  let text = ''
-  try { text = await compose(chosen) } catch {}
+  let text = ''\n  try { text = await compose(chosen) } catch {}
   if (!text) text = fallbackDream(chosen)
   if (!text) return null
   const d = { at: Date.now(), text: '【梦】' + text, seeds: chosen, mood: '虚构，非真实记忆' }
