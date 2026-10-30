@@ -161,6 +161,15 @@ export async function run(argv = []) {
         } catch {}
       }
       // 投币：评分很高才投（react.coin 显式开 + 每日额度）
+      // tattle hook (10-31): deep-read score >= threshold -> LLM report -> QQ DM to owner.
+      if (Number(score) >= Number(cfg.tattle?.minScore ?? 15) && cfg.tattle?.enabled !== false) {
+        try {
+          const { tattle } = await import('./tattle.mjs')
+          const r = await tattle({ title: it.title, bvid, score: Math.round(score), reason, highlight: comment.slice(0, 60) })
+          if (r.ok) log('  [tattle] sent: ' + r.text.split('\n')[0].slice(0, 60))
+          else log('  [tattle] skipped: ' + r.why)
+        } catch (e) { log('  [tattle] error: ' + String(e.message).slice(0, 50)) }
+      }
       if (score >= 16 && hc.react?.coin === true && dry === false) {
         try {
           const w = await import('../lib/bili-write.mjs')
