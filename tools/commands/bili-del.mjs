@@ -17,6 +17,10 @@ async function delArchive(cred, aid) {
 }
 
 export async function run(argv) {
+  // 10-31 实测：删除操作被 B站 Gaia 人机验证锁死（网页走到验证弹窗，headless 过不去）。
+  // 所以这个命令的作用 = 查稿 + 生成给笨蛋老爹的删除请求文案（他手动删）。
+  console.log("ℹ 删除稿件需要 B站人工验证（脚本无法绕过）。流程：本命令查出信息 → 你把下面的文案发到 QQ 给笨蛋老爹 → 他手动删。
+")
   const target = argv.find((a) => !a.startsWith('--'))
   if (!target) { console.error('用法：bili-del <BV号|aid> [--go]'); process.exit(2) }
   let aid = Number(target)
