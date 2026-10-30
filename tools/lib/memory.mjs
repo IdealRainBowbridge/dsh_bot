@@ -8,6 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
+import { config } from './config.mjs'
 import { normalizeMemoryText } from './normalize.mjs'
 
 const EP_FILE = dataPath('episodes.jsonl')
