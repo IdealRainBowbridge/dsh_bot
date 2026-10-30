@@ -36,7 +36,7 @@ export async function sendOwnerQQ(text) {
       const j = await r.json().catch(() => ({}))
       const ok = r.ok && (j.retcode === 0 || j.status === 'ok' || j.message_id)
       try {
-        await fetch(`${napcat}/set_input_status`, { method: POST, headers: { Content-Type: application/json }, body: JSON.stringify({ user_id: Number(ownerQQ), event_type: 0 }), signal: AbortSignal.timeout(4000) })
+        await fetch(`${napcat}/set_input_status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: Number(ownerQQ), event_type: 0 }), signal: AbortSignal.timeout(4000) })
       } catch {}
       if (ok) {
         // 发送成功 = 她"亲口说过"这句话：记进 QQ 对话记忆，主人接着聊才接得上
