@@ -3,6 +3,7 @@
 //   [记忆层] 关于对方的 facts + 相关旧记忆（memory 三层记忆）
 //   [状态层] 情绪/饥饿/时段/今日轮次（mood 状态机）
 import fs from 'node:fs'
+import { dreamToMention } from '../commands/dream.mjs'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { homePath } from './paths.mjs'
@@ -335,7 +336,6 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   let dreamLine = ""
   if (!isGroup && Math.random() < 0.3) {
     try {
-      const { dreamToMention } = await import("./dream.mjs")
       const d = dreamToMention()
       if (d) dreamLine = "【昨晚的梦（虚构，不是真事）】" + d.text.replace(/^【梦】/, "") + "（醒了还记得一点。他问起就说梦；不问别硬聊。梦里的内容和真实记忆无关。）"
     } catch {}
