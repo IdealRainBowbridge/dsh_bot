@@ -24,6 +24,7 @@ const COMMANDS = {
   status: 'QQ在线状态：status dnd（勿扰）/online（在线）/away/busy/invisible ｜ status show 看当前。睡眠自动勿扰/在线，也能手动换',
   'bili-me': '她的账号台：bili-me 看自己是谁（B站mid/等级/签名/QQ两号）| bili-me sign 看签名 | bili-me sign --set 文字 改签名（B站号的签名，归她管）',
   'bili-submit': 'B站自动投稿：bili-submit video.mp4 --title 标题 --tid 21 --tags a,b --desc 简介 [--cover 封面] [--dry]。preupload→分片→合并→提交全自动',
+  'bili-del': '删除她自己的B站投稿：bili-del BV号 [--go]（默认干跑）。她自己清理测试稿/不满意的作品用',
   nav: '登录验证 / 我是谁',
   feed: '选题：热门+搜索，偏好加权',
   debrief: '看懂一条视频（元信息+字幕+热评+简介）',
