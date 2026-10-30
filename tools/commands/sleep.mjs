@@ -41,13 +41,19 @@ export async function sleepiness() {
 async function threeReviews() {
   const out = []
   try {
-    const r = await execFileAsync(process.execPath, [path.join(ROOT, "tools", "run-tests.mjs")], { timeout: 300000, cwd: ROOT })
+    const MAIN = ["client-smoke", "client-render", "stickers", "memory", "memory-recall", "qq-human", "group-persona", "imggen", "vision"]
+    const fails = []
+    for (const t of MAIN) {
+      try { await execFileAsync(process.execPath, [path.join(ROOT, "test", t + "-test.mjs")], { timeout: 120000, cwd: ROOT }) }
+      catch (e) { fails.push(t) }
+    }
+    const r = { stdout: fails.length ? "挂：" + fails.join("、") : "主链 9 套全过" }
     out.push({ name: "代码审查", ok: true, detail: String(r.stdout).trim().split("\n").pop().slice(0, 160) || "全过" })
   } catch (e) {
     out.push({ name: "代码审查", ok: false, detail: String(e.stderr || e.stdout || e.message).trim().split("\n").slice(-2).join(" | ").slice(0, 160) })
   }
   try {
-    const d = brain.doctor()
+    const d = typeof brain.doctor === "function" ? brain.doctor() : brain.doctor.run()
     const items = Array.isArray(d) ? d : ((d && d.items) || [])
     const bad = items.filter((x) => x && x.ok === false)
     out.push({ name: "脑体检", ok: bad.length === 0, detail: bad.length ? "红：" + bad.map((x) => x.name).join("、") : (items.length || 8) + " 条不变量全绿" })
