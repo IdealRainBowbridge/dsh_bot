@@ -335,6 +335,15 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   const hintKey = isGroup ? `${platform}-group` : platform
   const hint = PLATFORM_HINTS[hintKey] || PLATFORM_HINTS[platform] || ''
   parts.push(mood.stateBlock(turnsToday, platform, isGroup) + (hint ? '\n' + hint : ''))
+  // affect (10-31): event-driven real emotion injected into state layer.
+  try {
+    const affectState = brainAffect?.state?.() || {}
+    const v = Number(affectState.valence || 0)
+    const t = Number(affectState.tension || 0)
+    if (v < -0.15) parts.push('【内在情绪】你现在有点低落——语气自然带一点，别演苦情戏。')
+    else if (v > 0.2) parts.push('【内在情绪】你现在心情不错——语气可以轻快一点。')
+    if (t > 0.3) parts.push('【内在压力】你有点惦记着没做完的事。')
+  } catch {}
 
   // 账本层（10-26）：她的记忆里反复问"账本/饭钱"，因为她读不到账 —— 于是只能问主人。
   // 这里把今天的饭钱和剩余额度摊给她，并说清"这是你自己翻的账"。群里不注入（家里的账不外扬）。

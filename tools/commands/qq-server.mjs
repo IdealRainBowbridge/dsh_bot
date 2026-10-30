@@ -479,7 +479,7 @@ export async function run(argv = []) {
       }
       // 动态温度（10-31 智能化）：按内容特征调——严肃/长文沉稳，日常/短句轻快
       const dynTemp = (() => {
-        const ut = String(userText || )
+        const ut = String(userText || '')
         if (ut.length > 100 || /[？?]\s*[？?]/.test(ut) || /(怎么办|求助| serious |难过|烦|焦虑|压力|工作)/i.test(ut)) return 0.55
         if (/(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut)) return 1.05
         return 0.92
