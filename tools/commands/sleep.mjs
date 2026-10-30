@@ -67,12 +67,36 @@ async function threeReviews() {
   return out
 }
 
+/**
+ * 该不该睡（10-30 策略）：平时少睡（门槛66 + 最短6h间隔），但每天保底一次整理小睡（21点后）。
+ */
+export async function shouldSleep(now = Date.now()) {
+  const THRESHOLD = 66
+  const MIN_GAP_H = 6
+  const NIGHTLY_AFTER = 21
+  const sp = await sleepiness()
+  const st = readJson(SLEEP_STATE(), {})
+  const last = Number(st.lastSleepAt || 0)
+  const gapH = last ? (now - last) / 3600000 : 999
+  const lastDay = st.lastSleep ? new Date(Number(st.lastSleep.at)).toLocaleDateString("sv-SE") : ""
+  const today = new Date(now).toLocaleDateString("sv-SE")
+  const hour = new Date(now).getHours()
+  if (sp.total >= THRESHOLD && gapH >= MIN_GAP_H) return { sleep: true, why: "睡意 " + sp.total + "（积压多了）", sp }
+  if (lastDay !== today && hour >= NIGHTLY_AFTER) return { sleep: true, why: "每日整理小睡（今天还没睡，现在 " + hour + " 点）", sp }
+  return { sleep: false, why: "醒着（睡意 " + sp.total + "，距上次 " + (gapH >= 999 ? "从未" : gapH.toFixed(1) + "h") + "）", sp }
+}
+
 export async function sleepNow(opts = {}) {
   const force = !!(opts && opts.force)
   const st = readJson(SLEEP_STATE(), {})
   if (st.sleeping && !force) return { ok: false, reason: "上次睡眠没收尾（卡在：" + (st.phase || "?") + "）。检查后用 --force 收尾。" }
-  const sp = force ? { total: 100, parts: {}, detail: {} } : await sleepiness()
-  if (!force && sp.total < 66) return { ok: false, reason: "睡意 " + sp.total + "/100，不够（" + JSON.stringify(sp.parts) + "）。改/记的还不够多，先醒着。" }
+  let sp, why
+  if (force) { sp = { total: 100, parts: {}, detail: {} }; why = "强制" }
+  else {
+    const d = await shouldSleep()
+    if (!d.sleep) return { ok: false, reason: d.why + "。不睡。" }
+    sp = d.sp; why = d.why
+  }
   const started = Date.now()
   const phases = []
   const mark = (name, result) => { phases.push({ name, ms: Date.now() - started, result }); writeJson(SLEEP_STATE(), { sleeping: true, phase: name, started, phases }); console.log("[sleep] " + name + " 完成") }
@@ -110,7 +134,10 @@ export async function run(args) {
     console.log("睡意 " + sp.total + "/100（记忆" + sp.parts.memory + " 事件" + sp.parts.events + " 改动" + sp.parts.code + "）")
     console.log("构成: " + JSON.stringify(sp.detail))
     console.log("上次睡眠: " + (state.lastSleep ? new Date(state.lastSleep.at).toLocaleString("sv-SE") + "，睡意" + state.lastSleep.sleepiness : "还没睡过"))
-    if (args.length === 0) console.log(sp.total >= 66 ? "够困了，可以睡。" : "不够困，先醒着。")
+    if (args.length === 0) {
+      const d = await shouldSleep()
+      console.log("判定: " + d.why)
+    }
     return
   }
   const r = await sleepNow({ force: args.includes("--force") })
