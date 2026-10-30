@@ -4,6 +4,7 @@
 //   [状态层] 情绪/饥饿/时段/今日轮次（mood 状态机）
 import fs from 'node:fs'
 import { dreamToMention } from '../commands/dream.mjs'
+import * as brainRecall from '../brain/recall.mjs'
 import { lastUnansweredPush } from './memory.mjs'
 import path from 'node:path'
 import { config } from './config.mjs'
@@ -290,7 +291,13 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   //   ① QQ 说"在抖音看滑肉视频" → 抖音问滑肉，这边看得见，不会再答"不知道"；
   //   ② 上网写的三段小说 → QQ 问起，她不会再答"我没写过"。
   if (platform === 'qq' || platform === 'douyin-dm') {
-    const all = memory.recallAll(chatId, { hours: 12, max: 12 })
+    // 融合（10-31）：优先 brain 多路召回（7路加权、audience 分级），空了退回老 recallAll。
+    let all = { lines: [], count: 0 }
+    try {
+      const B = brainRecall.bundle({ platform, chatId, userId, userText, isGroup, limit: 8 })
+      if (B.lines && B.lines.length) all = { lines: B.lines, count: B.lines.length }
+    } catch {}
+    if (!all.lines.length) all = memory.recallAll(chatId, { hours: 12, max: 12 })
     // 群聊里**照旧**注入（主人 10-26 拍板：不许让她"忘了私聊"，只要分得清人）。
     // 分得清靠的是 recallAll 的标签：私聊行是「[QQ] 主人：…」，群聊行是「[QQ群] 昵称：…」，
     // 她一眼能看出哪句是主人说的、哪句是群里谁说的。

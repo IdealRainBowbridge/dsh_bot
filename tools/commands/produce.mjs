@@ -422,6 +422,11 @@ export async function run(argv = []) {
     }
     console.log(`🔓 首条已发布${bvid ? `（${bvid}）` : ''} —— produce 从此自由，想剪什么剪什么`)
     if (bvid) console.log(`   已记进投稿包：replies 会自动回这条下面别人的评论（任何类型）`)
+  // brain 事件（10-31 融合）：成片产出进统一记忆
+  try {
+    const { emit } = await import('../brain/event.mjs')
+    emit({ proc: 'produce', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant', text: `完成视频制作：《${meta.title}》（${meta.durationSec}s，${meta.resolution}）` })
+  } catch {}
     void s
     return
   }
