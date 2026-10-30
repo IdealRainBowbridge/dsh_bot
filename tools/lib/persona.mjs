@@ -334,7 +334,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 梦境块（10-30）：30% 概率提一句昨晚的梦。梦是虚构（isFake 标记），带【梦】前缀，
   // 只此一处出口；她若聊起，要说清"是梦，不是发生过的事"。
   let dreamLine = ""
-  if (!isGroup && Math.random() < 0.3) {
+  if (!isGroup && cfg.dream?.enabled !== false && Math.random() < Number(cfg.dream?.mentionChance ?? 0.3)) {
     try {
       const d = dreamToMention()
       if (d) dreamLine = "【昨晚的梦（虚构，不是真事）】" + d.text.replace(/^【梦】/, "") + "（醒了还记得一点。他问起就说梦；不问别硬聊。梦里的内容和真实记忆无关。）"

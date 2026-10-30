@@ -8,6 +8,7 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 const execFileAsync = promisify(execFile)
 import { dataPath } from "../lib/paths.mjs"
+import { config } from "../lib/config.mjs"
 import * as brain from "../brain/index.mjs"
 import { backlog as inboxBacklog } from "../brain/event.mjs"
 // progress via stdout
@@ -115,6 +116,8 @@ export async function sleepNow(opts = {}) {
     mark("整理", r)
     // 梦境（10-30）：整理完的副产品。素材当跳板，放飞捏造，独立存储与记忆隔离。
     try {
+      const cfg = config()
+      if (cfg.dream?.enabled === false) throw new Error("dream disabled")
       const { dream } = await import("./dream.mjs")
       const d = await dream()
       if (d) console.log("[sleep] 做了一个梦：" + d.text.slice(0, 60))
