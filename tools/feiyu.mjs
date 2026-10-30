@@ -19,6 +19,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 
 const COMMANDS = {
   selftest: '启动体检（装完立刻跑）',
+  sleep: '睡眠：积累够了才睡（睡意>=66）。sleep check 看睡意 | sleep 直接睡 | sleep --force 强制。睡=整理记忆+三审（代码/脑/账本）+git归档，睡完自动醒',
   nav: '登录验证 / 我是谁',
   feed: '选题：热门+搜索，偏好加权',
   debrief: '看懂一条视频（元信息+字幕+热评+简介）',
