@@ -1,5 +1,5 @@
 // bili-me —— 她自己的账号台：whoami + 改签名。
-// 账号归属（10-31 笨蛋老爹拍板）：B站糖鲸大肥鱼归她运营，凭据是笨蛋老爹的 cookie。
+// 账号归属（10-31 笨蛋老爹拍板）：B站糖鲸大肥鱼归她运营，这是本鱼自己的号（糖鲸大肥鱼）。
 // 接口实测（10-31）：改签名走 POST /x/member/web/update（usersign 小写，整包 uname/sex/birthday）。
 import { config } from '../lib/config.mjs'
 import { loadCred } from '../lib/cred.mjs'
@@ -33,7 +33,7 @@ export async function whoami() {
     out.bilibili.error = String(e.message).slice(0, 100)
   }
   out.qq = { self: String(cfg.qq?.self_id || ''), owner: String(cfg.owner?.qq || '') }
-  out.owner = { name: cfg.owner?.name || '', mid: cfg.owner?.mid || '', note: 'B站号归我运营，凭据是笨蛋老爹的 cookie' }
+  out.owner = { name: cfg.owner?.name || '', mid: cfg.owner?.mid || '', note: '这是本鱼的号，这是本鱼自己的号（糖鲸大肥鱼）' }
   return out
 }
 
@@ -90,5 +90,5 @@ export async function run(args) {
   const b = me.bilibili
   console.log('【B站】' + (b.mid ? b.name + '（mid ' + b.mid + '）Lv.' + b.level + ' · 硬币 ' + b.coins + ' · 签名「' + b.sign + '」' : '✗ ' + (b.error || '未知')))
   console.log('【QQ 】我自己 ' + me.qq.self + '；笨蛋老爹 ' + me.qq.owner)
-  console.log('【关系】B站号归我运营，凭据是笨蛋老爹的 cookie；写操作走额度计数。')
+  console.log('【关系】这是本鱼的号，这是本鱼自己的号（糖鲸大肥鱼）；写操作走额度计数。')
 }
