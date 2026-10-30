@@ -304,6 +304,18 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     // 抖音私信：回忆块里「我：念标题给我听」这类也要剔（那是她看不懂卡片时的错话，
     // 留在上下文里等于教她继续说）。只剔她自己（「我：」开头）的行，主人说的不动。
     let lines = all.lines
+    // HUMAN-MEM (10-31): 3-layer anthropomorphic memory.
+    // Recent (<6h): full. Mid (6-48h): gist. Old (>48h): dropped (search if needed).
+    const NOW_MS = Date.now()
+    const SIXH = 6 * 3600000, TWOD = 48 * 3600000
+    lines = lines.map(l => {
+      const m = l.match(/ep-(d{4})(d{2})(d{2})-(d{4})/)
+      if (!m) return l
+      const epAge = NOW_MS - new Date(+m[1]+2000, +m[2]-1, +m[3], +m[4].slice(0,2), +m[4].slice(2)).getTime()
+      if (epAge > TWOD) return null
+      if (epAge > SIXH) return l.slice(0, 60) + '(gist)'
+      return l
+    }).filter(Boolean)
     if (platform === 'douyin-dm') {
       const clean = lines.filter(l => !(/我：/.test(l) && CARD_MISTAKE.test(l)))
       if (clean.length !== lines.length) lines = clean
