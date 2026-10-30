@@ -167,13 +167,13 @@ export async function run(argv = []) {
   const showTyping = async (payload) => {
     try {
       if (!payload?.user_id) return
-      await callApi(set_input_status, { user_id: payload.user_id, event_type: 1 })
+      await callApi('set_input_status', { user_id: payload.user_id, event_type: 1 })
     } catch {}
   }
   const stopTyping = async (payload) => {
     try {
       if (!payload?.user_id) return
-      await callApi(set_input_status, { user_id: payload.user_id, event_type: 0 })
+      await callApi('set_input_status', { user_id: payload.user_id, event_type: 0 })
     } catch {}
   }
 
