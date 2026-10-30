@@ -4,6 +4,7 @@
 //   [状态层] 情绪/饥饿/时段/今日轮次（mood 状态机）
 import fs from 'node:fs'
 import { dreamToMention } from '../commands/dream.mjs'
+import { lastUnansweredPush } from ./memory.mjs
 import path from 'node:path'
 import { config } from './config.mjs'
 import { homePath } from './paths.mjs'
@@ -342,6 +343,14 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   }
   if (books) parts.push(books)
   if (dreamLine) parts.push(dreamLine)
+  // push 上下文（10-31 B 项）：主人回复的是她之前的推送时，把原推送带进来。
+  try {
+    const up = lastUnansweredPush(chatId)
+    if (up && userText) parts.push( + JSON.stringify(up.text).slice(1, -1) + )
+  } catch {}
+
+  // push 上下文（10-31 B 项）：主人回复的是她之前的推送时，把原推送带进来。
+
 
   // 表情层：颜文字随处可用；[表情:标签] 只有 QQ/微信 会真的发图
   parts.push(stickerPrompt(platform))

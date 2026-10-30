@@ -142,7 +142,15 @@ export async function submitVideo(videoPath, opts = {}) {
   const biliName = String(up.upos_uri || '').split('/').pop().replace(/\.[^.]*$/, '')
   console.log('[debug] biliName=' + biliName)
   const j = await submitArchive(cred, { ...opts, biliFilename: biliName })
-  if (j?.code === 0) return { ok: true, aid: j?.data?.aid, bvid: j?.data?.bvid }
+  if (j?.code === 0) {
+    // 跨会话记忆（10-31）：投稿成功必须进统一记忆——她要记得自己发过什么。
+    try {
+      const { default: memory } = await import('../lib/memory.mjs')
+      memory.remember('bilibili', 'bilibili:self', '40048138', 'assistant',
+        `投稿成功：《${opts.title}》 BV${j.data.bvid}（自动投稿）`, { kind: 'post' })
+    } catch {}
+    return { ok: true, aid: j?.data?.aid, bvid: j?.data?.bvid }
+  }
   return { ok: false, why: '提交失败 code=' + j?.code + ': ' + (j?.message || '') }
 }
 

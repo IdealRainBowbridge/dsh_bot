@@ -32,6 +32,12 @@ export async function run(argv) {
   if (!argv.includes('--go')) { console.log('【干跑】将删除 aid=' + aid + '（加 --go 真删）'); return }
   const cred = loadCred()
   const j = await delArchive(cred, aid)
-  if (j?.code === 0) console.log('✓ 已删除 aid=' + aid)
+  if (j?.code === 0) {
+    console.log('✓ 已删除 aid=' + aid)
+    try {
+      const { default: memory } = await import('../lib/memory.mjs')
+      memory.remember('bilibili', 'bilibili:self', '40048138', 'assistant', `删除了稿件 aid=${aid}（笨蛋老爹手动执行的验证）`, { kind: 'post' })
+    } catch {}
+  }
   else console.error('✗ 删除失败 code=' + j?.code + ': ' + (j?.message || ''))
 }

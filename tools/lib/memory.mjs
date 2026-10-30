@@ -541,3 +541,18 @@ export function stats() {
     lore: readJson(LORE_FILE, []).length,
   }
 }
+
+/** B（10-31）：最近一条主人还没回过的推送（kind:push 的 assistant 行）。
+ *  主人回复推送时，把原推送内容带进上下文——不然她只看到回复，不记得自己说过什么。 */
+export function lastUnansweredPush(chatId, hours = 48) {
+  const cutoff = Date.now() - hours * 3600_000
+  const rows = readRows(chatId).filter((r) => Number(r.ts) >= cutoff)
+  // 从尾部往前找：最后一条 push 之后如果主人说过话，就算已回复
+  let lastPush = null
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i]
+    if (r.role === "user") return null   // 主人说话在 push 之后 → 已回复
+    if (r.role === "assistant" && r.kind === "push") { lastPush = r; break }
+  }
+  return lastPush ? { at: lastPush.ts, text: String(lastPush.text || "").slice(0, 120) } : null
+}
