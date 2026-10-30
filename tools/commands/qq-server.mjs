@@ -1437,6 +1437,13 @@ export async function run(argv = []) {
           } catch {}
         }).catch((e) => console.log("[qq] 睡眠钩子失败：" + String(e && e.message || e).slice(0, 80)))
       }
+      // share-queue consumer (10-31): fun non-report events -> timed casual share.
+      import('../lib/share-queue.mjs').then(async ({ shareTick }) => {
+        try {
+          const r = await shareTick()
+          if (r) log('[qq] share sent: ' + r.text.slice(0, 50))
+        } catch {}
+      }).catch(() => {})
       if (t.shouldConsolidate && !brainConsolidating) {
         brainConsolidating = true
         log('[qq] 🧠 该巩固了 → 起子进程（不阻塞聊天）')
