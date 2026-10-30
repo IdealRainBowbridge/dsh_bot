@@ -18,23 +18,13 @@ const execFileAsync = promisify(execFile)
 
 import { dataPath } from '../lib/paths.mjs'
 import { config } from '../lib/config.mjs'
+import * as brain from '../brain/index.mjs'
 import { readJsonl } from '../brain/json.mjs'
 
 const DREAMS = () => dataPath('dreams.jsonl')
 
 function appendDream(d) {
   fs.mkdirSync(path.dirname(DREAMS()), { recursive: true })
-  try {
-    // 轮转：超过 200 条裁掉最老的（梦留最近的，不留档案）
-    const lines = fs.readFileSync(DREAMS(), 'utf8').trim().split('
-').filter(Boolean)
-    if (lines.length >= 200) {
-      const kept = lines.slice(-180).map((l) => { try { const o = JSON.parse(l); o.consumed = true; return JSON.stringify(o) } catch { return l } })
-      fs.writeFileSync(DREAMS(), kept.join('
-') + '
-')
-    }
-  } catch {}
   fs.appendFileSync(DREAMS(), JSON.stringify({ dream: true, isFake: true, ...d }) + '\n')
 }
 export function recentDreams(n = 10) {
@@ -63,12 +53,10 @@ async function seeds(now = Date.now()) {
     for (const l of (lore || []).slice(-6)) pool.push(String(l.text).slice(0, 50))
   } catch {}
   try {
-    const brain = await import('../brain/index.mjs')
     const a = brain.affect?.state?.() || {}
     if (a.tension > 0 || a.valence !== 0) pool.push('爉牆：' + (a.valence < 0 ? '低耽' : '雀跃') + (a.tension > 0 ? '、紧绷' : ''))
   } catch {}
   try {
-    const brain = await import('../brain/index.mjs')
     const t = brain.tick()
     for (const x of (t.due || []).slice(0, 3)) pool.push('欠睐的今：' + x.object)
   } catch {}
