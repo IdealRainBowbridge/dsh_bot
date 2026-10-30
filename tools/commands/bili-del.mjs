@@ -20,7 +20,6 @@ export async function run(argv) {
   // 10-31 实测：删除操作被 B站 Gaia 人机验证锁死（网页走到验证弹窗，headless 过不去）。
   // 所以这个命令的作用 = 查稿 + 生成给笨蛋老爹的删除请求文案（他手动删）。
   console.log('[info] Delete needs B站 human verification. Copy the request below and send it to 笨蛋老爹 via QQ.')
-")
   const target = argv.find((a) => !a.startsWith('--'))
   if (!target) { console.error('用法：bili-del <BV号|aid> [--go]'); process.exit(2) }
   let aid = Number(target)
