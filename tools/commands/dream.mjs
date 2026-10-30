@@ -18,7 +18,6 @@ const execFileAsync = promisify(execFile)
 
 import { dataPath } from '../lib/paths.mjs'
 import { config } from '../lib/config.mjs'
-import * as brain from '../brain/index.mjs'
 import { readJsonl } from '../brain/json.mjs'
 
 const DREAMS = () => dataPath('dreams.jsonl')
@@ -53,10 +52,12 @@ async function seeds(now = Date.now()) {
     for (const l of (lore || []).slice(-6)) pool.push(String(l.text).slice(0, 50))
   } catch {}
   try {
+    const brain = await import('../brain/index.mjs')
     const a = brain.affect?.state?.() || {}
     if (a.tension > 0 || a.valence !== 0) pool.push('爉牆：' + (a.valence < 0 ? '低耽' : '雀跃') + (a.tension > 0 ? '、紧绷' : ''))
   } catch {}
   try {
+    const brain = await import('../brain/index.mjs')
     const t = brain.tick()
     for (const x of (t.due || []).slice(0, 3)) pool.push('欠睐的今：' + x.object)
   } catch {}
