@@ -1167,7 +1167,42 @@ export async function run(argv = []) {
       if (dailyMax > 0 && Number(st.count ?? 0) >= dailyMax) return
       if (Date.now() - Number(st.lastAt ?? 0) < Number(pp.minGapMin ?? 150) * 60_000) return
       if (ownerLastMsgAt && Date.now() - ownerLastMsgAt < Number(pp.minQuietMin ?? 90) * 60_000) return
-      if (Math.random() > Number(pp.chance ?? 0.12)) return
+      // ── LLM 决策预检（10-31 智能化升级）──────────────────────────────
+      // 旧逻辑：硬闸全过后 12% 掷骰，命中就硬搭 —— 她对"该不该说"没有发言权。
+      // 新逻辑：硬闸全过后先做一次便宜的自问（deepseek-flash，max_tokens 60），
+      //   她结合自己的状态/记忆/时段回答想不想说话。yes 才进搭话链，
+      //   later/no 直接 return（今天搭话质量来自"她自己想说"，不是骰子）。
+      //   掷骰保留为兜底（预检失败/超时时走老路，行为不回退）。
+      let smartPass = null
+      try {
+        const llm = await import('../lib/llm.mjs')
+        const hourNow = new Date().getHours()
+        const dowNow = new Date().getDay()
+        const dowText = dowNow === 0 ? '周日' : dowNow === 6 ? '周六' : ['周一','周二','周三','周四','周五'][dowNow-1]
+        // 情境摘要：最近记忆尾部 + 情绪 + 上次搭话
+        let recentLine = ''
+        try {
+          const rows = fs.readFileSync(dataPath('episodes.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
+          const last = rows.slice(-3).map((l) => { try { const j = JSON.parse(l); return (j.role === 'assistant' ? '我说：' : '他说：') + String(j.summary || j.text || '').slice(0, 40) } catch { return '' } }).filter(Boolean)
+          if (last.length) recentLine = last.join('；')
+        } catch {}
+        const moodNow2 = (() => { try { return JSON.parse(fs.readFileSync(dataPath('mood.json'), 'utf8')) } catch { return {} } })()
+        const dResp = await llm.chat([
+          { role: 'system', content: '你是大肥鱼。回答"现在要不要主动给笨蛋老爹发消息"。判据（自己权衡，不是规则）：你有真的想说的吗？现在时段合不合适？连续发过就别再发。输出 JSON：{"decision":"yes|later|no","hook":"想说的话头（yes 时给一句，20字内）","reason":"一句话理由"}。decision 必须诚实——没有想说的就说 no，别为了说话而说话。' },
+          { role: 'user', content: `现在：${dowText} ${hourNow}点。他已安静 ${quietMin || 0} 分钟。你的情绪值 ${Math.round(Number(moodNow2.value) || 60)}/100。最近：${recentLine || '（安静）'}。上次搭话说了：${lastProact.lastText ? String(lastProact.lastText).slice(0, 40) : '（今天还没说过）'}。` },
+        ], { temperature: 0.8, max_tokens: 80, timeoutMs: 15000, model: cfgNow.llm?.content_model })
+        const m2 = String(dResp?.content ?? dResp ?? '').match(/\{[\s\S]*\}/)
+        if (m2) {
+          const j2 = JSON.parse(m2[0])
+          smartPass = j2
+          if (j2.decision === 'no' || j2.decision === 'later') {
+            log(`[qq] 🤔 决策预检：${j2.decision}（${String(j2.reason || '').slice(0, 40)}）—— 不打扰`)
+            return
+          }
+          if (j2.hook) hooks.push('你自己现在想说的（决策预检给的由头）：' + String(j2.hook).slice(0, 60))
+        }
+      } catch {}
+      if (!smartPass && Math.random() > Number(pp.chance ?? 0.12)) return
 
       const ownerQQ = String(cfgNow.owner?.qq || '')
       if (!ownerQQ) return
@@ -1241,6 +1276,7 @@ export async function run(argv = []) {
         const tt = JSON.parse(fs.readFileSync(dataPath('tattle.json'), 'utf8'))
         if (tt.lastAt && Date.now() - Number(tt.lastAt) < 2 * 3600_000) return
       } catch {}
+      if (smartHook) hooks.push('你自己现在想说的（决策预检给的由头）：' + smartHook)
       const lastProact = readProact()
       const lastType = String(lastProact.lastType || '')
 
