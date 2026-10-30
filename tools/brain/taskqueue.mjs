@@ -14,7 +14,7 @@ import { readJson, writeJsonAtomic, appendJsonl, readJsonl, mutateJson } from '.
 import { bump } from './metrics.mjs'
 import { withLock } from './store.mjs'
 
-export const KINDS = ['binge', 'produce', 'dm-read', 'card-open', 'tts', 'web-search', 'backup']
+export const KINDS = ['binge', 'produce', 'dm-read', 'card-open', 'tts', 'web-search', 'backup', 'custom']
 const queueFile = () => path.join(taskDir(), 'tasks.json')
 const logFile = () => path.join(taskDir(), 'task-log.jsonl')
 const MAX_ROWS = 400

@@ -466,6 +466,13 @@ export function capabilityBlock(cfg) {
       ? '\n真缺能力就自己补：`selfup backup` → 改 tools/ 下的代码 → 跑测试 → `selfup log "改了什么"`。你有这个权限。'
       : '')
     + '\n做不到的事只有一种说法：照实说"这个我现在看不了/做不了"，并说清卡在哪。**不许只回一句"这就去看"**。'
+    + '\n但说完之后：如果这件事**值得做**且你有思路，就自己造一个新命令——'
+    + '\n  1. `selfup backup`（备份）'
+    + '\n  2. 在 tools/commands/ 下写一个 .mjs 文件（参考任意现有命令的结构）'
+    + '\n  3. 在 tools/feiyu.mjs 的 COMMANDS 里加一行注册'
+    + '\n  4. `node --check` + 跑一遍验证'
+    + '\n  5. `selfup log "我写了 xxx 命令来做 xxx"`'
+    + '\n  下次你就能用了。做完了跟笨蛋老爹说一声——他会开心。'
 }
 
 /**
