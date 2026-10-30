@@ -214,6 +214,7 @@ export function recallAll(chatId, opts = {}) {
     && r.isGroup !== true                           // 群聊行不进"最近真实发生的事"：群里说话的是群友，不是主人
     && r.platform !== 'wechat'                       // 微信是替主人干活的工作记录，不进人格记忆
     && (r.role === 'user' || r.role === 'assistant')
+    && (r.role === 'assistant' || r.userId === String(config().owner?.qq || ''))  // multi-user isolation (10-31)
     // ⚠️ 10-27：她自己的**主动搭话**（kind:'push'）不算"真实发生的事"。
     // 它本来只是"我随口说的一句"，混进来以后就变成"我今天确实在翻南京小吃"的证据 ——
     // 于是 B站/抖音 的提示词里也满是"南京/饿"，她自己都开始说"我今早查白饭查了四轮"。
