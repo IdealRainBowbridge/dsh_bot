@@ -104,6 +104,13 @@ export async function sleepNow(opts = {}) {
     let r = "?"
     try { const c = brain.runConsolidation({ now: Date.now() }); r = { processed: (c && ((c.processed != null && c.processed) || c.extracted)) != null ? (c.processed != null ? c.processed : c.extracted) : "?" } } catch (e) { r = String(e.message).slice(0, 120) }
     mark("整理", r)
+    // 梦境（10-30）：整理完的副产品。素材当跳板，放飞捏造，独立存储与记忆隔离。
+    try {
+      const { dream } = await import("./dream.mjs")
+      const d = await dream()
+      if (d) console.log("[sleep] 做了一个梦：" + d.text.slice(0, 60))
+      else console.log("[sleep] 今晚无梦")
+    } catch (e) { console.log("[sleep] 梦没做成：" + String(e.message).slice(0, 80)) }
   }
   if (!phases.some(p => p.name === "审查")) mark("审查", await threeReviews())
   if (!phases.some(p => p.name === "优化")) {

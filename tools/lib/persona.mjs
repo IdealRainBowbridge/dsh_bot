@@ -330,7 +330,18 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 账本层（10-26）：她的记忆里反复问"账本/饭钱"，因为她读不到账 —— 于是只能问主人。
   // 这里把今天的饭钱和剩余额度摊给她，并说清"这是你自己翻的账"。群里不注入（家里的账不外扬）。
   const books = ledgerBlock(cfg, platform, isGroup, userText)
+  // 梦境块（10-30）：30% 概率提一句昨晚的梦。梦是虚构（isFake 标记），带【梦】前缀，
+  // 只此一处出口；她若聊起，要说清"是梦，不是发生过的事"。
+  let dreamLine = ""
+  if (!isGroup && Math.random() < 0.3) {
+    try {
+      const { dreamToMention } = await import("./dream.mjs")
+      const d = dreamToMention()
+      if (d) dreamLine = "【昨晚的梦（虚构，不是真事）】" + d.text.replace(/^【梦】/, "") + "（醒了还记得一点。他问起就说梦；不问别硬聊。梦里的内容和真实记忆无关。）"
+    } catch {}
+  }
   if (books) parts.push(books)
+  if (dreamLine) parts.push(dreamLine)
 
   // 表情层：颜文字随处可用；[表情:标签] 只有 QQ/微信 会真的发图
   parts.push(stickerPrompt(platform))
