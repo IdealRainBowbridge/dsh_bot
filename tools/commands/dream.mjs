@@ -24,6 +24,17 @@ const DREAMS = () => dataPath('dreams.jsonl')
 
 function appendDream(d) {
   fs.mkdirSync(path.dirname(DREAMS()), { recursive: true })
+  try {
+    // 轮转：超过 200 条裁掉最老的（梦留最近的，不留档案）
+    const lines = fs.readFileSync(DREAMS(), 'utf8').trim().split('
+').filter(Boolean)
+    if (lines.length >= 200) {
+      const kept = lines.slice(-180).map((l) => { try { const o = JSON.parse(l); o.consumed = true; return JSON.stringify(o) } catch { return l } })
+      fs.writeFileSync(DREAMS(), kept.join('
+') + '
+')
+    }
+  } catch {}
   fs.appendFileSync(DREAMS(), JSON.stringify({ dream: true, isFake: true, ...d }) + '\n')
 }
 export function recentDreams(n = 10) {
