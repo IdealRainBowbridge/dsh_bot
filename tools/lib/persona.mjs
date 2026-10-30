@@ -346,7 +346,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // push 上下文（10-31 B 项）：主人回复的是她之前的推送时，把原推送带进来。
   try {
     const up = lastUnansweredPush(chatId)
-    if (up && userText) parts.push( + JSON.stringify(up.text).slice(1, -1) + )
+    if (up && userText) parts.push(`【上下文】你之前给他发过推送：` + JSON.stringify(up.text).slice(1, -1) + `。他现在回复了——接住话题。`)
   } catch {}
 
   // push 上下文（10-31 B 项）：主人回复的是她之前的推送时，把原推送带进来。
