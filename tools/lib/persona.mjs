@@ -4,7 +4,7 @@
 //   [状态层] 情绪/饥饿/时段/今日轮次（mood 状态机）
 import fs from 'node:fs'
 import { dreamToMention } from '../commands/dream.mjs'
-import { lastUnansweredPush } from ./memory.mjs
+import { lastUnansweredPush } from './memory.mjs'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { homePath } from './paths.mjs'
