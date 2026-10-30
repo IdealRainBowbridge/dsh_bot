@@ -89,6 +89,32 @@ export function searchWeb(kw) {
 }
 
 /** 读网页正文（内外网皆可；先直连后代理） */
+
+/** 受限 headless 浏览器：渲染 JS 页面后取正文。
+ *  服务在宿主机 3070，带 SSRF 防护（私网/回环一律拒绝）。 */
+export async function browseWeb(url, opts = {}) {
+  if (!/^https?:/.test(url)) throw new Error('只支持 http(s) 链接：' + url)
+  const svc = process.env.FEIYU_BROWSER_URL || 'http://172.17.0.1:3070'
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), 30000)
+  let r
+  try {
+    r = await fetch(svc + '/render', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url, waitMs: opts.waitMs || 3000, maxChars: opts.maxChars || 8000 }),
+      signal: ctl.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+  const d = await r.json()
+  if (!d.ok) throw new Error('浏览器打不开：' + (d.error || 'unknown') + (d.blocked ? ' (' + d.blocked + ')' : ''))
+  logWeb('浏览', url)
+  const head = d.title ? d.title + '\n' + d.url + '\n\n' : ''
+  return head + d.text + (d.truncated ? '\n\n[正文过长已截断]' : '')
+}
+
 export function fetchWeb(url) {
   if (!/^https?:\/\//.test(url)) throw new Error('只支持 http(s) 链接：' + url)
   let html = ''
@@ -253,6 +279,17 @@ export async function run(argv = []) {
     if (!rs.length) { console.log('（没搜到结果）'); return }
     console.log(`「${kw}」的搜索结果（${rs.length} 条）：`)
     for (const [i, r] of rs.entries()) console.log(`${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
+    return
+  }
+
+  if (sub === 'browse') {
+    const url = argv[1]
+    if (!url) { console.log('用法：web browse <url> [--wait 3000] [--chars 8000]'); return }
+    const waitIdx = argv.indexOf('--wait')
+    const waitMs = waitIdx > 0 ? Number(argv[waitIdx + 1]) || 3000 : 3000
+    const charsIdx = argv.indexOf('--chars')
+    const maxChars = charsIdx > 0 ? Number(argv[charsIdx + 1]) || 8000 : 8000
+    console.log(await browseWeb(url, { waitMs, maxChars }))
     return
   }
 

@@ -28,9 +28,10 @@ const USAGE_CACHE = () => dataPath('cache', 'ledger-usage.json')
 /** 找 python：voice.python → FEIYU_TTS_PYTHON → GPT-SoVITS 自带 venv（和 prosody 用同一套）。 */
 export function pythonPath(cfg = config()) {
   const cands = [
+    cfg.ledger?.python,      // 10-30：账本自己的 python 优先（容器内 uv venv）
     cfg.voice?.python,
     process.env.FEIYU_TTS_PYTHON,
-    'D:/GPT-SoVITS/.venv/Scripts/python.exe',
+    'D:/GPT-SoVITS/.venv/Scripts/python.exe',   // Windows 时代的残留，最后兜底
   ].filter(Boolean)
   for (const c of cands) {
     try {
@@ -184,9 +185,34 @@ export async function balance(cfg = config(), opts = {}) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
+    // 本地文件模式（10-30）：balanceFile 配了直接读（宿主聚合器每 5 分钟写）
+    const localFile = cfg.ledger?.balanceFile
+    if (localFile) {
+      const j = JSON.parse(fs.readFileSync(localFile, 'utf8'))
+      const avail = j?.usableNow ?? j?.usableToday
+      if (j?.total != null && avail != null) {
+        return {
+          currency: 'A2A', total: Number(j.total), usableNow: Number(avail),
+          granted: Number(j.total), toppedUp: 0, at: j.at, unit: j.unit || 'credit',
+          refreshIn24h: j.refreshIn24h, dailyCap: j.dailyCap,
+          wallets: [{ currency: 'A2A', total: Number(j.total), note: '聚合额度' }],
+        }
+      }
+      return null
+    }
     const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' }, signal: ctrl.signal })
     if (!r.ok) return null
     const j = await r.json()
+    // a2a 桥（10-30 二版）：不再直接调 a2a API —— 宿主 feiyu-quota.timer 每 5 分钟聚合
+    // 全部账号（含 429 剔除、倍率换算）写成 a2a-balance.json，这里只读文件。
+    // 她只看得到「还剩多少」，账号明细/限流状态全留在宿主（不该进她的视野）。
+    if (j?.total != null && j?.usableToday != null) {
+      return {
+        currency: 'A2A', total: Number(j.total), usableToday: Number(j.usableToday),
+        granted: Number(j.total), toppedUp: 0,
+        wallets: [{ currency: 'A2A', total: Number(j.total), note: '聚合额度' }],
+      }
+    }
     const infos = j?.balance_infos
     if (!Array.isArray(infos) || !infos.length) return null
     const wallets = infos.map((w) => ({
@@ -271,7 +297,12 @@ export function brief(r) {
   }
   const q = (r.quotas || []).filter((x) => x.limit > 0).map((x) => `${x.label} ${x.left}/${x.limit}`)
   if (q.length) p.push('额度：' + q.join(' · '))
-  if (r.balance) p.push(`钱包余额 ¥${r.balance.total}（按这个花法还能撑 ${r.runwayDays} 天）`)
+  if (r.balance?.currency === 'A2A') {
+    // 官方 credit 口径（10-30 v2）：宿主聚合器算好的「此刻可用」。
+    // 单位是官方积分（credit），不是钱也不是次数；每日会随账号刷新回血。
+    const u = r.balance.usableNow ?? r.balance.usableToday ?? r.balance.total
+    p.push(`现在可用 ${u} 积分`)
+  } else if (r.balance) p.push(`钱包余额 ¥${r.balance.total}（按这个花法还能撑 ${r.runwayDays} 天）`)
   return p.join(' ； ')
 }
 

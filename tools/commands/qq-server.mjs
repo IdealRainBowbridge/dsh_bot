@@ -28,6 +28,7 @@ import { parseEmotionTag, splitVoiceParts, emotionProfile, emotionMenu } from '.
 import { sing } from '../lib/sing.mjs'
 import { tickMood } from '../lib/mood.mjs'
 import { generateStickerImage } from '../lib/imggen.mjs'
+import { dataUri as visionDataUri } from '../lib/vision.mjs'
 import { availableTags } from '../lib/stickers.mjs'
 import * as brain from '../brain/index.mjs'
 import { execFile, spawnSync, spawn } from 'node:child_process'
@@ -320,22 +321,19 @@ export async function run(argv = []) {
         if (!isGroup && ownerQQNow && String(userId) === ownerQQNow) ownerLastMsgAt = Date.now()
       } catch {}
       let imageDesc = ''
+      const imageUris = []   // 10-30 合并通道：原图直接进聊天请求，不再先 VL 描述成文字
       if (images.length) {
         try {
-          const { visionOn, describeFrames } = await import('../lib/vision.mjs')
-          if (visionOn()) {
+          fs.mkdirSync(dataPath('qq-img'), { recursive: true })
+          const exe = fs.existsSync('C:/Windows/System32/curl.exe') ? 'C:/Windows/System32/curl.exe' : 'curl'
+          for (const u of images.slice(0, 3)) {
             const dl = path.join(dataPath('qq-img'), `img-${Date.now()}-${Math.floor(Math.random() * 1e4)}.jpg`)
-            fs.mkdirSync(path.dirname(dl), { recursive: true })
-            const exe = fs.existsSync('C:/Windows/System32/curl.exe') ? 'C:/Windows/System32/curl.exe' : 'curl'
-            await execFileAsync(exe, ['-sS', '-L', '-m', '30', '-A', 'Mozilla/5.0', '-o', dl, images[0]], { timeout: 35000, windowsHide: true })
-            if (fs.existsSync(dl) && fs.statSync(dl).size > 2000) {
-              const desc = await describeFrames([dl], { query: '这是 QQ 聊天里对方发来的图片。一两句话说明：图里是什么/谁、在干什么、如果是表情包或梗图说出它的梗和情绪。' })
-              imageDesc = desc ? `【她发来的图片：${desc.slice(0, 120)}】` : '【她发来一张图片，但我没看清】'
-            } else imageDesc = '【她发来一张图片，但下载失败】'
-            try { fs.rmSync(dl, { force: true }) } catch {}
-          } else imageDesc = '【她发来一张图片】'
+            await execFileAsync(exe, ['-sS', '-L', '-m', '30', '-A', 'Mozilla/5.0', '-o', dl, u], { timeout: 35000, windowsHide: true })
+            if (fs.existsSync(dl) && fs.statSync(dl).size > 2000) imageUris.push(dl)
+          }
+          imageDesc = imageUris.length ? '【她发来一张图片（我直接看到了原图）】' : '【她发来一张图片，但下载失败】'
         } catch { imageDesc = '【她发来一张图片】' }
-        try { fs.rmSync(path.join(dataPath('qq-img')), { recursive: true, force: true }) } catch {}   // 用完即清
+        // 图暂不删：等聊天请求带完原图再清（见 answer 之后）
       }
       // 10-27：引用行（他引用了哪一条）拼在正文前面 —— 记忆里也留着，回头能还原上下文
       const parts = [quoteLine, text.replace(new RegExp(`@?${selfId}\\s*`), '').trim(), extra, imageDesc]
@@ -452,7 +450,18 @@ export async function run(argv = []) {
         messages[0].content += '\n\n【这条回复必须带一个图片表情】在正文句尾追加一个标记，二选一：'
           + `[表情:标签]（可用标签：${availableTags().join('/')}）或 [自制表情:八个字以内的短句]（会现场画一张新的）。只带一个，别解释。`
       }
+      if (imageUris.length) {
+        // 10-30 合并通道：原图直接进 user 消息（v4 模型原生收图），一次调用完成看图+回复
+        const last = messages[messages.length - 1]
+        const content = [{ type: 'text', text: typeof last.content === 'string' ? last.content : '' }]
+        for (const f of imageUris) {
+          try { content.push({ type: 'image_url', image_url: { url: visionDataUri(f) } }) } catch {}
+        }
+        messages[messages.length - 1] = { role: 'user', content }
+        log(`[qq] 🖼 图片已并入聊天请求（${imageUris.length}张）`)
+      }
       const answer = await llm.chat(messages)
+      try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch {}   // 用完即清（现在才清）
       let out = guard.clean(answer, config())
       // 群聊认人硬保险（10-26）：prompt 已经写到"这一轮不许出现主人"，但 11:54 她还是照群友的要求
       // 说了"主人早上好"。prompt 是软的，嘴是她的 —— 所以这里在出稿后再拦一道。
@@ -785,8 +794,9 @@ export async function run(argv = []) {
     } catch (e) { return { error: String(e?.message || e) } }
   }
 
-  server.listen(port, '127.0.0.1', () => {
-    log(`[qq] 监听 http://127.0.0.1:${port}/onebot`)
+  const QQ_BIND = process.env.QQ_BIND_HOST || '127.0.0.1'
+  server.listen(port, QQ_BIND, () => {
+    log(`[qq] 监听 http://${QQ_BIND}:${port}/onebot`)
     log(`    NapCat WebUI → 网络配置 → HTTP 上报 → http://127.0.0.1:${port}/onebot（messagePostFormat=array）`)
     log(`    dryRun=${!!config().guard?.dryRun} · at_only=${QQ.at_only !== false} · voice=${!!QQ.voice_enabled} · napcat=${NAPCAT}`)
     // 群聊认人护栏自检（10-26）：启动就把三件套的状态打出来 —— 换了代码却忘了重启时，

@@ -25,7 +25,8 @@ def arg(name, default=None):
 
 
 def main():
-    sessions_dir = arg('--sessions', os.path.join(os.environ['USERPROFILE'], '.dsh', 'sessions'))
+    _home = os.environ.get('USERPROFILE') or os.path.expanduser('~')
+    sessions_dir = arg('--sessions', os.path.join(_home, '.dsh', 'sessions'))
     mine_key = arg('--mine', 'feiyu-work')
 
     # 目录层级是 sessions/<工作区>/<会话目录>/session.v4.jsonl.zstd，
