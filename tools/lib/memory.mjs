@@ -81,6 +81,10 @@ export function remember(platform, chatId, userId, role, text, extra = {}) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.appendFileSync(file, JSON.stringify(rec) + '\n')
   rotateIfBig(file)
+  // dual-write brain (10-31 fuse)
+  try {
+    import('./brain-bridge.mjs').then((B) => B.rememberToBrain(rec)).catch(() => {})
+  } catch {}
 }
 
 // 单文件太大时按月份分片（照 dsh-world「按天归档 + 原文全留」的思路，只是粒度用月）。
