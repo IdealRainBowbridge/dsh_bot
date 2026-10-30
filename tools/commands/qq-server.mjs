@@ -1343,18 +1343,19 @@ export async function run(argv = []) {
       if (t.catchUp?.doing?.length) log(`[qq] 🧠 补做 ${t.catchUp.doing.length} 件欠着的事：${t.catchUp.doing.map((x) => x.object).join('，')}`)
       // 睡眠（10-30）：积累驱动+每日保底小睡，shouldSleep 是唯一决策点。
       if (!brainConsolidating) {
-        try {
-          const { shouldSleep } = await import("./sleep.mjs")
-          const d = await shouldSleep()
-          if (d.sleep) {
-            brainConsolidating = true
-            console.log("[qq] 😴 " + d.why + " → 睡眠开始")
-            const p = spawn(process.execPath, [path.join(FEiyuRoot(), "tools", "feiyu.mjs"), "sleep", "--force"], { detached: true, stdio: "ignore", windowsHide: true })
-            p.on("exit", () => { brainConsolidating = false })
-            p.on("error", () => { brainConsolidating = false })
-            p.unref()
-          }
-        } catch {}
+        import("./sleep.mjs").then(async ({ shouldSleep }) => {
+          try {
+            const d = await shouldSleep()
+            if (d.sleep && !brainConsolidating) {
+              brainConsolidating = true
+              console.log("[qq] 😴 " + d.why + " → 睡眠开始")
+              const p = spawn(process.execPath, [path.join(FEiyuRoot(), "tools", "feiyu.mjs"), "sleep", "--force"], { detached: true, stdio: "ignore", windowsHide: true })
+              p.on("exit", () => { brainConsolidating = false })
+              p.on("error", () => { brainConsolidating = false })
+              p.unref()
+            }
+          } catch {}
+        }).catch(() => {})
       }
       if (t.shouldConsolidate && !brainConsolidating) {
         brainConsolidating = true
