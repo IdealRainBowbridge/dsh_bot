@@ -109,6 +109,11 @@ export async function sleepNow(opts = {}) {
   }
   const started = Date.now()
   const phases = []
+  try {
+    const { setOnline } = await import("./status.mjs")
+    await setOnline("dnd")
+    console.log("[sleep] 状态已切勿扰（睡觉了）")
+  } catch {}
   const mark = (name, result) => { phases.push({ name, ms: Date.now() - started, result }); writeJson(SLEEP_STATE(), { sleeping: true, phase: name, started, phases }); console.log("[sleep] " + name + " 完成") }
   if (!phases.some(p => p.name === "整理")) {
     let r = "?"
@@ -141,6 +146,11 @@ export async function sleepNow(opts = {}) {
     mark("优化", optimize)
   }
   const report = { at: Date.now(), sleepiness: sp.total, parts: sp.parts, detail: sp.detail, phases: phases.map(p => ({ name: p.name, ms: Math.round(p.ms / 1000), result: p.result })) }
+  try {
+    const { setOnline } = await import("./status.mjs")
+    await setOnline("online")
+    console.log("[sleep] 状态已切回在线")
+  } catch {}
   writeJson(SLEEP_STATE(), { sleeping: false, phase: "awake", lastSleep: report, lastSleepAt: Date.now() })
   console.log("[sleep] 醒了，全程 " + Math.round((Date.now() - started) / 1000) + "s")
   return { ok: true, report }
