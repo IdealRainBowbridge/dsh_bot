@@ -36,7 +36,8 @@ for (let i = 0; i < n; i++) {
 }
 `)
 for (const tag of ['甲', '乙', '丙', '丁']) {
-  const r = spawnSync(NODE, [writer, EVENT_URL, '25', tag], { env: { ...process.env }, encoding: 'utf8' })
+  // v5：补超时（测试里也一样 —— 子进程挂住会让整个测试套卡死）
+  const r = spawnSync(NODE, [writer, EVENT_URL, '25', tag], { env: { ...process.env }, encoding: 'utf8', timeout: 60_000, killSignal: 'SIGKILL' })
   if (r.status !== 0) console.log('    子进程失败：' + String(r.stderr).slice(0, 300))
 }
 const consumed = event.consume({ max: 1000 })

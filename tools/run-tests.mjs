@@ -1,7 +1,7 @@
 // run-tests —— 不依赖 npm 的测试跑轮（这台机器上 PATH 里没有 node/npm，
 // `npm test` 跑不了，而她自己改完代码必须验证）。
 //
-//   node tools/run-tests.mjs            # 顺序跑全部 40 套，全绿退出 0
+//   node tools/run-tests.mjs            # 顺序跑全部 42 套，全绿退出 0
 //   node tools/run-tests.mjs memory     # 只跑文件名含 "memory" 的
 //
 // 与 package.json 的 `test` 脚本等价：同样的文件、同样的顺序、失败即停。
@@ -54,6 +54,9 @@ const TESTS = [
   'config-file-test.mjs',      // 配置读写：合并/剔除默认值/600/原子写
   'lifecycle-test.mjs',        // 定时器生命周期：幂等/替换/清理/容错
   'persona-voice-test.mjs',    // 人设措辞单一来源：改名/改称呼/无 AI 字样
+  // ── v5 深度排查新增 ──────────────────────────────────────────────────────
+  'atomic-test.mjs',           // 跨进程读改写：20 进程并发零丢失（旧版丢 28.8%）
+  'share-queue-race-test.mjs', // 分享队列多生产者：并发入队不丢事件、不写坏 JSON
 ]
 
 const filter = process.argv[2] || ''
@@ -73,7 +76,12 @@ for (const t of picked) {
     bad++
     continue
   }
-  const r = spawnSync(NODE, [file], { stdio: 'inherit', windowsHide: true, cwd: path.join(HERE, '..') })
+  // v5：单个测试套原来没有超时 —— 任何一个测试挂住（比如等网络/等文件锁），
+  // 整个 run-tests 就永远不结束，看着像"卡住了"。给 5 分钟上限。
+  const r = spawnSync(NODE, [file], {
+    stdio: 'inherit', windowsHide: true, cwd: path.join(HERE, '..'),
+    timeout: 300_000, killSignal: 'SIGKILL',
+  })
   if (r.status === 0) console.log(`✓ ${t}`)
   else {
     console.log(`✗ ${t}（exit ${r.status ?? r.signal}）`)

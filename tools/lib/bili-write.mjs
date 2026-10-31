@@ -9,11 +9,12 @@ import { config } from './config.mjs'
 import * as guard from './guard.mjs'
 import { classifyComment } from './comment-kind.mjs'
 import { dataPath } from './paths.mjs'
+import { updateJson, readJsonSafe } from './atomic.mjs'
 
 // ── 日额度账本 ───────────────────────────────────────────────────────────
 const ACT_FILE = dataPath('bili-actions.json')
 const dayKey = () => new Date().toLocaleDateString('sv-SE')
-function readActs() { try { return JSON.parse(fs.readFileSync(ACT_FILE, 'utf8')) } catch { return {} } }
+function readActs() { return readJsonSafe(ACT_FILE, {}) }
 function actCount(kind) {
   const j = readActs()
   return j.day === dayKey() ? Number(j[kind] ?? 0) : 0
@@ -26,12 +27,23 @@ export function capOk(kind, max) { return !(Number(max) > 0) || actCount(kind) <
  * @param {object} info {bvid,title,text,to,extra} —— 有就顺手记进社交流水（主人要看得见）
  */
 export function capRecord(kind, info = {}) {
-  const j = readActs()
-  const fresh = j.day !== dayKey()
-  // ⚠️ 展开顺序：旧值必须在前，新值在后 —— 以前写反了（...j 在后把刚 +1 的值又覆盖回去，账本永远 1）
-  const next = fresh ? { day: dayKey(), [kind]: 1 } : { ...j, day: dayKey(), [kind]: Number(j[kind] ?? 0) + 1 }
-  fs.mkdirSync(path.dirname(ACT_FILE), { recursive: true })
-  fs.writeFileSync(ACT_FILE, JSON.stringify(next))
+  // ⚠️ v5：必须走跨进程锁。以前是 read → 改 → write，三个进程同时记录时
+  // 后写的会覆盖先写的增加量（实测 20 进程并发丢 28.8%）。
+  // 额度漏记 = 她以为没超发、实际超了 → 平台风控。
+  let next = null
+  const r = updateJson(ACT_FILE, (cur) => {
+    const j = cur || {}
+    const fresh = j.day !== dayKey()
+    // 展开顺序：旧值必须在前，新值在后 —— 以前写反了（...j 在后把刚 +1 的值又覆盖回去，账本永远 1）
+    next = fresh ? { day: dayKey(), [kind]: 1 } : { ...j, day: dayKey(), [kind]: Number(j[kind] ?? 0) + 1 }
+    return next
+  }, { fallback: {} })
+  if (!r.ok) {
+    // 拿不到锁：**宁可不记也不盲写**。调用方会在下一次 check 时看到额度没减，
+    // 最坏是少发一条，比超额触发风控好。
+    try { import('./swallow.mjs').then((m) => m.swallow(new Error('capRecord lock failed'), 'bili-write:cap-record')).catch(() => {}) } catch { /* ignore */ }
+    return
+  }
   // 只说"动作"类（点赞/投币/关注/投稿）；"说话"类由 outbox.recordBili 记，避免一条事记两遍
   if (SOCIAL_ACTION_KINDS.has(kind)) {
     import('./social-log.mjs').then((s) => s.append({ kind, ...info, cfg: config() })).catch(() => {})

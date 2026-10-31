@@ -7,18 +7,24 @@
 import fs from 'node:fs'
 import { dataPath } from '../lib/paths.mjs'
 import { config } from '../lib/config.mjs'
+import { updateJson, readJsonSafe } from '../lib/atomic.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const QUOTA_FILE = dataPath('quota.json')
 const dayOf = (v = Date.now()) => new Date(v).toLocaleDateString('sv-SE')
 
 function read() {
-  try { return JSON.parse(fs.readFileSync(QUOTA_FILE, 'utf8')) } catch { return { log: [] } }
+  // v5：走 atomic 的读（失败回落），写入走 updateJson 的跨进程锁。
+  return readJsonSafe(QUOTA_FILE, { log: [] })
 }
 function write(q) {
-  fs.mkdirSync(dataPath(), { recursive: true })
-  const temp = QUOTA_FILE + '.' + process.pid + '.tmp'
-  fs.writeFileSync(temp, JSON.stringify(q, null, 1) + '\n')
-  fs.renameSync(temp, QUOTA_FILE)
+  const r = updateJson(QUOTA_FILE, () => q, { fallback: { log: [] } })
+  if (!r.ok) {
+    // 拿不到锁就不要盲写（会把别人的记录覆盖掉）
+    try { swallow(new Error('quota write lock failed'), 'quota:write') } catch { /* ignore */ }
+    return false
+  }
+  return true
 }
 
 function arg(argv, name) {

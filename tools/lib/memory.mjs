@@ -17,6 +17,7 @@ import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
 import { config } from './config.mjs'
 import { normalizeMemoryText } from './normalize.mjs'
+import { updateJson } from './atomic.mjs'
 
 const EP_FILE = dataPath('episodes.jsonl')
 const FACT_FILE = dataPath('facts.json')
@@ -546,29 +547,38 @@ function loreThemeCapOnce(list, { keep = 2, minCount = 4 } = {}) {
 }
 
 export function addLore(tag, text) {
-  const list = readJson(LORE_FILE, [])
+  // v5：lore 有 6 个写入者（memory / dream / wander / index.js / CLI）。
+  // 旧写法 readJson → push → writeJson 是"整份覆盖"：两个进程同时写，
+  // 后完成的那次用自己手里的旧快照把对方的条目冲掉 —— 丢的是她的设定与名场面。
+  // 现在在**锁内重新读磁盘**再合并，并且合并后统一做主题封顶。
   const kind = OPS_TAGS.has(String(tag)) ? 'ops' : (String(tag) === '兴趣' ? 'interest' : (isDatedLog(text) ? 'work' : 'value'))
-  const item = { tag: String(tag), text: String(text), ts: Date.now(), kind }
-  // ⚠️ 10-27 止损：同一主题已经写过 2 次以上 → 不再新增，只把最后一条换成新的并记 n。
-  if (kind === 'value' || kind === 'interest') {
-    const key = topicKey(text)
-    const same = list.filter(x => !isOps(x) && topicKey(x.text) === key)
-    if (same.length >= 2) {
-      const last = same[same.length - 1]
-      last.text = String(text)
-      last.ts = Date.now()
-      last.n = Number(last.n || 1) + 1
-      writeJson(LORE_FILE, list)
-      return
+  let added = false
+  const r = updateJson(LORE_FILE, (cur) => {
+    const list = Array.isArray(cur) ? cur : []
+    const item = { tag: String(tag), text: String(text), ts: Date.now(), kind }
+    // ⚠️ 10-27 止损：同一主题已经写过 2 次以上 → 不再新增，只把最后一条换成新的并记 n。
+    if (kind === 'value' || kind === 'interest') {
+      const key = topicKey(text)
+      const same = list.filter(x => !isOps(x) && topicKey(x.text) === key)
+      if (same.length >= 2) {
+        const last = same[same.length - 1]
+        last.text = String(text)
+        last.ts = Date.now()
+        last.n = Number(last.n || 1) + 1
+        return list
+      }
     }
-  }
-  list.push(item)
-  const capped = loreThemeCap(list)
-  const values = capped.filter(x => !isInterest(x) && !isOps(x) && x.kind !== 'work' && x.kind !== 'superseded')
-  const work = capped.filter(x => x.kind === 'work' || x.kind === 'superseded').slice(-120)
-  const interests = capped.filter(isInterest)
-  const ops = capped.filter(isOps).slice(-60)
-  writeJson(LORE_FILE, [...values, ...interests.slice(-200), ...work, ...ops].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)))
+    list.push(item)
+    added = true
+    const capped = loreThemeCap(list)
+    const values = capped.filter(x => !isInterest(x) && !isOps(x) && x.kind !== 'work' && x.kind !== 'superseded')
+    const work = capped.filter(x => x.kind === 'work' || x.kind === 'superseded').slice(-120)
+    const interests = capped.filter(isInterest)
+    const ops = capped.filter(isOps).slice(-60)
+    return [...values, ...interests.slice(-200), ...work, ...ops].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))
+  }, { fallback: [], mode: 0o644 })
+  if (!r.ok) { try { swallow(new Error('lore write failed'), 'memory:addLore') } catch { /* ignore */ } }
+  return added ? r.value : undefined
 }
 
 export function lore(tag) {

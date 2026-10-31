@@ -84,7 +84,7 @@ function nativeRate(file, cfg = config()) {
 function pcm16(file, sr = 0, cfg = config()) {
   const rate = Number(sr) > 0 ? Number(sr) : nativeRate(file, cfg)
   const buf = execFileSync(ffmpegBin(cfg), ['-v', 'quiet', '-i', file, '-ac', '1', '-ar', String(rate), '-f', 's16le', '-'],
-    { maxBuffer: 256 * 1024 * 1024, windowsHide: true })
+    { maxBuffer: 256 * 1024 * 1024, windowsHide: true, timeout: 300_000, killSignal: 'SIGKILL' })
   return { sr: rate, data: new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.length / 2)) }
 }
 
@@ -183,7 +183,7 @@ export function trimVoice(file, out, cfg = config()) {
  */
 export function staticGainTo(file, targetLufs = -16, cfg = config()) {
   const probe = (args) => {
-    const r = spawnSync(ffmpegBin(cfg), args, { encoding: 'utf8', windowsHide: true, maxBuffer: 8 * 1024 * 1024 })
+    const r = spawnSync(ffmpegBin(cfg), args, { encoding: 'utf8', windowsHide: true, maxBuffer: 8 * 1024 * 1024, timeout: 120_000, killSignal: 'SIGKILL' })
     return String(r.stderr || '') + String(r.stdout || '')
   }
   const txt = probe(['-hide_banner', '-nostats', '-i', file, '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-'])

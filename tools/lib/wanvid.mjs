@@ -153,8 +153,11 @@ export async function submit({ firstFrame, prompt = '', negative, seconds = 5, s
       ...(Number.isFinite(seed) ? { seed: Math.trunc(seed) } : {}),
     },
   }
+  // v5：提交请求也要有超时。视频生成本来就慢（轮询在别处），
+  // 但这个"提交"调用如果挂着，整个 produce 流程会卡在这里不动。
   const res = await fetch(s.baseUrl + SUBMIT_PATH, {
     method: 'POST',
+    signal: AbortSignal.timeout(30_000),
     headers: {
       Authorization: `Bearer ${s.apiKey}`,
       'Content-Type': 'application/json',

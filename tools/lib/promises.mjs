@@ -11,6 +11,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
+import { updateJson } from './atomic.mjs'
+import { swallow } from './swallow.mjs'
 import * as brainIntents from '../brain/intents.mjs'
 
 const FILE = dataPath('promises.json')
@@ -24,12 +26,21 @@ function read() {
 }
 
 function write(obj) {
-  try {
-    fs.mkdirSync(path.dirname(FILE), { recursive: true })
-    const tmp = FILE + '.' + process.pid + '.tmp'
-    fs.writeFileSync(tmp, JSON.stringify(obj, null, 1) + '\n')
-    fs.renameSync(tmp, FILE)
-  } catch {}
+  // v5：承诺账本有 4 个写入者（qq-server / mind / wander / CLI）。
+  // 旧的整份覆盖会丢承诺 —— 她答应的事凭空消失，是"说了不做"的另一种成因。
+  const r = updateJson(FILE, () => obj, { fallback: { items: [] } })
+  if (!r.ok) { try { swallow(new Error('promises write failed'), 'promises:write') } catch { /* ignore */ } }
+}
+
+/**
+ * 在锁内做"读-改-写"（新增/结算承诺都走这条）。
+ * @param {(cur:any)=>{items:any[]}} mutate
+ */
+function mutate(fn) {
+  return updateJson(FILE, (cur) => {
+    const base = (cur && Array.isArray(cur.items)) ? cur : { items: [] }
+    return fn(base) || base
+  }, { fallback: { items: [] } })
 }
 
 const norm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim()
@@ -76,22 +87,45 @@ export function extract(reply, { userText = '' } = {}) {
 }
 
 /** 落账。同 what 未完成的只留一条（不重复记账）。 */
-export function add(text, { what = '', kind = 'todo', dueMin = 120, id = '' } = {}) {
+/**
+ * 新增一条承诺。
+ *
+ * ⚠️ v5 发现的一个易错点：签名是 `add(text, opts)`，第一个参数是**整句话**。
+ * 很多人（包括我写测试时）会理所当然地写成 `add({ what, kind, text })` ——
+ * 结果 `text` 收到一个对象，`norm(object)` = "[object Object]"，
+ * 承诺内容变成字符串 "[object Object]"，而且**不报错**。
+ * 这里加一个兼容层：第一个参数是对象且没有第二个参数时，按 opts 解构。
+ *
+ * @param {string|{what?:string,text?:string,kind?:string,dueMin?:number,id?:string}} text
+ * @param {{what?:string, kind?:string, dueMin?:number, id?:string}} opts
+ */
+export function add(text, opts = {}) {
+  let o = opts
+  let body = text
+  if (text && typeof text === 'object') {
+    o = text
+    body = text.text ?? text.what ?? ''
+  }
+  const { what = '', kind = 'todo', dueMin = 120, id = '' } = o
   const st = read()
-  const w = norm(what || text).slice(0, 60)
+  const w = norm(what || body).slice(0, 60)
   if (!w) return null
   const dup = st.items.find((x) => x.state === 'open' && norm(x.what) === w)
   if (dup) return dup
   const item = {
     id: id || ('p' + Date.now().toString(36) + Math.floor(Math.random() * 100).toString(36)),
-    what: w, kind, text: norm(text).slice(0, 160),
+    what: w, kind, text: norm(body).slice(0, 160),
     createdAt: Date.now(),
     dueAt: Date.now() + Math.max(5, Number(dueMin) || 120) * 60_000,
     state: 'open', tries: 0, doneAt: 0, why: '',
   }
-  st.items.push(item)
-  if (st.items.length > 80) st.items = st.items.slice(-80)
-  write(st)
+  // v5：在锁内重新读盘再 push（create 之前那次 read 只用于去重预判，
+  // 真正写入必须基于磁盘上的最新状态，否则会覆盖掉别人刚加的承诺）。
+  mutate((cur) => {
+    if (!cur.items.some((x) => x.id === item.id)) cur.items.push(item)
+    if (cur.items.length > 80) cur.items = cur.items.slice(-80)
+    return cur
+  })
   // 镜像进脑的意图账本（v3 O7）：旧账本仍是执行者，这边只观察 —— S4 再换它当主人。
   try {
     if (process.env.FEIYU_BRAIN_MIRROR !== '0') {
@@ -136,13 +170,17 @@ export function openCount() {
 }
 
 export function done(id, note = '') {
-  const st = read()
-  const it = st.items.find((x) => x.id === id)
+  let it = null
+  mutate((cur) => {
+    const found = cur.items.find((x) => x.id === id)
+    if (!found) return cur
+    found.state = 'done'
+    found.doneAt = Date.now()
+    found.why = norm(note).slice(0, 120)
+    it = found
+    return cur
+  })
   if (!it) return null
-  it.state = 'done'
-  it.doneAt = Date.now()
-  it.why = norm(note).slice(0, 120)
-  write(st)
   // 脑的意图账本同步结算（旧账本先结算，脑跟着走 —— 两边都记，交叉核对）
   try {
     const mirror = brainIntents.all().find((x) => x.origin === `promise:${id}`)
@@ -153,15 +191,19 @@ export function done(id, note = '') {
 
 /** 做不成：标记失败并写明原因 —— 之后她再答应这类事，提示词会拦。 */
 export function fail(id, why = '') {
-  const st = read()
-  const it = st.items.find((x) => x.id === id)
+  let it = null
+  mutate((cur) => {
+    const found = cur.items.find((x) => x.id === id)
+    if (!found) return cur
+    found.state = 'failed'
+    found.tries = Number(found.tries || 0) + 1
+    found.why = norm(why).slice(0, 200)
+    // 失败 2 次后推到 6 小时后再试（别每 10 分钟撞一次）
+    if (found.tries >= 2) found.dueAt = Date.now() + 6 * 3600_000
+    it = found
+    return cur
+  })
   if (!it) return null
-  it.state = 'failed'
-  it.tries = Number(it.tries || 0) + 1
-  it.why = norm(why).slice(0, 200)
-  // 失败 2 次后推到 6 小时后再试（别每 10 分钟撞一次）
-  if (it.tries >= 2) it.dueAt = Date.now() + 6 * 3600_000
-  write(st)
   // 做不成 → 脑里标 blocked（不是"没发生过"，是"现在做不了"，带重试时间）
   try {
     const mirror = brainIntents.all().find((x) => x.origin === `promise:${id}`)
@@ -173,13 +215,17 @@ export function fail(id, why = '') {
 /** 做不成（但还值得再试）：只把截止时间往后推，不记"失败"。
  *  用途：机器睡了一夜、binge 这次没材料 —— 不该算她失信，也不该每 60 秒重撞一次。 */
 export function defer(id, min = 360, note = '') {
-  const st = read()
-  const it = st.items.find((x) => x.id === id)
+  let it = null
+  mutate((cur) => {
+    const found = cur.items.find((x) => x.id === id)
+    if (!found) return cur
+    found.tries = Number(found.tries || 0) + 1
+    found.dueAt = Date.now() + Math.max(10, Number(min) || 360) * 60_000
+    if (note) found.why = norm(note).slice(0, 200)
+    it = found
+    return cur
+  })
   if (!it) return null
-  it.tries = Number(it.tries || 0) + 1
-  it.dueAt = Date.now() + Math.max(10, Number(min) || 360) * 60_000
-  if (note) it.why = norm(note).slice(0, 200)
-  write(st)
   return it
 }
 

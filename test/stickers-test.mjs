@@ -8,7 +8,7 @@ import path from 'node:path'
 
 import {
   splitSticker, toPlain, sanitizeFor, pickSticker, availableTags, stickerPrompt,
-  ensureSelfSticker, DEFAULT_TAGS, BILI_FACES, STICKER_DIR,
+  ensureSelfSticker, selfStickerAvailable, DEFAULT_TAGS, BILI_FACES, STICKER_DIR,
 } from '../tools/lib/stickers.mjs'
 
 // 1) 摘表情标记（图库标签 / 自制文案 / 没有）
@@ -54,9 +54,24 @@ assert.ok(biliPrompt.includes('[' + BILI_FACES[0] + ']'), 'B站 prompt 应给出
 const dyPrompt = stickerPrompt('douyin')
 assert.ok(dyPrompt.includes('emoji'), '抖音 prompt 应说明只认 emoji')
 
-// 6) 自制表情：没配置 python 时优雅返回 null（不抛错）
-assert.equal(ensureSelfSticker('困死了', null), null)
-assert.equal(ensureSelfSticker('', {}), null)
+// 6) 自制表情（v5 改了契约，这里跟着更新）
+// 旧行为：没配 cfg.wechat.python 就恒返 null —— 也就是"AI 画不出来退文字贴纸"
+// 这条兜底**从来没生效过**（容器里根本没有那个 Windows python）。
+// 新行为：优先用 ffmpeg 画（容器自带 + 中文字体），画不出来才返回 null。
+// 所以这里不能再断言"一定 null"，而是断言：
+//   · 空文案必须 null（不浪费一次渲染）
+//   · 有文案时：**要么**给出一个真实存在的文件，**要么** null（能力不可用时优雅降级）
+const r1 = ensureSelfSticker('困死了', null)
+if (r1 !== null) {
+  assert.ok(fs.existsSync(r1), '返回了路径就必须是真实存在的文件：' + r1)
+  assert.ok(fs.statSync(r1).size > 500, '生成的贴纸不能是 0 字节')
+} else {
+  // 环境里没有 ffmpeg/字体时允许降级 —— 但必须能说清为什么
+  const avail = selfStickerAvailable ? selfStickerAvailable() : { ok: false, why: 'no available()' }
+  assert.equal(avail.ok, false, '返回 null 时必须能解释原因（available() 应为 false）')
+}
+assert.equal(ensureSelfSticker('', {}), null, '空文案不该生成任何东西')
+assert.equal(ensureSelfSticker('   ', {}), null, '纯空白也不该生成')
 
 console.log('stickers ✓  标记解析/自制标记/评论剥离/分平台清洗/prompt/空图库兜底 全部通过')
 console.log('  图库标签：', tags.join('/'), '· B站表情码：', BILI_FACES.slice(0, 4).join(' '))

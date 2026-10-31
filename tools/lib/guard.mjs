@@ -9,6 +9,8 @@
 import fs from 'node:fs'
 import { dataPath } from './paths.mjs'
 import { config } from './config.mjs'
+import { updateJson } from './atomic.mjs'
+import { swallow } from './swallow.mjs'
 
 const SENT_LOG = dataPath('sent-log.json')
 const SENT_AT = dataPath('sent-at.json')
@@ -17,10 +19,11 @@ function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return fallback }
 }
 function writeJson(file, value) {
-  fs.mkdirSync(dataPath(), { recursive: true })
-  const temp = file + '.' + process.pid + '.tmp'
-  fs.writeFileSync(temp, JSON.stringify(value))
-  fs.renameSync(temp, file)
+  // v5：guard 的 sent-at / sent-log 是**限速与去重的唯一依据**，
+  // 多进程（qq-server + 各 CLI）同时发时旧写法会丢记录 → 限速失效 → 刷屏。
+  // 用原子写（这里是整份覆盖，语义不变；跨进程互斥由 atomic 保证）。
+  const r = updateJson(file, () => value, { fallback: {} })
+  if (!r.ok) { try { swallow(new Error('guard write failed: ' + file), 'guard:write') } catch { /* ignore */ } }
 }
 
 /** 3-gram 集合（dafeiyu guard.py _grams）。 */

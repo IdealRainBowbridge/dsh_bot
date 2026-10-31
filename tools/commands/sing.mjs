@@ -21,9 +21,11 @@ async function sendQQ(file, text) {
     signal: AbortSignal.timeout(60000),
   })
   if (r.ok && text) {
+    // v5：补超时（上面那条发语音的 fetch 有 signal，这条漏了）
     await fetch(`${napcat}/send_private_msg`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'text', data: { text } }] }),
+      signal: AbortSignal.timeout(15000),
     }).catch(() => {})
   }
   return r.ok

@@ -36,7 +36,8 @@ const push = (kind, file, detail) => problems.push({ kind, file, detail })
 // ── 1. 语法 ────────────────────────────────────────────────────────────────
 function checkSyntax(files) {
   for (const f of files) {
-    try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }) }
+    // 门禁自己也要有超时：`node --check` 遇到超大/畸形文件可能卡住
+    try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe', timeout: 15_000, killSignal: 'SIGKILL' }) }
     catch (e) {
       const msg = String(e.stderr || e.message).split('\n').filter(Boolean).slice(0, 4).join('\n      ')
       push('语法错误', rel(f), msg)
@@ -50,9 +51,84 @@ function resolves(from, spec) {
   const base = path.resolve(path.dirname(from), spec)
   return EXTS.some((x) => { try { return fs.statSync(base + x).isFile() } catch { return false } })
 }
-const stripComments = (src) => src
-  .replace(/\/\*[\s\S]*?\*\//g, (x) => x.replace(/[^\n]/g, ' '))
-  .replace(/(^|[^:])\/\/[^\n]*/g, (x, p) => p + ' '.repeat(x.length - p.length))
+/**
+ * 去掉注释（保留字符串内容与行号）。
+ *
+ * ⚠️ v5 深度排查发现的一个**门禁自身 bug**：
+ * 旧实现是两条正则（一条去块注释、一条去行注释）。
+ * 第二条会把**字符串里的 `//`** 当成注释开始 —— 而项目里到处都是
+ * `path.replace(/\//g, path.sep)` 这种写法。结果整行后半段被抹成空格，
+ * 于是：
+ *   · 后面的 `timeout: 20000` 看不见 → 误报"没有超时"
+ *   · 更糟的是反过来：注释开始的判断错了，也可能把**真实代码当注释删掉** → 漏报
+ * 一个质量门禁自己会吃掉被检查的代码，是最危险的 bug：它会静默放过真问题。
+ *
+ * 现在改成逐字符扫描：正确识别普通字符串、模板字符串、正则字面量、行注释、块注释。
+ */
+function stripComments(src) {
+  let out = ''
+  let i = 0
+  const n = src.length
+  // 上一个"有意义的"字符，用来判断 / 是除号还是正则开头
+  let prevSignificant = ''
+  while (i < n) {
+    const c = src[i]
+    const c2 = src[i + 1]
+    // 行注释
+    if (c === '/' && c2 === '/') {
+      while (i < n && src[i] !== '\n') { out += ' '; i++ }
+      continue
+    }
+    // 块注释（保留换行，行号不变）
+    if (c === '/' && c2 === '*') {
+      out += '  '
+      i += 2
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+        out += src[i] === '\n' ? '\n' : ' '
+        i++
+      }
+      if (i < n) { out += '  '; i += 2 }
+      continue
+    }
+    // 字符串 / 模板
+    if (c === '"' || c === "'" || c === '`') {
+      const quote = c
+      out += c; i++
+      while (i < n) {
+        const d = src[i]
+        if (d === '\\') { out += d + (src[i + 1] || ''); i += 2; continue }
+        out += d; i++
+        if (d === quote) break
+        if (d === '\n' && quote !== '`') break   // 未闭合的字符串，别吃掉整文件
+      }
+      prevSignificant = quote
+      continue
+    }
+    // 正则字面量：只有出现在"运算符位置"的 / 才是正则开头
+    if (c === '/' && (prevSignificant === '' || /[=(,:;!&|?{}\[\]\n]/.test(prevSignificant) || /\b(?:return|typeof|case)\b/.test(out.slice(-8)))) {
+      out += c; i++
+      let closed = false
+      while (i < n) {
+        const d = src[i]
+        if (d === '\\') { out += d + (src[i + 1] || ''); i += 2; continue }
+        if (d === '\n') break                    // 正则不能跨行
+        out += d; i++
+        if (d === '/') { closed = true; break }
+        if (d === '[') {                        // 字符组里允许 /
+          while (i < n && src[i] !== ']') { out += src[i]; i++ }
+          if (i < n) { out += ']'; i++ }
+        }
+      }
+      if (closed) { prevSignificant = '/'; continue }
+      prevSignificant = c
+      continue
+    }
+    if (!/\s/.test(c)) prevSignificant = c
+    out += c
+    i++
+  }
+  return out
+}
 
 function checkSpecifiers(files) {
   const re = /(?:\bfrom\s*|\bimport\s*\(\s*)['"]([^'"]+)['"]/g
@@ -187,6 +263,85 @@ function checkSyncThenable(files) {
   }
 }
 
+// ── 10. 没有超时的网络/子进程调用（v5 深度排查）────────────────────────
+// 为什么加：这一轮查出 4 处 fetch 和 6 处 ffmpeg execFileSync **完全没有 timeout**。
+// 后果不是"慢"，是**永久挂死**：fetch 等到 TCP 超时（可达数分钟），
+// execFileSync 会把整个 Node 进程钉死（事件循环停摆 → 她一个字都不回）。
+//
+// 判定策略（宁可漏报，不要误报）：
+//   取"这一行 + 之后 12 行"，出现 timeout / signal / AbortSignal 就算通过。
+//   误报会让人把门禁关掉，那比漏报更糟（这个教训来自 v5 自己：
+//   我第一版按括号配对扫，结果被 `'-v', 'error'` 里的括号和正则 .exec 骗了三次）。
+function checkNoTimeout(files) {
+  for (const f of files) {
+    const src = stripComments(fs.readFileSync(f, 'utf8'))
+    const lines = src.split('\n')
+    lines.forEach((l, i) => {
+      const zone = lines.slice(i, i + 13).join('\n')
+      // fetch(...)
+      if (/(?<![.\w$])fetch\s*\(/.test(l)) {
+        if (!/signal\s*:|AbortSignal|timeout/.test(zone)) {
+          push('fetch 无超时', `${rel(f)}:${i + 1}`, 'fetch 没有 signal/timeout —— 网络卡住时这个请求会永久挂起')
+        }
+      }
+      // 独立的 spawnSync / execFileSync（不是 a.exec(...) / /re/.exec(...)）
+      if (/(?<![.\w$])(?:spawnSync|execFileSync)\s*\(/.test(l)) {
+        if (/\/.*\/\.exec\(/.test(l)) return      // 正则字面量里的 exec
+        if (!/timeout/.test(zone)) {
+          push('同步子进程无超时', `${rel(f)}:${i + 1}`, 'spawnSync/execFileSync 没有 timeout —— 子进程挂住会把整个 Node 进程钉死')
+        }
+      }
+    })
+  }
+}
+
+// ── 11. 裸 JSON.parse（能把主进程炸掉，v5 深度排查）──────────────────────
+// 实测：往面板 API POST 一个畸形 body，`JSON.parse(await readBody(req))` 抛的异常
+// 在 async 路由里没人 catch → unhandledRejection → DSH `fatal uncaught exception` 退出。
+// 规则：读**请求体/外部输入**的 JSON.parse 必须在 try 里，或走 safeBody()。
+// 读自己刚写的文件的 parse 不算（那种失败有 fallback 语义）。
+function checkBareJsonParse(files) {
+  for (const f of files) {
+    // 一次性运维脚本 / 测试 / 门禁自己：崩了只是那个命令失败，不会影响常驻服务
+    if (/\/(test|scripts)\//.test(f) || /tools\/(drill-|tidy-|trim-|restore-|reset-|fix-|probe)/.test(f)) continue
+    const lines = stripComments(fs.readFileSync(f, 'utf8')).split('\n')
+    lines.forEach((l, i) => {
+      if (!/JSON\.parse\s*\(/.test(l)) return
+      // 只关心"解析外部输入"的场景
+      if (!/(readBody|req\.|body|resp|raw|txt\.slice|String\(r\)|payload)/.test(l)) return
+      const win = lines.slice(Math.max(0, i - 6), i + 1).join('\n')
+      if (/try\s*\{|safeBody|\?\.|\.catch\(/.test(win)) return
+      push('裸 JSON.parse', `${rel(f)}:${i + 1}`, '解析外部输入没有 try/catch —— 畸形输入会抛到 async 顶层，可能崩掉主进程')
+    })
+  }
+}
+
+// ── 12. 多进程状态文件必须走 atomic（v5 深度排查）───────────────────────
+// 实测：无锁 read-modify-write，20 进程并发丢 28.8%。
+// 额度账本漏记 = 她超额发评论/点赞 = 平台风控；情绪值丢 = 行为漂移。
+// 规则：写这些"多写入者"的状态文件时，必须用 atomic 的 updateJson（或显式加锁）。
+const MULTI_WRITER = [
+  'quota.json', 'bili-actions.json', 'share-queue.json', 'mood.json',
+  'lore.json', 'promises.json', 'sent-at.json', 'sent-log.json',
+  'qq-proactive-gate.json', 'sleep-state.json',
+]
+function checkAtomicWrites(files) {
+  for (const f of files) {
+    // 测试要在"没有锁"的前提下验证旧行为；一次性脚本只跑一次，不参与并发
+    if (/\/(test|scripts)\//.test(f) || /tools\/(drill-|tidy-|trim-|restore-|reset-|fix-|probe)/.test(f)) continue
+    const src = stripComments(fs.readFileSync(f, 'utf8'))
+    const lines = src.split('\n')
+    lines.forEach((l, i) => {
+      if (!/writeFileSync\s*\(/.test(l)) return
+      const name = MULTI_WRITER.find((n) => l.includes(n) || (i > 0 && lines[i - 1].includes(n)))
+      if (!name) return
+      const win = lines.slice(Math.max(0, i - 8), i + 1).join('\n')
+      if (/updateJson|withFileLock|acquireLock|writeJsonAtomic/.test(win)) return
+      push('多进程状态文件裸写', `${rel(f)}:${i + 1}`, name + ' 有多个进程写，必须走 atomic.updateJson（实测无锁并发丢 28.8%）')
+    })
+  }
+}
+
 // ── 7. Windows 硬编码路径（10-31）───────────────────────────────────────────
 // 生产代码里出现 D:/ 或 C:\ 就是 ENOENT，而且是静默的（被 catch 吞掉）。
 // 允许清单：外部程序路径候选（用户可配）与纯提示文案。
@@ -295,6 +450,9 @@ if (!FAST) {
   checkEmptyCatch(files)
   checkHardcodedPaths(files)
   checkSyncThenable(files)
+  checkNoTimeout(files)
+  checkBareJsonParse(files)
+  checkAtomicWrites(files)
   checkSize(files)
 }
 
@@ -302,7 +460,7 @@ const grouped = {}
 for (const p of problems) (grouped[p.kind] ||= []).push(p)
 
 if (!problems.length) {
-  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/同步异步/规模 全绿'}`)
+  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/同步异步/超时/JSON/原子写/规模 全绿'}`)
   for (const n of notes) console.log(`   · ${n}`)
   process.exit(0)
 }

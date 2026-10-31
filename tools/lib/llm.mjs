@@ -7,6 +7,7 @@
 import fs from 'node:fs'
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const _cfg = () => config().llm ?? {}
 
@@ -470,7 +471,17 @@ export async function chatRaw(messages, opts = {}) {
 /** 要求模型只回 JSON（用于写脚本/文案）。 */
 export async function jsonChat(messages, schemaHint, opts = {}) {
   const sys = { role: 'system', content: '你只输出合法 JSON，不要 markdown 代码块，不要任何解释。\n字段结构：' + schemaHint }
-  let raw = await chat([sys, ...messages], opts)
-  raw = raw.trim().replace(/^```json\s*/i, '').replace(/^```/, '').replace(/```$/, '').trim()
-  return JSON.parse(raw)
+  const raw = await chat([sys, ...messages], opts)
+  const cleaned = String(raw || '').trim().replace(/^```json\s*/i, '').replace(/^```/, '').replace(/```$/, '').trim()
+  // v5 深度排查：这里原来是裸 JSON.parse —— 模型只要吐一句
+  // "抱歉，我无法生成" 或半截 JSON，就抛到 async 顶层。
+  // review / sing 都是**在她说话的主链路里**调它，抛出去就是整轮失败（她哑掉）。
+  // 现在：先整体解析，失败就贪心抠第一个 {...} 再试，再失败返回 null（调用方本来就有兜底）。
+  try { return JSON.parse(cleaned) } catch { /* 继续兜底 */ }
+  const m = cleaned.match(/\{[\s\S]*\}/)
+  if (m) {
+    try { return JSON.parse(m[0]) } catch { /* 继续兜底 */ }
+  }
+  try { swallow(new Error('jsonChat 解析失败：' + cleaned.slice(0, 120)), 'llm:jsonChat', { force: true }) } catch { /* ignore */ }
+  return null
 }

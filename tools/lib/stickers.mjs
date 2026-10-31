@@ -50,8 +50,10 @@ export async function loadBiliFaces() {
     const c = loadCred()
     if (missingForWrite(c).length) return BILI_FACES
     const cookie = `SESSDATA=${c.sessdata}; bili_jct=${c.bili_jct}; buvid3=${c.buvid3 || ''}`
+    // v5：没有超时 → B 站慢的时候取表情列表会一直挂着（调用方也是 sync 路径）
     const r = await fetch('https://api.bilibili.com/x/emote/user/panel/web?business=reply', {
       headers: { cookie, 'user-agent': 'Mozilla/5.0', referer: 'https://www.bilibili.com/' },
+      signal: AbortSignal.timeout(10000),
     })
     const j = await r.json()
     const names = []
@@ -205,7 +207,21 @@ export function selfStickerAvailable() {
   const ff = stickerRendererAvailable()
   if (ff.ok) return { ok: true, via: 'ffmpeg', detail: ff.font }
   const py = pythonFor(['PIL'])
-  if (py.ok) return { ok: true, via: 'python', detail: py.bin }
+  // ⚠️ v5 自测发现的不一致：这里曾经只看"python 能跑 + 有 PIL"就报 ok，
+  // 但渲染分支还需要 **sticker_render.py 里那些 Windows 字体**（msyh.ttc 等）。
+  // 在没有那些字体的机器上 → available() 说"可用"，ensureSelfSticker 却返回 null。
+  // 诊断与实际行为必须同源：所以这里连"渲染脚本能不能真跑通"一起验。
+  if (py.ok) {
+    const fontOk = (() => {
+      try {
+        // sticker_render.py 的 FONTS 只认 Windows 路径；这里做同样的检查
+        const winFonts = ['C:/Windows/Fonts/msyhbd.ttc', 'C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/simhei.ttf', 'C:/Windows/Fonts/simsun.ttc']
+        return winFonts.some((p) => fs.existsSync(p))
+      } catch { return false }
+    })()
+    if (fontOk) return { ok: true, via: 'python', detail: py.bin }
+    return { ok: false, via: '', detail: 'ffmpeg 路线不可用（' + (ff.why || '') + '）；python 有 PIL 但 sticker_render.py 需要 Windows 字体，本机没有' }
+  }
   return { ok: false, via: '', detail: ff.why + '；' + (py.why || '') }
 }
 

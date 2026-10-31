@@ -13,6 +13,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
+import { updateJson } from './atomic.mjs'
+import { swallow } from './swallow.mjs'
 import { config } from './config.mjs'
 
 const MOOD_FILE = dataPath('mood.json')
@@ -49,10 +51,13 @@ function readState() {
 }
 
 function writeState(st) {
-  try {
-    fs.mkdirSync(dataPath(), { recursive: true })
-    fs.writeFileSync(MOOD_FILE, JSON.stringify(st, null, 2) + '\n')
-  } catch {}
+  // v5：情绪值有 5 个写入者。旧的整份覆盖会丢更新 ——
+  // 她刚被一句话影响，下一个 tick 又被别的进程手里的旧快照覆盖回去。
+  const r = updateJson(MOOD_FILE, (cur) => {
+    const base = (cur && typeof cur === 'object') ? cur : { value: 62, hunger: 0 }
+    return { ...base, ...st }
+  }, { fallback: { value: 62, hunger: 0 } })
+  if (!r.ok) { try { swallow(new Error('mood write failed'), 'mood:write') } catch { /* ignore */ } }
 }
 
 const dayKey = (d = new Date()) => d.toLocaleDateString('sv-SE')
@@ -162,11 +167,11 @@ export function reconcileAffect() {
   const step = Math.max(-6, Math.min(6, diff))
   const next = Math.round((cur + step) * 10) / 10
   try {
-    const all = readState()
-    all.value = next
-    all.updatedAt = new Date().toISOString()
-    fs.mkdirSync(path.dirname(MOOD_FILE), { recursive: true })
-    fs.writeFileSync(MOOD_FILE, JSON.stringify(all, null, 2) + '\n')
+    // v5：这是"读 → 算 → 写"，必须原子（两个进程同时漂移会互相覆盖）
+    updateJson(MOOD_FILE, (cur) => {
+      const base = (cur && typeof cur === 'object') ? cur : { value: 62, hunger: 0 }
+      return { ...base, value: next, updatedAt: new Date().toISOString() }
+    }, { fallback: { value: 62, hunger: 0 } })
   } catch { /* 写不进去不影响本轮说话 */ }
   return { from: cur, to: next, moved: Math.round(step * 10) / 10 }
 }

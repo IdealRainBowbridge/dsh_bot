@@ -166,7 +166,12 @@ export async function run(argv = []) {
 
   // 5.3) 记忆库卫生：重复率 + 认人错标
   try {
-    const epFile = dataPath('brain', 'ep', new Date().toISOString().slice(0, 7) + '.jsonl')
+    // v5：toISOString 是 UTC —— 东八区每月 1 号 00:00~08:00 会算成"上个月"，
+    // 于是 diagnose 去读上个月的脑事件文件（或读不到），记忆卫生检查静默失效。
+    // 用本地日期拼。
+    const _d = new Date()
+    const _ym = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}`
+    const epFile = dataPath('brain', 'ep', _ym + '.jsonl')
     if (fs.existsSync(epFile)) {
       const rows = fs.readFileSync(epFile, 'utf8').trim().split('\n').filter(Boolean)
       const seen = new Map()

@@ -320,7 +320,11 @@ await ok('辅助服务：探活靠端口 /health，不是靠手里有没有 chil
   assert.ok(/export async function ensureBiliOwnReply/.test(aux), 'B站评论巡检要能自愈')
   assert.ok(/tries\.length >= 3/.test(aux), '要有退避，别 crash-loop 刷进程')
   const idx = fs.readFileSync(path.join(import.meta.dirname, '..', 'lib', 'index.js'), 'utf8')
-  assert.ok(/function portHealthy/.test(idx), '插件侧也要端口级探活')
+  // v5：进程/端口管理抽到了 tools/lib/proc.mjs（lib/index.js 曾 1194 行超护栏）。
+  // 断言跟着搬家 —— 但"插件侧必须做端口级探活"这条要求不变，所以两处都查。
+  const proc = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'lib', 'proc.mjs'), 'utf8')
+  assert.ok(/export function portHealthy/.test(proc), '插件侧也要端口级探活（现在在 proc.mjs）')
+  assert.ok(/portHealthy/.test(idx), 'lib/index.js 必须真的用上 portHealthy')
   assert.ok(/async function watchServices/.test(idx), '插件要有 60s 看门狗')
   assert.ok(/startWithDsh === true/.test(idx), '看门狗只在该自启的服务上动手')
 })

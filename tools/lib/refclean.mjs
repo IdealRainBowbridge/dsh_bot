@@ -17,6 +17,9 @@ import { config } from './config.mjs'
 import { ffmpegBin, ffprobeBin } from './video.mjs'
 
 const WIN = 0.01
+// v5 深度排查：这里所有 ffmpeg/ffprobe 调用原来都**没有 timeout**。
+// 遇到损坏音频/容器不支持的编码时 ffmpeg 会一直等下去，而这是 execFileSync ——
+// **整个进程被钉死**（不是慢，是彻底不返回）。已全部补 30s~300s 超时 + SIGKILL。
 const TH = 0.06
 const MERGE = 0.35     // ≤0.35s 的间隔算句内停顿，保留
 const KEEP = 0.12      // 长间隔挤成这么长的气口
@@ -25,7 +28,7 @@ const MIN_REF = 3.0
 
 function env(file) {
   const buf = execFileSync(ffmpegBin(), ['-v', 'quiet', '-i', file, '-ac', '1', '-ar', '32000', '-f', 's16le', '-'],
-    { maxBuffer: 256 * 1024 * 1024, windowsHide: true })
+    { maxBuffer: 256 * 1024 * 1024, windowsHide: true, timeout: 300_000, killSignal: 'SIGKILL' })
   const pcm = new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.length / 2))
   const n = 320
   const out = []
@@ -92,20 +95,20 @@ export function compactRef(src, opt = {}) {
     plan.pieces.forEach(([s, t], i) => {
       const f = out.replace(/\.wav$/, `.piece${i}.wav`)
       execFileSync(ffmpegBin(), ['-v', 'error', '-y', '-ss', s.toFixed(3), '-t', (t - s).toFixed(3), '-i', src,
-        '-ac', '1', '-ar', '32000', f], { windowsHide: true })
+        '-ac', '1', '-ar', '32000', f], { windowsHide: true, timeout: 120_000, killSignal: 'SIGKILL' })
       tmp.push(f)
     })
     const list = out.replace(/\.wav$/, '.concat.txt')
     fs.writeFileSync(list, tmp.map((f) => `file '${f.replace(/\\/g, '/')}'`).join('\n'), 'utf8')
     execFileSync(ffmpegBin(), ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-ac', '1', '-ar', '32000', out],
-      { windowsHide: true })
+      { windowsHide: true, timeout: 300_000, killSignal: 'SIGKILL' })
     fs.rmSync(list, { force: true })
     let dur = probeDur(out)
     let padded = false
     if (dur < MIN_REF) {
       const f2 = out.replace(/\.wav$/, '.pad.wav')
       execFileSync(ffmpegBin(), ['-v', 'error', '-y', '-i', out, '-af', `apad=pad_dur=${(MIN_REF - dur + 0.1).toFixed(2)}`,
-        '-ac', '1', '-ar', '32000', f2], { windowsHide: true })
+        '-ac', '1', '-ar', '32000', f2], { windowsHide: true, timeout: 120_000, killSignal: 'SIGKILL' })
       fs.renameSync(f2, out)
       dur = probeDur(out)
       padded = true
@@ -125,14 +128,14 @@ function probeDur(file) {
   // 统一走 video.mjs 的 ffprobeBin()（跨平台候选 + PATH 兜底）。
   try {
     const out = execFileSync(ffprobeBin(cfg), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file],
-      { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      { encoding: 'utf8', windowsHide: true, timeout: 30_000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'] })
     const d = parseFloat(String(out).trim())
     if (d > 0) return d
   } catch {}
   // 兜底：ffmpeg 的 Duration 在 stderr，必须 2>&1（以前读 stdout 必然空）
   try {
     const e = execFileSync(ffmpegBin(cfg), ['-v', 'info', '-i', file, '-f', 'null', '-'],
-      { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      { encoding: 'utf8', windowsHide: true, timeout: 60_000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'] })
     const m = String(e).match(/Duration: (\d+):(\d+):([\d.]+)/)
     if (m) return (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3])
   } catch {}

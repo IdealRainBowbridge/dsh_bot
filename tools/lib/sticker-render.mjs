@@ -22,18 +22,34 @@ const PALETTE = [
 ]
 const INK = '262A34'
 
-/** 候选字体：容器自带的第一优先。 */
+/**
+ * 候选字体（v5：按发行版补齐 —— 只写"我以为的路径"是这类兜底失效的经典原因）。
+ * 顺序：自己带的 → Debian/Ubuntu → Arch → 通用 → Windows。
+ * 最后还会用 `fc-match :lang=zh` 兜底（有 fontconfig 就一定找得到）。
+ */
 const FONTS = [
-  () => homePath('.feiyu-ai', 'fonts', 'NotoSansCJK.ttc'),
-  () => '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-  () => '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-  () => 'C:/Windows/Fonts/msyhbd.ttc',
+  () => homePath('.feiyu-ai', 'fonts', 'NotoSansCJK.ttc'),          // 容器里拷进去的那份
+  () => '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',   // Debian/Ubuntu
+  () => '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',        // Arch
+  () => '/usr/share/fonts/noto-cjk/NotoSansCJK-Light.ttc',          // Arch（备用字重）
+  () => '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',          // 有字但没中文，最后再试
+  () => '/System/Library/Fonts/PingFang.ttc',                       // macOS
+  () => 'C:/Windows/Fonts/msyhbd.ttc',                              // Windows
+  () => 'C:/Windows/Fonts/msyh.ttc',
 ]
 
+let _fontCache
 export function findFont() {
+  if (_fontCache !== undefined) return _fontCache
   for (const f of FONTS) {
-    try { const p = f(); if (p && fs.existsSync(p)) return p } catch { /* ignore */ }
+    try { const p = f(); if (p && fs.existsSync(p)) { _fontCache = p; return p } } catch { /* ignore */ }
   }
+  // 最后兜底：问 fontconfig 要一个中文字体（Arch/Debian 都装了 fc-match）
+  try {
+    const out = execFileSync('fc-match', ['-f', '%{file}', ':lang=zh'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    if (out && fs.existsSync(out)) { _fontCache = out; return out }
+  } catch { /* 没有 fontconfig 就算了 */ }
+  _fontCache = ''
   return ''
 }
 

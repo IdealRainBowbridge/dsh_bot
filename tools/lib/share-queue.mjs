@@ -12,6 +12,8 @@
 import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
 import { dataPath } from '../lib/paths.mjs'
+import { updateJson } from './atomic.mjs'
+import { swallow } from './swallow.mjs'
 import { fill } from './persona-voice.mjs'
 
 const QFILE = () => dataPath('share-queue.json')
@@ -21,15 +23,37 @@ const NL = String.fromCharCode(10)
 function readQ() {
   try { return JSON.parse(fs.readFileSync(QFILE(), 'utf8')) } catch { return [] }
 }
+/**
+ * 写队列。
+ *
+ * ⚠️ v5 第一个版本改错了（自己发现）：调用方传的是**整份队列**（`const q = readQ(); q.push(x); writeQ(q)`），
+ * 而我写成了"把 q 当单条 append" —— 语义从"覆盖"变成"追加一条数组"，队列会坏掉。
+ *
+ * 正确做法：保留"整份覆盖"的语义，但用**跨进程锁 + 原子替换**包起来，
+ * 并且在锁内**重新读一次**再合并 —— 这样两个进程同时 enqueue 时，
+ * 后进的那个不会把先进的那个覆盖掉（旧版正是这样丢事件的）。
+ * @param {any[]} q 调用方手里的队列（可能是基于旧快照的）
+ */
 function writeQ(q) {
-  fs.mkdirSync(dataPath('share-queue.json').replace('/share-queue.json', ''), { recursive: true })
-  fs.writeFileSync(QFILE(), JSON.stringify(q.slice(-20), null, 1))
+  const mine = Array.isArray(q) ? q : []
+  const r = updateJson(QFILE(), (cur) => {
+    const disk = Array.isArray(cur) ? cur : []
+    // 合并策略：磁盘上多出来的（别人在我读完之后加的）优先保留；
+    // 我手里新增的（不在磁盘上的）追加在后面。
+    // 老数据可能没有 id → 用「时间+kind+标题」当内容指纹兜底，避免重复合并
+    const key = (x) => (x && x.id) ? ('id:' + x.id) : ('fp:' + Number(x?.at || 0) + '|' + String(x?.kind || '') + '|' + String(x?.title || ''))
+    const seen = new Set(disk.map(key))
+    const extra = mine.filter((x) => x && !seen.has(key(x)))
+    return [...disk, ...extra].sort((a, b) => Number(a?.at || 0) - Number(b?.at || 0)).slice(-20)
+  }, { fallback: [] })
+  if (!r.ok) { try { swallow(new Error('share-queue write failed'), 'share-queue:write') } catch { /* ignore */ } }
 }
 function readState() {
   try { return JSON.parse(fs.readFileSync(STATE(), 'utf8')) } catch { return { day: '', sent: 0, lastAt: 0 } }
 }
 function writeState(st) {
-  fs.writeFileSync(STATE(), JSON.stringify(st, null, 1))
+  const r = updateJson(STATE(), () => st, { fallback: { day: '', sent: 0, lastAt: 0 } })
+  if (!r.ok) { try { swallow(new Error('share-state write failed'), 'share-queue:state') } catch { /* ignore */ } }
 }
 
 /** 入队（各命令调用）。kind: video|binge|web|dream|create|misc */
@@ -39,7 +63,10 @@ export function enqueue({ kind = 'misc', title = '', text = '', meta = '' }) {
   const cutoff = Date.now() - 8 * 3600_000
   const dup = q.find((x) => x.kind === kind && x.title === title && Number(x.at) > cutoff)
   if (dup) return { ok: false, why: 'dup' }
-  q.push({ at: Date.now(), kind, title: String(title).slice(0, 60), text: String(text).slice(0, 200), meta: String(meta).slice(0, 100) })
+  // v5：每条必须有稳定 id —— 跨进程合并靠它去重。
+  // 以前没有 id，writeQ 只能整份覆盖（两个进程同时入队就丢一条）。
+  const id = 'sq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+  q.push({ id, at: Date.now(), kind, title: String(title).slice(0, 60), text: String(text).slice(0, 200), meta: String(meta).slice(0, 100) })
   writeQ(q)
   return { ok: true, size: q.length }
 }
@@ -66,7 +93,7 @@ export async function shareTick() {
     const g = await import('./proactive-gate.mjs')
     const gate = g.allow('share')
     if (!gate.ok) return null
-  } catch (e) { /* 闸门不可用就退回原逻辑 */ }
+  } catch (e) { swallow(e, 'share-queue:gate') }
 
   const ev = q.shift()
   writeQ(q)
@@ -97,7 +124,7 @@ export async function shareTick() {
       try {
         const memory = await import('./memory.mjs')
         memory.remember('qq', 'qq:' + ownerQQ, ownerQQ, 'assistant', text, { kind: 'push' })
-      } catch {}
+      } catch (e) { swallow(e, 'share-queue:commit') }
       return { ok: true, text, event: ev }
     }
   } catch {}

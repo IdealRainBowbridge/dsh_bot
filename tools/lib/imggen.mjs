@@ -52,7 +52,10 @@ function uploadRef(localPath) {
     {
       name: 'tmpfiles',
       run: () => {
-        const r = execFileSync(exe, ['-sS', '-m', '90', '-x', REF_UPLOAD_PROXY(), '-F', `file=@${sep}`, 'https://tmpfiles.org/api/v1/upload'], opts)
+        // v5：opts 里本来就有 timeout:100000，但门禁扫不到"变量里的 timeout"；
+        // 内联成显式对象，既让门禁看得见，也让下一次改动不容易漏。
+        const r = execFileSync(exe, ['-sS', '-m', '90', '-x', REF_UPLOAD_PROXY(), '-F', `file=@${sep}`, 'https://tmpfiles.org/api/v1/upload'],
+          { encoding: 'utf8', timeout: 100_000, killSignal: 'SIGKILL', windowsHide: true })
         const page = String(JSON.parse(r)?.data?.url || '')
         if (!page) throw new Error('tmpfiles 没回 url')
         return page.replace('tmpfiles.org/', 'tmpfiles.org/dl/')   // 页面链 → 直链
@@ -61,7 +64,8 @@ function uploadRef(localPath) {
     {
       name: 'uguu',
       run: () => {
-        const r = execFileSync(exe, ['-sS', '-m', '90', '--noproxy', '*', '-A', 'feiyu/1.0', '-F', `files[]=@${sep}`, 'https://uguu.se/upload?output=text'], opts)
+        const r = execFileSync(exe, ['-sS', '-m', '90', '--noproxy', '*', '-A', 'feiyu/1.0', '-F', `files[]=@${sep}`, 'https://uguu.se/upload?output=text'],
+          { encoding: 'utf8', timeout: 100_000, killSignal: 'SIGKILL', windowsHide: true })
         const u = String(r).trim().split('\n').pop().trim()
         if (!/^https?:\/\//.test(u)) throw new Error('uguu 没回直链：' + String(r).slice(0, 80))
         return u
