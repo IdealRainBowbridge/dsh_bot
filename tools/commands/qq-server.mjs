@@ -58,6 +58,7 @@ import * as PLATFORMS from '../lib/platforms.mjs'
 import { current as currentCtx, runWithContext } from '../lib/reply-context.mjs'
 import { inboundTokenOk, requireInboundToken } from '../lib/inbound-auth.mjs'
 import { createPromiseExecutor, promiseOutcomePath } from '../lib/promise-executor.mjs'
+import { fill } from '../lib/persona-voice.mjs'
 
 /** 宿主是 stdio:'ignore' 起的进程，不打文件日志等于瞎 —— 出问题只能靠猜。 */
 function logLine(level, args) {
@@ -105,9 +106,19 @@ export async function run(argv = []) {
   // 10-31：platforms.qq 以前是纯装饰 —— 面板关了它，qq-server 照样收发消息（假开关）。
   // 现在这里也认它：两个开关任一说"关"就不启动，并且说清是哪个。
   // 单一真相：qq.enabled（用户意图，持久）。platforms.qq 由面板同步写入，两者任一为 false 都不启动。
-  if (!QQ.enabled) {
-    logErr('✗ qq.enabled=false —— QQ 平台是关的：面板上打开 QQ 开关，或改 feiyu.config.json 的 qq.enabled')
-    process.exit(1)
+  // v5 修 P0 的另一半：旧代码只要 qq.enabled=false 就直接 exit(1)。
+  // 但 qq-server 是**所有平台共用的宿主进程**（/inbound 的微信消息也进它），
+  // 于是"关 QQ、只开微信"这种完全合理的配置会连微信一起弄死。
+  // 现在：只有当**所有对话平台都关着**时才退出。
+  {
+    const dialogs = PLATFORMS.PLATFORMS.map((p) => ({ id: p.id, ...PLATFORMS.enabled(cfg, p.id) }))
+    const anyOn = dialogs.some((d) => d.on)
+    if (!anyOn) {
+      logErr('✗ 所有对话平台都关着（' + dialogs.map((d) => d.id + ':' + (d.on ? '开' : '关')).join(' / ') + '）—— 面板上打开至少一个，或改 feiyu.config.json')
+      process.exit(1)
+    }
+    const on = dialogs.filter((d) => d.on).map((d) => d.id)
+    log('[qq] 本次启用的平台：' + on.join(', ') + (on.includes('qq') ? '' : '（QQ 关着，只跑其他平台）'))
   }
   if (!llm.apiKey()) { logErr('✗ 没有 LLM API key（设环境变量 DEEPSEEK_API_KEY，或填 llm.api_key）'); process.exit(1) }
   try { const n = memory.sweepEpisodes(); if (n) log(`[qq] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch {}
@@ -1155,7 +1166,7 @@ export async function run(argv = []) {
         } catch {}
         const moodNow2 = (() => { try { return JSON.parse(fs.readFileSync(dataPath('mood.json'), 'utf8')) } catch { return {} } })()
         const dResp = await llm.chat([
-          { role: 'system', content: '你是大肥鱼。回答"现在要不要主动给笨蛋老爹发消息"。判据（自己权衡，不是规则）：你有真的想说的吗？现在时段合不合适？连续发过就别再发。输出 JSON：{"decision":"yes|later|no","hook":"想说的话头（yes 时给一句，20字内）","reason":"一句话理由"}。decision 必须诚实——没有想说的就说 no，别为了说话而说话。' },
+          { role: 'system', content: fill('你是{name}。回答"现在要不要主动给{owner}发消息"。判据（自己权衡，不是规则）：你有真的想说的吗？现在时段合不合适？连续发过就别再发。输出 JSON：{"decision":"yes|later|no","hook":"想说的话头（yes 时给一句，20字内）","reason":"一句话理由"}。decision 必须诚实——没有想说的就说 no，别为了说话而说话。') },
           { role: 'user', content: `现在：${dowText} ${hourNow}点。他已安静 ${quietMin || 0} 分钟。你的情绪值 ${Math.round(Number(moodNow2.value) || 60)}/100。最近：${recentLine || '（安静）'}。上次搭话说了：${lastProact.lastText ? String(lastProact.lastText).slice(0, 40) : '（今天还没说过）'}。` },
         ], { temperature: 0.8, max_tokens: 80, timeoutMs: 15000, model: cfgNow.llm?.content_model, purpose: 'deep' })
         const m2 = String(dResp?.content ?? dResp ?? '').match(/\{[\s\S]*\}/)

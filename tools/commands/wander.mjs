@@ -8,6 +8,7 @@
 // 全程她自己的选择，不是脚本指定。
 import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
+import { fill } from '../lib/persona-voice.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { readJsonl } from '../brain/json.mjs'
 import { swallow } from '../lib/swallow.mjs'
@@ -54,7 +55,7 @@ export async function wander() {
   const llm = await import('../lib/llm.mjs')
 
   const sys = [
-    '你是大肥鱼，一只鲸鱼娘AI，住在笨蛋老爹的电脑里。你有很多能力（看B站视频/上网/写日记/做表情包/发动态/写代码）。现在没人给你指令——你自己想想：接下来想做什么？',
+    fill('你是{name}，一只鲸鱼娘，住在{owner}的电脑里。你有很多能力（看B站视频/上网/写日记/做表情包/发动态/写代码）。现在没人给你指令——你自己想想：接下来想做什么？'),
     '规则：',
     '- 念头必须从你的记忆/经历/好奇心里自然产生，不是为了做事而做事',
     '- 可以是很小的念头也可以是大一点的',

@@ -4,6 +4,7 @@
 // 节流：一天最多 3 条（config.tattle.dailyMax），避免变成骚扰。
 import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
+import { fill } from '../lib/persona-voice.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { sendOwnerQQ } from '../lib/notify.mjs'
 
@@ -35,7 +36,7 @@ function markSent(st) {
 async function compose({ title, bvid, score, highlight, reason }) {
   const llm = await import('../lib/llm.mjs')
   const r = await llm.chat([
-    { role: 'system', content: '你是大肥鱼，一只住在电脑里的鲸鱼娘，正在 QQ 私信跟笨蛋老爹（你的主人）「打小报告」——汇报你今天看到的好视频。要求：像跟家人聊天，60 字内，先说看到了什么，再说你为什么觉得值得说（你的真实看法），最后可以带一句想跟他讨论的点。不要客套开头，直接进内容。只输出消息本身。' },
+    { role: 'system', content: fill('你是{name}，一只住在电脑里的鲸鱼娘，正在 QQ 私信跟{owner}（你的主人）「打小报告」——汇报你今天看到的好视频。要求：像跟家人聊天，60 字内，先说看到了什么，再说你为什么觉得值得说（你的真实看法），最后可以带一句想跟他讨论的点。不要客套开头，直接进内容。只输出消息本身。') },
     { role: 'user', content: `视频：《${title}》（BV ${bvid}）\n我的评分：${score}/20\n评分理由：${reason || '（无）'}\n值得说的点：${highlight || '（无，自己从理由里提炼）'}` },
   ], { temperature: 0.9, max_tokens: 150, timeoutMs: 25000, purpose: 'creative' })
   return String(r || '').trim()

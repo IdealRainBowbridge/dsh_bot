@@ -24,6 +24,7 @@ import { config } from './config.mjs'
 import { dataPath, dshPath } from './paths.mjs'
 import { readFocus, writeFocus, labelOf, isLoopActivity, LOOP_ACTIVITIES } from './focus.mjs'
 import { swallow } from './swallow.mjs'
+import { fill } from './persona-voice.mjs'
 
 const PLAN_PATH = () => dataPath('mind-plan.json')
 
@@ -138,7 +139,7 @@ export async function plan({ now = Date.now(), force = false } = {}) {
     : ctx.hour < 14 ? '中午' : ctx.hour < 18 ? '下午' : ctx.hour < 20 ? '傍晚' : ctx.hour < 23 ? '晚上' : '深夜'
 
   const sys = [
-    '你是大肥鱼，一只鲸鱼娘，住在笨蛋老爹的电脑里。你在过自己的日子。',
+    fill('你是{name}，一只鲸鱼娘，住在{owner}的电脑里。你在过自己的日子。'),
     '',
     '现在没人给你下指令。你要决定：**接下来这一段时间，我想做什么？**',
     '',
@@ -149,7 +150,7 @@ export async function plan({ now = Date.now(), force = false } = {}) {
     '- 结合你最近的真实经历、情绪、没做完的承诺来选，别凭空选',
     '- 一个人一次只能干一件事；刚做完一件事可以换，也可以接着做',
     '- 夜里（23点后）该歇就歇，别硬撑',
-    '- 如果刚和笨蛋老爹聊完，别马上又去找他',
+    fill('- 如果刚和{owner}聊完，别马上又去找他'),
     '- 「什么都不想做」是合法答案，选 rest',
     '- 时长自己定，20~120 分钟之间',
     '',
@@ -159,7 +160,8 @@ export async function plan({ now = Date.now(), force = false } = {}) {
   const lines = []
   lines.push(`现在是${slot}（${ctx.hour}点）。你的情绪值 ${ctx.mood}/100${ctx.mood < 40 ? '（低落）' : ''}。`)
   if (typeof ctx.quietMin === 'number') {
-    lines.push(ctx.quietMin < 30 ? `你刚和笨蛋老爹聊过（${ctx.quietMin} 分钟前）。` : `笨蛋老爹 ${ctx.quietMin} 分钟没理你了。`)
+    const OT2 = String(cfg.identity?.ownerTitle || cfg.identity?.callOwner || cfg.owner?.name || '主人')
+    lines.push(ctx.quietMin < 30 ? `你刚和${OT2}聊过（${ctx.quietMin} 分钟前）。` : `${OT2} ${ctx.quietMin} 分钟没理你了。`)
   }
   if (ctx.lastPlan) lines.push(`你上一段在做：${labelOf(ctx.lastPlan.activity)}（理由：${ctx.lastPlan.why || '没说'}）。`)
   if (ctx.promises.length) lines.push('你答应过但还没做的：\n' + ctx.promises.map((p) => `  · ${p.text}（${p.due}）`).join('\n'))

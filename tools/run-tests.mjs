@@ -1,7 +1,7 @@
 // run-tests —— 不依赖 npm 的测试跑轮（这台机器上 PATH 里没有 node/npm，
 // `npm test` 跑不了，而她自己改完代码必须验证）。
 //
-//   node tools/run-tests.mjs            # 顺序跑全部 39 套，全绿退出 0
+//   node tools/run-tests.mjs            # 顺序跑全部 40 套，全绿退出 0
 //   node tools/run-tests.mjs memory     # 只跑文件名含 "memory" 的
 //
 // 与 package.json 的 `test` 脚本等价：同样的文件、同样的顺序、失败即停。
@@ -53,6 +53,7 @@ const TESTS = [
   'config-truth-test.mjs',     // 配置单一真相：DEFAULTS 必须覆盖代码读的键
   'config-file-test.mjs',      // 配置读写：合并/剔除默认值/600/原子写
   'lifecycle-test.mjs',        // 定时器生命周期：幂等/替换/清理/容错
+  'persona-voice-test.mjs',    // 人设措辞单一来源：改名/改称呼/无 AI 字样
 ]
 
 const filter = process.argv[2] || ''
