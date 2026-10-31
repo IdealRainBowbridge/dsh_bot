@@ -154,6 +154,39 @@ function checkEmptyCatch(files) {
   }
 }
 
+// ── 6.5 同步函数被当异步用（v5）─────────────────────────────────────────
+// 为什么加这条：v5 重构时我把 `setTimeout(() => mindTick(), 30_000)`
+// 改成了 `void mindTick().catch(...)`，而 mindTick 是**同步**函数（返回 undefined）。
+// 结果 30 秒后线上炸 "TypeError: Cannot read properties of undefined (reading 'catch')"，
+// 直接把 DSH 主进程带崩（fatal uncaught exception → 容器重启）。
+// 语法检查、断链、测试全都没拦住 —— 因为代码"语法正确、逻辑也在"，
+// 只是把一个返回值当 Promise 用了。这类错误必须静态扫出来。
+function checkSyncThenable(files) {
+  for (const f of files) {
+    // 必须剥掉注释再扫 —— 注释里写 "以前是 `x().catch()`" 这种说明也会被误报
+    // （v5 自测时就被自己的注释绊了一次）。stripComments 已在第 2 条检查里定义。
+    const src = stripComments(fs.readFileSync(f, 'utf8'))
+    const syncNames = new Set()
+    for (const m of src.matchAll(/^[ \t]*(?:const|let|var)[ \t]+([A-Za-z_$][\w$]*)[ \t]*=[ \t]*(?:function[ \t]*)?\([^)]*\)[ \t]*=>/gm)) {
+      if (!/\basync\b/.test(m[0])) syncNames.add(m[1])
+    }
+    for (const m of src.matchAll(/^[ \t]*function[ \t]+([A-Za-z_$][\w$]*)[ \t]*\(/gm)) {
+      if (!/\basync\b/.test(m[0])) syncNames.add(m[1])
+    }
+    for (const name of syncNames) {
+      const esc = name.replace(/\$/g, '\\$')
+      // 前面不能是 `.` —— 否则会把 `res.json(...)` 这种**方法调用**误判成
+      // 本地同名函数（v5 第一条就误报了 json()）。也排除 `?.`。
+      const re = new RegExp('(?<![.\\w$])' + esc + '\\([^)]*\\)[ \\t]*\\.\\s*(catch|then|finally)\\b', 'g')
+      let m
+      while ((m = re.exec(src)) !== null) {
+        const line = src.slice(0, m.index).split('\n').length
+        push('同步函数当异步用', `${rel(f)}:${line}`, `${name}() 是同步函数（未声明 async），对它调 .${m[1]}() 会抛 TypeError`)
+      }
+    }
+  }
+}
+
 // ── 7. Windows 硬编码路径（10-31）───────────────────────────────────────────
 // 生产代码里出现 D:/ 或 C:\ 就是 ENOENT，而且是静默的（被 catch 吞掉）。
 // 允许清单：外部程序路径候选（用户可配）与纯提示文案。
@@ -261,6 +294,7 @@ if (!FAST) {
   checkPerms()
   checkEmptyCatch(files)
   checkHardcodedPaths(files)
+  checkSyncThenable(files)
   checkSize(files)
 }
 
@@ -268,7 +302,7 @@ const grouped = {}
 for (const p of problems) (grouped[p.kind] ||= []).push(p)
 
 if (!problems.length) {
-  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/规模 全绿'}`)
+  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/同步异步/规模 全绿'}`)
   for (const n of notes) console.log(`   · ${n}`)
   process.exit(0)
 }
