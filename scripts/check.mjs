@@ -194,6 +194,60 @@ function checkHardcodedPaths(files) {
   }
 }
 
+// ── 8. 规模护栏（10-31）───────────────────────────────────────────────────
+// 上帝文件不是"风格问题"：qq-server.mjs 1710 行时，改一行要在 400 行上下文里找落点，
+// 这是 lib/index.js 曾被打散成单字符那类事故的温床。
+// 阈值定在"现状 + 余量"，只拦**继续变大**，不要求一次重构完。
+//   · 单文件 > 1800 行          —— 必须拆了再加功能
+//   · 单个函数 > 500 行         —— 必须拆函数
+// 例外清单写在这里，是"已知欠账"，不是"允许无限长"。
+const FILE_LIMIT = 1800
+const FUNC_LIMIT = 500
+const FILE_ALLOW = {
+  // 已知欠账：闭包耦合太深，拆分风险 > 收益（见 AUDIT-FIX-20261031.md 第八节）
+  'tools/commands/qq-server.mjs': 1750,
+  'lib/index.js': 1150,
+  'client.js': 1150,
+}
+// 函数级例外：这些是"主闭包"（把所有子功能装进同一个作用域），
+// 拆它们的正确做法是抽出可独立测试的纯逻辑（已完成：onebot.mjs），
+// 剩下的闭包内部函数彼此共享 send/callApi/config，强拆只会制造更多参数传递。
+const FUNC_ALLOW = {
+  // qq-server 的 run() 是主闭包 —— 它的长度 ≈ 文件长度，文件护栏已经覆盖
+  'tools/commands/qq-server.mjs:run': 1600,
+  // lib/index.js 的 apply() 是插件壳主闭包，同理
+  'lib/index.js:apply': 1100,
+}
+function checkSize(files) {
+  for (const f of files) {
+    const r = rel(f)
+    const src = fs.readFileSync(f, 'utf8')
+    const lines = src.split('\n').length
+    const limit = FILE_ALLOW[r] ?? FILE_LIMIT
+    if (lines > limit) push('文件过大', r, lines + ' 行（上限 ' + limit + '）—— 再加功能前先拆')
+    // 函数级：按"函数声明所在行的缩进"找配对的 }，而不是找第一个 {。
+    // 为什么：以前用 src.indexOf('{', start) —— 如果函数签名换行、或前面有解构默认值，
+    // 会从一个错误的位置开始数括号，把后面几个函数全算进同一个，误报 608 行（实际 95 行）。
+    const re = /^(\s*)(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm
+    let m
+    while ((m = re.exec(src)) !== null) {
+      const indent = m[1].length
+      const startLine = src.slice(0, m.index).split('\n').length
+      const lines = src.split('\n')
+      // 从函数首行开始，逐行找"缩进 <= 声明缩进 且以 } 开头"的那一行 = 函数结束
+      let endLine = startLine
+      for (let i = startLine; i < lines.length; i++) {
+        const L = lines[i]
+        if (i > startLine && /^\s*\}/.test(L) && (L.match(/^\s*/)[0].length <= indent)) { endLine = i + 1; break }
+      }
+      const n = endLine - startLine + 1
+      const fkey = r + ':' + m[2]
+      const flimit = FUNC_ALLOW[fkey] ?? FUNC_LIMIT
+      if (n > flimit) push('函数过大', r + ':' + startLine, m[2] + '() ' + n + ' 行（上限 ' + flimit + '）')
+    }
+  }
+}
+
 // ── 跑 ────────────────────────────────────────────────────────────────────
 const files = ['tools', 'lib', 'test', 'scripts'].flatMap((d) => walk(path.join(ROOT, d)))
 checkSyntax(files)
@@ -204,13 +258,14 @@ if (!FAST) {
   checkPerms()
   checkEmptyCatch(files)
   checkHardcodedPaths(files)
+  checkSize(files)
 }
 
 const grouped = {}
 for (const p of problems) (grouped[p.kind] ||= []).push(p)
 
 if (!problems.length) {
-  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径 全绿'}`)
+  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/规模 全绿'}`)
   for (const n of notes) console.log(`   · ${n}`)
   process.exit(0)
 }

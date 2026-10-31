@@ -66,7 +66,22 @@ export function readDirectUsage() {
   out.days.sort((a, b) => (a.day < b.day ? -1 : 1))
   return out
 }
-const _fb = () => _cfg().fallback ?? {}
+/**
+ * 备用通道链（10-31 升级）。支持 fallback: {…}（旧）与 fallback: [{…}, {…}]（新）。
+ * 每级补齐主通道缺的 base/key；没 model 或没 key 的级别直接丢弃（发出去只会白等一次 401）。
+ */
+const _chain = () => {
+  const c = _cfg()
+  const raw = c.fallback ?? c.fallbacks ?? null
+  if (!raw) return []
+  const list = Array.isArray(raw) ? raw : [raw]
+  return list
+    .filter((x) => x && typeof x === 'object')
+    .map((x) => ({ ...x, base_url: x.base_url || x.baseUrl || c.base_url, api_key: x.api_key || c.api_key }))
+    .filter((x) => x.model && (x.api_key || x.base_url))
+}
+/** 兼容老调用点：第一级备用（describe/诊断用）。 */
+const _fb = () => _chain()[0] ?? {}
 
 /** API key：环境变量优先（DEEPSEEK_API_KEY / LLM_API_KEY），再读配置文件。 */
 export const apiKey = () => process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY || _cfg().api_key || ''
@@ -74,9 +89,12 @@ export const apiKey = () => process.env.DEEPSEEK_API_KEY || process.env.LLM_API_
 /** 当前主通道的简述（日志/面板用）。 */
 export function describe() {
   const c = _cfg()
-  const f = _fb()
-  return `${c.model || 'deepseek-chat'} @ ${(c.base_url || 'https://api.deepseek.com/v1').replace(/^https?:\/\//, '')}`
-    + (f.model ? `（备：${f.model} @ ${String(f.base_url || '').replace(/^https?:\/\//, '')}）` : '')
+  const chain = _chain()
+  const host = (u) => String(u || '').replace(/^https?:\/\//, '')
+  const tail = chain.length
+    ? '（备：' + chain.map((x, i) => '#' + (i + 1) + ' ' + x.model + '@' + host(x.base_url)).join(' → ') + '）'
+    : '（无备用通道）'
+  return `${c.model || 'deepseek-chat'} @ ${host(c.base_url || 'https://api.deepseek.com/v1')}` + tail
 }
 
 function endpointOf(c) {
@@ -96,12 +114,27 @@ function headers() {
   return headersOf({ ..._cfg(), api_key: apiKey() })
 }
 
+/**
+ * 是否是"思考链先吃 token"的推理模型。
+ * 优先用配置里显式的 reasoning: true / false；没写才按模型名猜（实测 kimi 系与 hy3 全是推理型）。
+ */
+function isReasoningModel(c) {
+  if (typeof c.reasoning === 'boolean') return c.reasoning
+  const m = String(c.model || '').toLowerCase()
+  return /^(kimi|hy3|o1|o3|o4|qwq|deepseek-r)/.test(m) || /-thinking$/.test(m)
+}
+
 function payloadOf(c, messages, opts = {}) {
+  // 推理模型：max_tokens 至少要 1024，否则正文一个字都出不来（实测 kimi/hy3 在 24 时全空）
+  const base = opts.max_tokens || c.max_tokens || 600
+  // 推理模型的下限 1024：实测 kimi-k2.8-preview / hy3 在 max_tokens=24 时
+  // finish_reason=length、content 为空的空串（token 全烧在 reasoning_content 上）。
+  const cap = isReasoningModel({ ...c, model: opts.model || c.model }) ? Math.max(base, 1024) : base
   return {
     model: opts.model || c.model || 'deepseek-chat',
     messages,
     temperature: opts.temperature ?? (c.temperature ?? 0.92),
-    max_tokens: opts.max_tokens || c.max_tokens || 600,
+    max_tokens: cap,
     presence_penalty: 0.3,     // 防复读
     frequency_penalty: 0.2,
     stream: opts.stream === true,
@@ -115,10 +148,76 @@ function payload(messages, opts = {}) {
   return payloadOf(_cfg(), messages, opts)
 }
 
-/** 一次性拿全文。主通道失败自动换 fallback（除非 opts.noFallback）。 */
+// ── 通道熔断（10-31）────────────────────────────────────────────────────────
+// 为什么需要：以前每次聊天都先撞一遍已经挂掉的主通道（默认 90s timeout），
+// 一天几百轮就是几百次白等；同一家 429 恢复前也会被反复打。
+// 规则：连续失败 FAIL_N 次 → 冷却 COOLDOWN_MS；冷却期内直接跳过这一级。
+// 只对"确定性失败"（4xx/超时/连接拒绝）计入，成功立刻清零。
+const FAIL_N = 3
+const COOLDOWN_MS = 3 * 60_000
+const BREAKER_FILE = () => dataPath('cache', 'llm-breakers.json')
+
+function readBreakers() {
+  try { return JSON.parse(fs.readFileSync(BREAKER_FILE(), 'utf8')) } catch { return {} }
+}
+function writeBreakers(o) {
+  try {
+    const f = BREAKER_FILE()
+    fs.mkdirSync(f.slice(0, f.lastIndexOf('/')) || '.', { recursive: true })
+    fs.writeFileSync(f, JSON.stringify(o))
+  } catch {}
+}
+/** 这一级现在是否被熔断（冷却中）。 */
+function isOpen(key, breakers) {
+  const b = breakers[key]
+  return !!(b && b.until && Date.now() < b.until)
+}
+function bumpFail(key, err) {
+  const all = readBreakers()
+  const cur = all[key] || { fails: 0, until: 0, lastErr: '' }
+  cur.fails = (Number(cur.fails) || 0) + 1
+  cur.lastErr = String(err?.message ?? err).slice(0, 160)
+  // 失败够数就跳闸；每多失败一次多冷一会儿（最长 15 分钟）
+  if (cur.fails >= FAIL_N) {
+    const extra = Math.min(12 * 60_000, (cur.fails - FAIL_N) * 60_000)
+    cur.until = Date.now() + COOLDOWN_MS + extra
+  }
+  all[key] = cur
+  writeBreakers(all)
+  return cur
+}
+function bumpOk(key) {
+  const all = readBreakers()
+  if (all[key] && (all[key].fails || all[key].until)) {
+    delete all[key]
+    writeBreakers(all)
+  }
+}
+/** 给 /api/status 与 diagnose 看的熔断快照。 */
+export function breakerSnapshot() {
+  const all = readBreakers()
+  const out = []
+  for (const [key, v] of Object.entries(all)) {
+    out.push({ level: key, fails: v.fails || 0, openUntil: v.until && Date.now() < v.until ? v.until : null, lastError: v.lastErr || '' })
+  }
+  return out
+}
+function fbLog(line) {
+  try { fs.appendFileSync(dataPath('llm-fallback.log'), new Date().toISOString() + ' ' + line + '\n') } catch {}
+}
+
+/**
+ * 一次性拿全文。
+ * 通道顺序：主通道 → fallback 链的每一级（跳过被熔断的）。
+ * @param {object} [opts]
+ * @param {boolean} [opts.noFallback] 只用主通道
+ * @param {number}  [opts.timeoutMs]  单级超时（默认 90s）
+ */
 export async function chat(messages, opts = {}) {
   const main = _cfg()
-  const fb = _fb()
+  const levels = [{ ...main, __key: 'main' }]
+  if (!opts.noFallback) for (let i = 0; i < _chain().length; i++) levels.push({ ..._chain()[i], __key: 'fb' + (i + 1) })
+
   const tryOne = async (c) => {
     const r = await fetch(endpointOf(c), {
       method: 'POST',
@@ -128,36 +227,83 @@ export async function chat(messages, opts = {}) {
     })
     if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`)
     const j = await r.json()
-    const out = (j.choices?.[0]?.message?.content ?? '').trim()
-    if (!out) throw new Error('LLM 返回空内容')
+    const ch = j.choices?.[0] ?? {}
+    const out = String(ch.message?.content ?? '').trim()
+    if (!out) {
+      // 10-31 实测：kimi / hy3 这类**推理模型**会先把 max_tokens 全烧在 reasoning_content 上，
+      // finish_reason=length 而 content 是空串。旧代码一律当"LLM 返回空内容"抛，
+      // 结果把它们误判成坏通道、还会进熔断 —— 其实是 max_tokens 给小了。
+      const reasoning = String(ch.message?.reasoning_content ?? '')
+      if (ch.finish_reason === 'length' && reasoning) {
+        const e = new Error('推理模型把 max_tokens 烧在思考链上（' + reasoning.length + ' 字思考、正文 0 字）—— 需要更大的 max_tokens')
+        e.reasoningOnly = true          // 标记：不算通道故障
+        throw e
+      }
+      throw new Error('LLM 返回空内容')
+    }
     // 直连通道自己记账（账本只扫 DSH 会话，扫不到这条路）
     try { recordDirectUsage(j.usage, { model: c.model, via: 'chat' }) } catch {}
     return out
   }
-  try {
-    return await tryOne(main)
-  } catch (e) {
-    if (opts.noFallback || !fb.model || !(fb.api_key || fb.base_url)) throw e
+
+  const breakers = readBreakers()
+  const errs = []
+  for (let i = 0; i < levels.length; i++) {
+    const c = levels[i]
+    const key = c.__key
+    if (i > 0 && isOpen(key, breakers)) {
+      errs.push(key + '：熔断中（跳过）')
+      continue
+    }
     try {
-      // 备通道有自己的私有参数体系，别把主通道的 params 带过去（DeepSeek 官方不认 enable_thinking）
-      const out = await tryOne({ ...main, ...fb, params: fb.params ?? {} })
-      try { (await import('node:fs')).appendFileSync((await import('./paths.mjs')).dataPath('llm-fallback.log'), `${new Date().toISOString()} 主通道失败(${String(e.message).slice(0, 80)}) → 已用备通道\n`) } catch {}
+      const out = await tryOne(c)
+      if (i > 0) {
+        bumpOk(key)
+        fbLog(`主通道失败 → 已用 ${key}（${c.model}）`)
+      } else {
+        bumpOk('main')
+      }
       return out
-    } catch (e2) {
-      throw new Error(`主通道失败（${String(e.message).slice(0, 90)}）；备通道也失败（${String(e2.message).slice(0, 90)}）`)
+    } catch (e) {
+      const rec = bumpFail(key, e)
+      errs.push(`${key}（${c.model || '?'}）：${String(e.message).slice(0, 90)}`)
+      if (i === 0) fbLog(`主通道失败(${String(e.message).slice(0, 80)})，尝试备用链`)
     }
   }
+  // 全都失败：把每一级的失败原因都带上，别只说"主备都失败"（排障时那句话等于没说）
+  throw new Error('全部 ' + levels.length + ' 个 LLM 通道失败 → ' + errs.join('；'))
 }
 
 /** 流式：边收边吐增量文本（思考链外显 / 分句发送）。 */
 export async function* chatStream(messages, opts = {}) {
-  const r = await fetch(endpoint(), {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(payload(messages, { ...opts, stream: true })),
-    signal: AbortSignal.timeout(120000),
-  })
-  if (!r.ok) throw new Error(`LLM HTTP ${r.status}`)
+  // 10-31：流式以前只走主通道、且不走熔断 —— 主通道挂了她就整段哑掉。
+  // 现在：主通道失败时退到备用链，并且同样记熔断（流式的失败原因与 chat 一致）。
+  const levels = [{ ..._cfg(), __key: 'main' }]
+  if (!opts.noFallback) for (let i = 0; i < _chain().length; i++) levels.push({ ..._chain()[i], __key: 'fb' + (i + 1) })
+  const breakers = readBreakers()
+  let chosen = null
+  let lastErr = null
+  for (let i = 0; i < levels.length; i++) {
+    const c = levels[i]
+    if (i > 0 && isOpen(c.__key, breakers)) continue
+    try {
+      const r = await fetch(endpointOf(c), {
+        method: 'POST',
+        headers: headersOf({ ...c, api_key: c.api_key || apiKey() }),
+        body: JSON.stringify(payloadOf(c, messages, { ...opts, stream: true })),
+        signal: AbortSignal.timeout(opts.timeoutMs || 120000),
+      })
+      if (!r.ok) throw new Error(`LLM HTTP ${r.status}`)
+      chosen = { r, key: c.__key, model: c.model }
+      bumpOk(c.__key)
+      break
+    } catch (e) {
+      lastErr = e
+      bumpFail(c.__key, e)
+    }
+  }
+  if (!chosen) throw new Error('流式：全部 ' + levels.length + ' 个通道失败 → ' + String(lastErr?.message ?? lastErr).slice(0, 120))
+  const r = chosen.r
   const reader = r.body.getReader()
   const dec = new TextDecoder()
   let buf = ''

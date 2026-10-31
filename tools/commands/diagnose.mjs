@@ -46,9 +46,14 @@ function behaviorMismatches(cfg) {
     out.push('platforms.qq=false 但 qq.enabled=true —— 以前 qq-server 不读 platforms，会照常收发（已在 10-31 修）')
   }
   // 账本盲区
-  const hasFallback = !!(cfg.llm?.fallback && (cfg.llm.fallback.model || cfg.llm.fallback.base_url))
-  if (cfg.llm?.base_url && !hasFallback) {
-    out.push('llm.fallback 没配 —— 主通道一挂，QQ/微信/抖音/主动搭话全部哑火（llm.mjs 的 fallback 逻辑形同虚设）')
+  // 10-31：fallback 支持链式（数组）。任一有效级别都算"有备份"。
+  const fbRaw = cfg.llm?.fallback ?? cfg.llm?.fallbacks ?? null
+  const fbList = Array.isArray(fbRaw) ? fbRaw : (fbRaw ? [fbRaw] : [])
+  const usable = fbList.filter((x) => x && typeof x === 'object' && x.model && (x.api_key || x.base_url || cfg.llm?.api_key || cfg.llm?.base_url))
+  if (cfg.llm?.base_url && !usable.length) {
+    out.push('llm.fallback 没配（或没有有效级别）—— 主通道一挂，QQ/微信/抖音/主动搭话全部哑火')
+  } else if (cfg.llm?.base_url && usable.length === 1) {
+    out.push('llm.fallback 只有 1 级 —— 单级链首选失败即无退路，建议至少 2 级（同网关可配不同模型）')
   }
   // 沙箱
   const presets = (() => { try { return JSON.parse(fs.readFileSync(dshPath('feiyu-perm.json'), 'utf8')) } catch { return null } })()
@@ -79,7 +84,37 @@ export async function run(argv = []) {
     } catch (e) { items.push(warn('权限检查失败', p + '：' + e.message)) }
   }
 
-  // 4) 三条 LLM 通道 & 记账
+  // 4) LLM 通道：链有几级、有没有被熔断的、推理模型是否配错
+  let llmMod = null
+  try { llmMod = await import('../lib/llm.mjs') } catch {}
+  if (llmMod) {
+    try { items.push(ok('LLM 通道', llmMod.describe())) } catch {}
+    try {
+      const snap = llmMod.breakerSnapshot()
+      const open = snap.filter((x) => x.openUntil)
+      if (open.length) {
+        for (const b of open) {
+          items.push(bad('通道熔断', b.level + ' 连续失败 ' + b.fails + ' 次，冷却到 ' + new Date(b.openUntil).toLocaleTimeString('zh-CN') + '（最后错误：' + b.lastError + '）'))
+        }
+      } else if (snap.length) {
+        items.push(warn('通道异常记录', snap.map((x) => x.level + ' ×' + x.fails).join('、') + ' —— 未到熔断阈值'))
+      } else {
+        items.push(ok('通道熔断', '无（所有通道健康）'))
+      }
+    } catch {}
+    // 推理模型配成"非推理"会在 max_tokens 小时返回空正文 —— 提前点出来
+    try {
+      const cfg2 = config()
+      const chain = [cfg2.llm, ...(Array.isArray(cfg2.llm?.fallback) ? cfg2.llm.fallback : (cfg2.llm?.fallback ? [cfg2.llm.fallback] : []))].filter(Boolean)
+      const risky = chain.filter((x) => {
+        if (typeof x.reasoning === 'boolean') return false
+        return /^(kimi|hy3|o1|o3|o4|qwq|deepseek-r)/i.test(String(x.model || ''))
+      })
+      if (risky.length) {
+        items.push(warn('推理模型未声明', risky.map((x) => x.model).join('、') + ' —— 看起来是推理型，建议显式写 reasoning:true（否则 max_tokens 小时会返回空正文）'))
+      } else items.push(ok('推理模型声明', '链上模型都不需要特殊处理'))
+    } catch {}
+  }
   const directLog = dataPath('llm-usage.jsonl')
   items.push(fs.existsSync(directLog)
     ? ok('直连记账', directLog + '（' + fs.statSync(directLog).size + ' 字节）')
@@ -90,6 +125,20 @@ export async function run(argv = []) {
   items.push(fs.existsSync(sw)
     ? ok('吞错留痕', sw + '（' + fs.statSync(sw).size + ' 字节）')
     : ok('吞错留痕', '还没有被吞掉的错误'))
+
+  // 5.5) DSH 集成契约（升级 DSH 后第一眼看这里）
+  try {
+    const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+    const decl = pkg?.dshFeiyu || {}
+    let runtime = null
+    try { runtime = JSON.parse(fs.readFileSync('/opt/dsh/package.json', 'utf8')) } catch {}
+    if (runtime) {
+      const same = runtime.version === String(decl.testedAgainst || '').split('@').pop()
+      items.push(same
+        ? ok('DSH 契约', '运行时 ' + runtime.name + '@' + runtime.version + ' · 契约版本 ' + (decl.contractVersion || '?') + '（与实测版本一致）')
+        : warn('DSH 契约', '运行时 ' + runtime.name + '@' + runtime.version + '，插件只在 ' + (decl.testedAgainst || '?') + ' 上实测过 —— 建议跑一遍全量测试'))
+    } else items.push(warn('DSH 契约', '读不到 /opt/dsh/package.json（非 DSH 环境？）'))
+  } catch (e) { items.push(warn('DSH 契约', '检查失败：' + e.message)) }
 
   // 6) 容器/沙箱
   const inDocker = fs.existsSync('/.dockerenv')

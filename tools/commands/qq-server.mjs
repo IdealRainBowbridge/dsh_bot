@@ -10,6 +10,8 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
+import { splitBubbles, parseMessage } from '../lib/onebot.mjs'
 import { config } from '../lib/config.mjs'
 import { startBriefRefresher } from '../lib/ledger.mjs'
 import * as guard from '../lib/guard.mjs'
@@ -59,86 +61,9 @@ function logLine(level, args) {
 const log = (...a) => logLine('INFO', a)
 const logErr = (...a) => logLine('ERR', a)
 
-/** 把一段话拆成 1~3 条短消息 —— 真人不会一次甩一大段。 */
-export function splitBubbles(text, max = 3, perMax = 42) {
-  const src = String(text || '').trim()
-  if (!src) return []
-  if (src.length <= 20) return [src]
-  const parts = src.split(/(?<=[。！？!?…~～])/).map(s => s.trim()).filter(Boolean)
-  const out = []
-  for (const p of parts) {
-    const last = out[out.length - 1]
-    // 太碎的片段并到上一条；没有上一条就自己开一条
-    if (last !== undefined && (p.length <= 6 || last.length < 8)) out[out.length - 1] = last + p
-    else out.push(p)
-  }
-  // 超长的再按逗号补切一刀
-  const fit = []
-  for (const p of out) {
-    if (p.length <= perMax) { fit.push(p); continue }
-    const chunks = p.split(/(?<=[，,；;])/).map(x => x.trim()).filter(Boolean)
-    let buf = ''
-    for (const c of chunks) {
-      if (buf && buf.length + c.length > perMax) { fit.push(buf); buf = c }
-      else buf += c
-    }
-    if (buf) fit.push(buf)
-  }
-  if (fit.length <= max) return fit
-  // 超过上限：尾部全并进最后一条（宁可长一点，也别刷屏）
-  const head = fit.slice(0, max - 1)
-  return [...head, fit.slice(max - 1).join('')]
-}
-
-/** 解析 OneBot v11 消息（array 或 CQ 码字符串）→ 纯文本 + 是否 @ 了机器人。 */
-export function parseMessage(message, selfId) {
-  let text = ''
-  let atMe = false
-  const images = []   // 图片 URL（等 Qwen3-VL 来"看"）
-  const marks = []    // 非文字内容的描述标记
-  let replyId = ''    // 引用了哪一条（10-27：以前只留一句"【引用…】"，被引用的正文丢了）
-  if (Array.isArray(message)) {
-    for (const seg of message) {
-      const t = seg?.type
-      if (t === 'text') text += seg.data?.text ?? ''
-      else if (t === 'at' && String(seg.data?.qq) === String(selfId)) atMe = true
-      else if (t === 'image') {
-        const u = String(seg.data?.url || seg.data?.file || '')
-        if (/^https?:\/\//.test(u)) images.push(u)
-        marks.push('【发了一张图片】')
-      } else if (t === 'face') marks.push('【QQ表情】')
-      else if (t === 'video') marks.push('【发了一段视频】')
-      else if (t === 'record') marks.push('【发了一条语音】')
-      else if (t === 'reply') {
-        replyId = String(seg.data?.id ?? seg.data?.message_id ?? '').trim()
-        marks.push('【引用回复了一条消息】')
-      }
-      else if (t === 'forward' || t === 'node') marks.push('【合并转发消息】')
-      else if (t === 'json' || t === 'miniapp') {
-        // 卡片（B站/小程序/结构化消息）：挖 title/desc/url
-        let card = { title: '', desc: '', url: '' }
-        try {
-          const j = JSON.parse(seg.data?.data || seg.data?.json || '{}')
-          const dig = (o, depth = 0) => {
-            if (!o || typeof o !== 'object' || depth > 3) return null
-            if ((o.title || o.desc) && (o.url || o.jumpUrl || o.qqdocurl)) return o
-            for (const v of Object.values(o)) { const hit = dig(v, depth + 1); if (hit) return hit }
-            return null
-          }
-          const hit = dig(j)
-          card = { title: String(hit?.title || j.prompt || '').slice(0, 60), desc: String(hit?.desc || '').slice(0, 60), url: String(hit?.url || hit?.jumpUrl || hit?.qqdocurl || '').slice(0, 120) }
-        } catch { card.title = String(seg.data?.data || '').slice(0, 40) }
-        marks.push(`【分享卡片：${card.title || '未知内容'}${card.desc ? ' · ' + card.desc : ''}】`)
-      } else if (t) marks.push(`【${t}】`)
-    }
-  } else if (typeof message === 'string') {
-    text = message.replace(/\[CQ:[^\]]*\]/g, '')
-    atMe = message.includes(`[CQ:at,qq=${selfId}]`)
-    const m = /\[CQ:reply,id=(-?\d+)/.exec(message)
-    if (m) replyId = m[1]
-  }
-  return { text: text.trim(), atMe, images, marks, replyId }
-}
+// OneBot 消息解析已拆到 ../lib/onebot.mjs（10-31）：纯函数、可单测。
+// 这里保留 re-export，老调用方与测试不用改。
+export { splitBubbles, parseMessage } from '../lib/onebot.mjs'
 
 export async function run(argv = []) {
   const cfg = config()
@@ -156,6 +81,22 @@ export async function run(argv = []) {
   try { const n = memory.sweepEpisodes(); if (n) log(`[qq] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch {}
   const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   const port = Number(argv[0]) || 8080
+
+  // ── 单实例锁（10-31）──────────────────────────────────────────────────────
+  // 两套启动机制（im-gateway.sh / 插件 startQQ）都能拉起这个进程。
+  // 谁先起谁拿锁，后来的安静退出 —— 否则 startQQ 的 killPortListeners 会杀掉守护进程，
+  // 守护再拉起，形成无限拉锯（已在审计中确认这条路径存在）。
+  const { acquire } = await import('../lib/lock.mjs')
+  const releaseLock = acquire('qq-server')
+  if (!releaseLock) {
+    logErr('[qq] 已有另一个 qq-server 实例在跑（端口 ' + port + '）—— 本实例让位退出。' +
+      '如果你想接管，请先停掉 im-gateway.sh 里的那个进程。')
+    process.exit(0)      // exit 0：不是错误，别让守护以为崩了
+  }
+  const releaseOnExit = () => { try { releaseLock() } catch (e) { swallow(e, 'qq-server:lock-release') } }
+  process.on('exit', releaseOnExit)
+  process.on('SIGTERM', () => { releaseOnExit(); process.exit(0) })
+  process.on('SIGINT', () => { releaseOnExit(); process.exit(0) })
 
   const callApi = async (action, payload = {}, timeout = 20000) => {
     try {

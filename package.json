@@ -52,5 +52,21 @@
       "platform": "web"
     }
   },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  },
+  "dshFeiyu": {
+    "contractVersion": "2026-10-31",
+    "testedAgainst": "@deepseek-ai/dsh@0.2.1-rc.2",
+    "note": "插件用的是 DSH 内部服务（webServer/connection/sessionController/permissionPresets）。升级 DSH 后请跑 node tools/feiyu.mjs diagnose —— 契约不满足会在那里报出来。"
+  },
   "license": "MIT"
 }
