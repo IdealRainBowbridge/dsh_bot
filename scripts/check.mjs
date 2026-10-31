@@ -213,8 +213,11 @@ const FILE_ALLOW = {
 // 拆它们的正确做法是抽出可独立测试的纯逻辑（已完成：onebot.mjs），
 // 剩下的闭包内部函数彼此共享 send/callApi/config，强拆只会制造更多参数传递。
 const FUNC_ALLOW = {
-  // qq-server 的 run() 是主闭包 —— 它的长度 ≈ 文件长度，文件护栏已经覆盖
-  'tools/commands/qq-server.mjs:run': 1600,
+  // qq-server 的 run() 是主闭包 —— 它的长度 ≈ 文件长度，文件护栏已经覆盖。
+  // 10-31 从 1600 调到 1700：为了治"一小时内连发 6 条主动消息"，在闭包里加了
+  // 主动发言闸门（ownerSpoke / canSpeak / spokeDone 三个 helper 在模块级，
+  // 闭包里只剩调用）。文件护栏（1750）仍然管着总长度，这里只是同步放宽。
+  'tools/commands/qq-server.mjs:run': 1700,
   // lib/index.js 的 apply() 是插件壳主闭包，同理
   'lib/index.js:apply': 1100,
 }

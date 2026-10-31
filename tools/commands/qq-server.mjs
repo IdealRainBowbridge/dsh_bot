@@ -61,6 +61,27 @@ function logLine(level, args) {
 const log = (...a) => logLine('INFO', a)
 const logErr = (...a) => logLine('ERR', a)
 
+// ── 主动发言闸门（10-31）：三条主动通道共用一张账 ────────────────────────────
+// 截图实锤她一小时内连发 6 条主动消息（4 条在接自己的话）。三条通道各有节流但互不相认。
+// 这里收敛成一个 helper，主闭包里只留一行调用，逻辑可单测。
+let _gateMod = null
+async function gateMod() {
+  if (!_gateMod) _gateMod = await import('../lib/proactive-gate.mjs')
+  return _gateMod
+}
+/** 能不能发一条主动消息。@returns {Promise<{ok:boolean, why:string}>} */
+async function canSpeak(kind = 'proactive') {
+  try { return (await gateMod()).allow(kind) } catch { return { ok: true, why: '' } }
+}
+/** 真的发出去了才记账。 */
+async function spokeDone(kind = 'proactive') {
+  try { (await gateMod()).commit(kind) } catch { /* noop */ }
+}
+/** 主人说话了 → 重置连续计数。 */
+async function ownerSpoke() {
+  try { (await gateMod()).noteOwnerSpoke() } catch { /* noop */ }
+}
+
 // OneBot 消息解析已拆到 ../lib/onebot.mjs（10-31）：纯函数、可单测。
 // 这里保留 re-export，老调用方与测试不用改。
 export { splitBubbles, parseMessage } from '../lib/onebot.mjs'
@@ -266,6 +287,8 @@ export async function run(argv = []) {
       const live = config()
       // 10-31：面板关了 QQ 就该真闭嘴 —— 以前只认 qq.enabled，platforms.qq 是装饰。
       if (live.platforms?.qq === false || live.qq?.enabled === false) return
+      // 10-31：主人开口了 → 重置"连续主动"计数，并标记他正在聊（3 分钟内不插话）
+      await ownerSpoke()
       const QQ = live.qq ?? {}
       const selfId = String(evt.self_id ?? '')
       const isGroup = evt.message_type === 'group'
@@ -1181,6 +1204,8 @@ export async function run(argv = []) {
       const dailyMax = Number(pp.dailyMax ?? 3)
       if (dailyMax > 0 && Number(st.count ?? 0) >= dailyMax) return
       if (Date.now() - Number(st.lastAt ?? 0) < Number(pp.minGapMin ?? 150) * 60_000) return
+      // 10-31：全局闸门（三条主动通道共用）—— 治"一小时内连发 6 条 + 自言自语接自己话"
+      { const g = await canSpeak('proactive'); if (!g.ok) { log('[qq] 主动搭话跳过：' + g.why); return } }
       if (ownerLastMsgAt && Date.now() - ownerLastMsgAt < Number(pp.minQuietMin ?? 90) * 60_000) return
       // ── LLM 决策预检（10-31 智能化升级）──────────────────────────────
       // 旧逻辑：硬闸全过后 12% 掷骰，命中就硬搭 —— 她对"该不该说"没有发言权。
@@ -1393,6 +1418,8 @@ export async function run(argv = []) {
       if (cfgNow.guard?.dryRun) { log(`[qq][干跑] 本要主动搭话：${out.slice(0, 50)}`); return }
       const ok = await send('send_private_msg', { user_id: Number(ownerQQ), message: [{ type: 'text', data: { text: out } }] })
       if (!ok) return
+      // 10-31：真的发出去了才记账（全局闸门）
+      await spokeDone('proactive')
       // 主动搭话也带图（10-25）：这条路径以前**完全不发图**，主人那边"好久没见表情包"一半是这原因。
       if (Math.random() < Number(cfgNow.qq?.stickerChance ?? 0.5)) {
         const ptag = autoTag(out)
@@ -1594,6 +1621,7 @@ export async function run(argv = []) {
         const verdict = guard.allow(chatId, out, config(), { checkDryRun: false })   // 间隔 + 复读去重（干跑已在上游拦）
         if (!verdict.ok) continue
         const ok = await send('send_group_msg', { group_id: Number(gid), message: [{ type: 'text', data: { text: out } }] })
+      if (ok) await spokeDone('group')
         if (!ok) continue
         guard.commit(chatId, out)
         memory.remember('qq', chatId, config().identity?.name ?? 'feiyu', 'assistant', out, { isGroup: true })   // 推送即记忆

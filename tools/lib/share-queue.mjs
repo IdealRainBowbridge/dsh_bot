@@ -59,6 +59,13 @@ export async function shareTick() {
   // 深夜不打扰
   const hour = new Date().getHours()
   if (hour < 9 || hour >= 23) return null
+  // 10-31：全局闸门 —— 三条主动通道（搭话/分享/小报告）共用一张账，
+  // 否则各自 2h 叠加 = 一小时内 6 条（截图实锤）
+  try {
+    const g = await import('./proactive-gate.mjs')
+    const gate = g.allow('share')
+    if (!gate.ok) return null
+  } catch (e) { /* 闸门不可用就退回原逻辑 */ }
 
   const ev = q.shift()
   writeQ(q)
@@ -84,6 +91,7 @@ export async function shareTick() {
       st.sent = Number(st.sent ?? 0) + 1
       st.lastAt = Date.now()
       writeState(st)
+      try { const g = await import('./proactive-gate.mjs'); g.commit('share') } catch (e) { /* noop */ }
       // 写统一记忆
       try {
         const memory = await import('./memory.mjs')

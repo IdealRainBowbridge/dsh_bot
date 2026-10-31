@@ -51,8 +51,17 @@ export async function tattle({ title, bvid, score, reason, highlight }) {
     text = `老爹，今天看到《${String(title).slice(0, 30)}》，打了 ${score} 分。${reason ? String(reason).slice(0, 60) : '值得一看'}。有空可以看看。`
   }
   const full = `🐋 ${text}${NL}https://www.bilibili.com/video/${bvid}`
+  // 10-31：全局闸门（三条主动通道共用），别再各自为政
+  try {
+    const g = await import('../lib/proactive-gate.mjs')
+    const gate = g.allow('tattle')
+    if (!gate.ok) return { ok: false, text: full, skipped: gate.why }
+  } catch (e) { /* 闸门不可用就退回原逻辑 */ }
   const ok = await sendOwnerQQ(full)
-  if (ok) markSent(q.st)
+  if (ok) {
+    markSent(q.st)
+    try { const g = await import('../lib/proactive-gate.mjs'); g.commit('tattle') } catch (e) { /* noop */ }
+  }
   return { ok, text: full }
 }
 

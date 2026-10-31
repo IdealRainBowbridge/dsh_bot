@@ -8,21 +8,32 @@
 // 覆盖：array 格式 / CQ 码字符串 / 卡片(json,miniapp) / 图片 / 表情 / 视频 / 语音 / 引用 / 合并转发
 
 /** 把一段话拆成 1~3 条短消息 —— 真人不会一次甩一大段。 */
-export function splitBubbles(text, max = 3, perMax = 42) {
+/**
+ * 把一段话拆成几条短消息 —— 真人不会一次甩一大段，但也不该一句一条地刷屏。
+ *
+ * 10-31 调参（截图实测定下来的）：
+ *   旧：max=3, perMax=42 → 一句"记上了，明早九点提醒你交房租。别到时候又赖床"被切成 2 条，
+ *       "就这一件。"这种 5 字碎片也单独成条，观感像机器人在刷屏。
+ *   新：perMax=68（QQ 里 60-70 字是正常一句话）、max=4、只在句末标点切、碎片并回上一条。
+ */
+export function splitBubbles(text, max = 4, perMax = 68) {
   const src = String(text || '').trim()
   if (!src) return []
-  if (src.length <= 20) return [src]
-  const parts = src.split(/(?<=[。！？!?…~～])/).map((s) => s.trim()).filter(Boolean)
-  const out = []
+  // 短回复就一条 —— 不要为了"像人"硬拆
+  if (src.length <= perMax) return [src]
+
+  const parts = src.split(/(?<=[。！？!?…~～\n])/).map((s) => s.trim()).filter(Boolean)
+  const merged = []
   for (const p of parts) {
-    const last = out[out.length - 1]
-    // 太碎的片段并到上一条；没有上一条就自己开一条
-    if (last !== undefined && (p.length <= 6 || last.length < 8)) out[out.length - 1] = last + p
-    else out.push(p)
+    const last = merged[merged.length - 1]
+    // 碎片并回上一条：<=12 字，或上一条还太短
+    if (last !== undefined && (p.length <= 12 || last.length < 14)) merged[merged.length - 1] = last + p
+    else merged.push(p)
   }
-  // 超长的再按逗号补切一刀
+
+  // 超长的单句再按逗号补切（只在真的超过 perMax 时）
   const fit = []
-  for (const p of out) {
+  for (const p of merged) {
     if (p.length <= perMax) { fit.push(p); continue }
     const chunks = p.split(/(?<=[，,；;])/).map((x) => x.trim()).filter(Boolean)
     let buf = ''
@@ -32,6 +43,7 @@ export function splitBubbles(text, max = 3, perMax = 42) {
     }
     if (buf) fit.push(buf)
   }
+
   if (fit.length <= max) return fit
   // 超过上限：尾部全并进最后一条（宁可长一点，也别刷屏）
   const head = fit.slice(0, max - 1)
