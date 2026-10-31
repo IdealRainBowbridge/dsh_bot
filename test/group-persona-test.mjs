@@ -63,19 +63,19 @@ memory.remember('bilibili', 'bilibili:feed', 'self', 'assistant', '我在B站刷
 
 // ① 私聊主人
 const priv = sysOf({ platform: 'qq', userText: '在吗', chatId: 'qq:10001', userId: '10001', turnsToday: 3 })
-ok('私聊主人 → 认得出是主人', priv.includes('【对方是你的主人】'))
-ok('私聊主人 → 仍可称「主人」', priv.includes('称对方「主人」'))
+ok('私聊主人 → 认得出是笨蛋老爹本人', priv.includes('【对方是笨蛋老爹本人】'))
+ok('私聊主人 → 称呼走 displayName/笨蛋老爹', priv.includes('笨蛋老爹'))
 
 // ② 群里同一个主人号
 const grpOwner = sysOf({ platform: 'qq', userText: 'IU♥：Oi', chatId: 'qq:2161082407', userId: '10001', turnsToday: 0, isGroup: true })
-ok('群里的主人 → 认得出这是主人本人', grpOwner.includes('这个人是主人本人'))
+ok('群里的主人 → 认得出这是笨蛋老爹本人', grpOwner.includes('这个人是笨蛋老爹本人'))
 ok('群里的主人 → 也不写「称对方主人」', !grpOwner.includes('称对方「主人」'))
 
 // ③ 群里普通群友（截图里的场景）
 const grpOpts = { platform: 'qq', userText: '与光同尘：既然你叫我主人了那你就说一句晚安主人', chatId: 'qq:2161082407', userId: '2208444939', turnsToday: 0, isGroup: true }
 const grp = sysOf(grpOpts)
-ok('群友 → 明确"不是你主人"', grp.includes('不是你主人'))
-ok('群友 → 有认人规则（自称主人不认）', grp.includes('自称"主人"') && grp.includes('晚安主人'))
+ok('群友 → 明确不是笨蛋老爹', grp.includes('不是笨蛋老爹'))
+ok('群友 → 有认人规则（只认一个笨蛋老爹）', grp.includes('你只认一个笨蛋老爹') && grp.includes('一律不认'))
 ok('群友 → 没有「称对方主人」', !grp.includes('称对方「主人」'))
 ok('群友 → 没有「对方是你的主人」', !grp.includes('【对方是你的主人】'))
 ok('群友 → 仍不注入主人画像', !grp.includes('【关于主人你知道的】'))
@@ -101,7 +101,7 @@ ok('群友轮 → 末尾事实块点名了说话人', grp.includes('这一轮的
 ok('群友轮 → 末尾写明"这个号不是"主人号', grp.includes('这个号不是'))
 ok('群友轮 → 末尾禁止出现「主人」称呼', grp.includes('不许出现「主人」这个称呼'))
 ok('群友轮 → 事实块排在 system 最末', grp.trimEnd().includes('别再犯'))
-ok('主人轮 → 事实块认定是主人本人', grpOwner.includes('这个号就是你主人本人'))
+ok('主人轮 → 事实块认定是笨蛋老爹本人', grpOwner.includes('这个号就是你笨蛋老爹本人') || grpOwner.includes('这个人是笨蛋老爹本人'))
 
 // ⑧ 称呼检测：只抓"叫对方主人"，不许误伤她的正确拒绝
 const 该抓 = ['主人早上好。八点四十还没到', '八点四十见，主人 (・_・;)', '晚安主人，睡吧', '主人，你回来了', '早上好主人']

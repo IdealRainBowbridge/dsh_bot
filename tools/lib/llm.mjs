@@ -4,9 +4,68 @@
 //
 // 双通道（10-26）：主通道挂了/额度没了，自动落到 llm.fallback（换一家供应商的 key）。
 // 这样换平台不用改代码，也不会因为某一家 429 就整晚不吭声。
+import fs from 'node:fs'
 import { config } from './config.mjs'
+import { dataPath } from './paths.mjs'
 
 const _cfg = () => config().llm ?? {}
+
+// ── 记账（10-31）─────────────────────────────────────────────────────────────
+// 漏洞：QQ / 微信 / 抖音 / 主动搭话 / mind 规划全走这条直连通道，
+// 而账本只扫 DSH 会话日志（~/.dsh/sessions/*.zstd）—— 她陪老爹聊天烧的钱，
+// 账本一分看不见。实测：唤醒后 DSH 记了 5131 token，同一时段 a2a 余额掉了 241。
+// 所以直连通道必须自己记一笔：每次成功调用把 usage 追加到直连用量账本。
+const DIRECT_USAGE = () => dataPath('llm-usage.jsonl')
+
+/** 把一次直连调用的 usage 追加进账本。失败绝不打断对话。 */
+export function recordDirectUsage(usage, meta = {}) {
+  if (!usage || typeof usage !== 'object') return
+  const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0)
+  const rec = {
+    at: Date.now(),
+    day: new Date().toLocaleDateString('sv-SE'),
+    input: num(usage.prompt_tokens ?? usage.input_tokens ?? usage.inputTokens),
+    output: num(usage.completion_tokens ?? usage.output_tokens ?? usage.outputTokens),
+    cache: num(usage.cached_tokens ?? usage.cache_read_input_tokens ?? usage.cachedTokens),
+    model: meta.model || '',
+    via: meta.via || 'direct',
+  }
+  if (!rec.input && !rec.output) return
+  try {
+    const f = DIRECT_USAGE()
+    fs.mkdirSync(f.slice(0, f.lastIndexOf('/')) || '.', { recursive: true })
+    fs.appendFileSync(f, JSON.stringify(rec) + '\n')
+  } catch { /* 记账失败不挡业务 */ }
+}
+
+/** 读直连账本（给 ledger 合并用）。返回 {days:[{day,input,output,cache,total,calls}], lifetime} */
+export function readDirectUsage() {
+  const out = { days: [], lifetime: { input: 0, output: 0, cache: 0, total: 0, calls: 0 } }
+  let lines = []
+  try { lines = fs.readFileSync(DIRECT_USAGE(), 'utf8').trim().split('\n').filter(Boolean) } catch { return out }
+  const byDay = new Map()
+  let staleCut = Date.now() - 400 * 86400_000   // 400 天外的行直接忽略（防文件无限长拖慢）
+  for (const l of lines) {
+    let r
+    try { r = JSON.parse(l) } catch { continue }
+    if (!r || !r.at || Number(r.at) < staleCut) continue
+    const day = r.day || new Date(Number(r.at)).toLocaleDateString('sv-SE')
+    if (!byDay.has(day)) byDay.set(day, { day, input: 0, output: 0, cache: 0, total: 0, calls: 0 })
+    const d = byDay.get(day)
+    d.input += Number(r.input) || 0
+    d.output += Number(r.output) || 0
+    d.cache += Number(r.cache) || 0
+    d.calls += 1
+    out.lifetime.input += Number(r.input) || 0
+    out.lifetime.output += Number(r.output) || 0
+    out.lifetime.cache += Number(r.cache) || 0
+    out.lifetime.calls += 1
+  }
+  for (const d of byDay.values()) { d.total = d.input + d.output; out.days.push(d) }
+  out.lifetime.total = out.lifetime.input + out.lifetime.output
+  out.days.sort((a, b) => (a.day < b.day ? -1 : 1))
+  return out
+}
 const _fb = () => _cfg().fallback ?? {}
 
 /** API key：环境变量优先（DEEPSEEK_API_KEY / LLM_API_KEY），再读配置文件。 */
@@ -71,6 +130,8 @@ export async function chat(messages, opts = {}) {
     const j = await r.json()
     const out = (j.choices?.[0]?.message?.content ?? '').trim()
     if (!out) throw new Error('LLM 返回空内容')
+    // 直连通道自己记账（账本只扫 DSH 会话，扫不到这条路）
+    try { recordDirectUsage(j.usage, { model: c.model, via: 'chat' }) } catch {}
     return out
   }
   try {

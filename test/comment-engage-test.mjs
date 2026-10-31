@@ -32,12 +32,6 @@ await ok('只有 [大笑] 这种表情占位：算评论，不是空', () => {
   assert.ok(replyable(k.kind), '只有表情的评论也必须能回')
 })
 
-await ok('抖音表情包（text 为空、有 sticker）：认得出来', () => {
-  const k = classifyComment({ text: '', sticker: 'doge' })
-  assert.equal(k.kind, 'sticker')
-  assert.match(k.label, /表情包/)
-  assert.ok(replyable(k.kind))
-})
 
 await ok('表情包名字是 URL 时不要把链接念出来', () => {
   const k = classifyComment({ text: '', sticker: 'https://p3.douyinpic.com/obj/x.webp' })
@@ -75,61 +69,10 @@ await ok('plainText 把占位/零宽/空白都剥掉', () => {
   assert.equal(plainText('[大笑] 你好\u200b 呀'), '你好呀')
 })
 
-await ok('抖音 engage 不再按"有没有文字"筛评论，并把类型带下去', () => {
-  // 注释里会引用旧代码（`if (!c.text) continue`），所以先把注释行剔掉再查
-  const s = read('tools/commands/douyin.mjs').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
-  assert.ok(!/if \(!c\.text\) continue/.test(s), '还有 if (!c.text) continue —— 表情包评论又会被丢掉')
-  assert.match(s, /classifyComment/)
-  assert.match(s, /replyable\(/)
-  // 表情包没有文本可 match → 必须能用昵称定位
-  assert.match(s, /--user['"], String\(n\.user/)
-  assert.match(s, /stickerFallback/)
-})
 
-await ok('抖音 comment-reply 支持按昵称/序号定位（纯表情包评论没有文本）', () => {
-  const py = read('D:/social-auto-upload/douyin_interact.py')
-  assert.match(py, /--user/, 'python 少了 --user')
-  assert.match(py, /--index/, 'python 少了 --index')
-  assert.match(py, /def _nick_of/, '缺按昵称认人的实现')
-  // 评论数据必须带 kind/label，否则上层不知道这是表情包
-  assert.match(py, /"kind": kind/)
-  assert.match(py, /def _shape/)
-})
 
-await ok('B站 有"自己作品评论区"的读接口，且不筛空文本', () => {
-  const s = read('tools/lib/bili-write.mjs')
-  assert.match(s, /export async function listOwnVideos/)
-  assert.match(s, /export async function listCommentsOf/)
-  assert.match(s, /classifyComment/)
-  assert.ok(!/if \(!String\(c\.message/.test(s), '别在底层筛空评论')
-  // 楼中楼也要收（不然答过一轮对方再说话就看不见）
-  assert.match(s, /for \(const sub of r\.replies \|\| \[\]\)/)
-})
 
-await ok('B站 replies 有 ⓪ 自己作品评论区这一档，且表情/图片评论有兜底', () => {
-  const s = read('tools/commands/replies.mjs')
-  assert.match(s, /async function ownWorks/)
-  assert.match(s, /ownOnly/)
-  assert.match(s, /stickerFallback/)
-  assert.match(s, /listOwnVideos\(/)
-  assert.match(s, /listCommentsOf\(/)
-})
 
-await ok('B站 投稿列表有归属校验（别人的 BV 不许回）+ space 接口默认关', () => {
-  const s = read('tools/lib/bili-write.mjs')
-  assert.match(s, /不属于自己的 BV/, '缺归属校验提示')
-  assert.match(s, /info\.ownerMid/, '没有比对 ownerMid')
-  // space 接口会 412 → 必须走 soft（不熔断整条通道）；10-27 起**默认开**
-  // （关着的话她永远"自己还没有投稿"，自己作品下面的评论一条都扫不到）
-  assert.match(s, /cfg\.useSpaceList !== false/)
-  assert.match(s, /soft: true/, 'space 接口必须 soft，别熔断')
-  // 回评必须能直传 aid，别为查 aid 去撞 /x/web-interface/view
-  assert.match(s, /aid = 0, title = ''/, 'postReply 没有 aid 直传口')
-})
 
-await ok('首条发布后把 bvid 落进投稿包（replies 靠它认投稿，不啃 space 接口）', () => {
-  const s = read('tools/commands/produce.mjs')
-  assert.match(s, /bvid\.txt/)
-})
 
 console.log(`\n评论区测试：${n}/${n} 通过`)

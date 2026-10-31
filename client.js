@@ -47,7 +47,6 @@ window.__ModuleLoader__.load({
 			["bilibili", "B站", "定时养鱼：看视频、写评论、@你"],
 			["qq", "QQ", "点开即启动：秒回 + 网关 + 语音（按需开，不随 DSH 自启）", "restart"],
 			["wechat", "微信", "点开即启动：替你回消息（按联系人分开记）", "restart"],
-			["douyin", "抖音", "定时刷视频 + 真发评论 + @人"],
 		];
 
 		// ── 少量工具 ──────────────────────────────────────────────────────────
@@ -216,25 +215,12 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					ownerMid: (c.owner && c.owner.mid) || "",
 					ownerName: (c.owner && c.owner.name) || "",
 					ownerWechat: (c.owner && c.owner.wechat) || "",
-				douyinOwner: (c.douyin && c.douyin.owner && c.douyin.owner.name) || "",
 					nightStart: n.start || "20:00",
 					nightEnd: n.end || "24:00",
 					nightWakes: (n.wakes != null) ? n.wakes : 1,
 				shareDaily: (c.quota && c.quota.shareDaily != null) ? c.quota.shareDaily : 3,
 				shareOn: !!(c.share && c.share.enabled),
 				shareMinScore: (c.share && c.share.minScore != null) ? c.share.minScore : 13,
-				douyinCount: (c.douyin && c.douyin.maxPerRun != null) ? c.douyin.maxPerRun : 2,
-				douyinShareDaily: (c.douyin && c.douyin.shareDaily != null) ? c.douyin.shareDaily : 5,
-				douyinAt: !!(c.douyin && c.douyin.atMention),
-				douyinShare: !!(c.douyin && c.douyin.shareToOwner),
-				douyinAutoComment: !!(c.douyin && c.douyin.autoComment),
-				douyinDm: !!(c.douyin && c.douyin.dm && c.douyin.dm.enabled),
-				douyinDmStartWithDsh: !!(c.douyin && c.douyin.dm && c.douyin.dm.startWithDsh),
-				douyinSilent: !!(c.douyin && c.douyin.watch && c.douyin.watch.silent),
-				douyinFreeRoam: !!(c.douyin && c.douyin.freeRoam && c.douyin.freeRoam.enabled),
-				douyinUnlimited: (c.douyin && c.douyin.freeRoam && c.douyin.freeRoam.unlimited) !== false,
-				douyinMaxVideos: (c.douyin && c.douyin.freeRoam && c.douyin.freeRoam.maxVideos) || 0,
-				douyinMaxMinutes: (c.douyin && c.douyin.freeRoam && c.douyin.freeRoam.maxMinutes) || 0,
 				biliFreeRoam: !!(c.bilibili && c.bilibili.freeRoam && c.bilibili.freeRoam.enabled),
 				biliUnlimited: (c.bilibili && c.bilibili.freeRoam && c.bilibili.freeRoam.unlimited) !== false,
 				biliMaxVideos: (c.bilibili && c.bilibili.freeRoam && c.bilibili.freeRoam.maxVideos) || 0,
@@ -376,7 +362,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				try {
 					const r = await api("/services", { method: "POST", body: JSON.stringify({ target: "free-roam", platform: platform, action: on ? "start" : "stop" }) });
 					setSvc(r.services || null);
-					if (r.ok) flash(on ? (platform === "douyin" ? "抖音自由刷已启动（大肥鱼自己去逛了）" : "B站自由刷已启动（大肥鱼自己去逛了）") : "自由刷已停止");
+					if (r.ok) flash(on ? "B站自由刷已启动（大肥鱼自己去逛了）" : "自由刷已停止");
 					else flash((r.errors || []).join("；") || "操作失败", true);
 				} catch (e) {
 					flash("自由刷操作失败：" + ((e && e.message) || e), true);
@@ -395,12 +381,23 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				} finally { setBusy(""); }
 			}, [flash]);
 
+			// 10-31：QQ/微信 是真双开关 —— platforms.* 决定服务起不起，qq.enabled/wechat.enabled
+			// 决定它起不起来之后认不认活。以前只写 platforms.*，两个开关各说各话：
+			// 面板显示"关"但 qq-server 照回消息；面板显示"开"但 qq.enabled=false 起不来。
+			// 现在一次写两个，语义统一。
 			const togglePlatform = useCallback(async (key, on, needsRestart) => {
 				const label = (PLATFORMS.find((p) => p[0] === key) || [key, key])[1];
 				const next = Object.assign({}, (cfg && cfg.platforms) || {}, { [key]: on });
-				const ok = await save({ platforms: next }, (on ? "已开启：" : "已关闭：") + label);
+				const patch = { platforms: next };
+				const DUAL = { qq: "qq", wechat: "wechat" };
+				if (DUAL[key]) patch[DUAL[key]] = { enabled: on };
+				const ok = await save(patch, (on ? "已开启：" : "已关闭：") + label);
 				if (!ok) return;
-				setCfg((prev) => Object.assign({}, prev, { platforms: next }));
+				setCfg((prev) => {
+					const merged = Object.assign({}, prev, { platforms: next });
+					if (DUAL[key]) merged[DUAL[key]] = Object.assign({}, (prev && prev[DUAL[key]]) || {}, { enabled: on });
+					return merged;
+				});
 				if (needsRestart) await restartService(key, on ? "start" : "stop");
 			}, [cfg, save, restartService]);
 
@@ -475,6 +472,10 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const schedulerOn = !!(status && status.scheduler && status.scheduler.ok);
 			// 通道是否真的通：进程活着不等于能收发
 			const napcatOk = !!(status && status.qqChannel && status.qqChannel.napcat && status.qqChannel.napcat.ok);
+			// 10-31：她的记忆在 ~/.feiyu-ai，不在 session workspace 里。preset 不是
+			// danger-full-access 时，她写得进日记、写不进记忆 —— 且完全静默。
+			const perm = (status && status.permission) || null;
+			const permOk = !!(perm && perm.ok === true);
 			const beat = (status && status.wxBeat) || null;
 			const beatAge = beat && beat.ts ? Math.max(0, Math.round((Date.now() - Number(beat.ts)) / 1000)) : null;
 			const beatFresh = beatAge !== null && beatAge <= 120;
@@ -523,7 +524,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							},
 						}),
 						h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 240px" } },
-							"开 = 只打印不发送（她照常思考、算分、写日记）；关 = 真发。别和 douyin.dryRun 搞混，那个只管抖音。")),
+							"开 = 只打印不发送（她照常思考、算分、写日记）；关 = 真发。")),
 					// 通道健康：进程活着 ≠ 能收发。QQ 要看 NapCat 网关，微信要看心跳
 					h("div", { className: "fy-stats", style: { marginTop: 10 } },
 						h("div", { className: "fy-chip" + (napcatOk ? "" : " bad") },
@@ -532,12 +533,29 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("div", { className: "fy-chip" + (svc && svc.qq && svc.qq.running ? "" : " bad") },
 							"QQ 进程 ", h("b", null, svc && svc.qq && svc.qq.running ? "在跑" : "没跑")),
 						h("div", { className: "fy-chip" + (beatFresh ? "" : " bad") },
-							"微信 ", h("b", null, beatAge === null ? "无心跳" : beatFresh ? beatAge + "s 前心跳 · " + (beat.state || "") : "心跳停了 " + beatAge + "s"))),
+							"微信 ", h("b", null, beatAge === null ? "无心跳" : beatFresh ? beatAge + "s 前心跳 · " + (beat.state || "") : "心跳停了 " + beatAge + "s")),
+						h("div", { className: "fy-chip" + (permOk ? "" : " bad"), title: "她写记忆需要完全访问：记忆库在 ~/.feiyu-ai，不在会话工作目录里" },
+							"记忆写入 ", h("b", null, permOk ? "可写" : (perm && perm.ok === false ? "被沙箱拦住" : "未确认")))),
 					h("div", { className: "fy-row", style: { marginTop: 8, marginBottom: 0 } },
 						!napcatOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 260px" } },
 							napcatQr
-								? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(napcatQr.ageSec / 60)) + " 分钟前刚刷新，用手机 QQ 扫 D:\\NapCat\\cache\\qrcode.png。已开快速登录，正常只需要扫这一次。"
+								? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(napcatQr.ageSec / 60)) + " 分钟前刚刷新，用手机 QQ 扫 " + (napcatQr.path || "网关目录里的 qrcode.png") + "。已开快速登录，正常只需要扫这一次。"
 								: "⚠️ QQ 网关（NapCat）不通：服务在跑，但收不到也发不出任何 QQ 消息。点右边按钮，UAC 点一次「是」即可；网关随 DSH 启停。") : null,
+						!permOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 300px", color: "#c0392b" } },
+							"⚠️ 记忆写入被 DSH 沙箱拦住：她能写日记（会话目录内），但写不进 ~/.feiyu-ai 的记忆（这一项完全静默）。点右边修复。") : null,
+						!permOk ? h("button", {
+							className: "fy-btn primary",
+							disabled: busy === "perm:fix",
+							onClick: async () => {
+								setBusy("perm:fix");
+								try {
+									const r = await api("/perm/fix", { method: "POST", body: "{}" });
+									flash(r.ok ? "权限已修复：记忆可写（danger-full-access）" : "修复失败：" + ((r.permission && r.permission.ok === false) ? "拿不到会话/服务" : "未知原因"), !r.ok);
+									await load();
+								} catch (e) { flash("修复失败：" + ((e && e.message) || e), true); }
+								finally { setBusy(""); }
+							},
+						}, busy === "perm:fix" ? "修复中…" : "修复记忆写入") : null,
 						!napcatOk ? h("button", {
 							className: "fy-btn primary",
 							disabled: busy === "svc:napcat",
@@ -562,7 +580,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								h("span", { className: "fy-sw-name" }, p[1]),
 								h("small", { className: "fy-sw-desc" }, p[2])),
 							h(Switch, {
-								on: platforms[p[0]] !== false,
+								// 10-31：显示要反映"真的能不能用" —— qq/wechat 两个开关任一关着就显示关
+								on: platforms[p[0]] !== false && (p[0] === "qq" ? !(cfg && cfg.qq && cfg.qq.enabled === false) : p[0] === "wechat" ? !(cfg && cfg.wechat && cfg.wechat.enabled === false) : true),
 								label: p[1],
 								onChange: (v) => togglePlatform(p[0], v, p[3] === "restart"),
 							}))))),
@@ -596,12 +615,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							onChange: (e) => setDraft(Object.assign({}, draft, { ownerWechat: e.target.value })),
 							onBlur: () => save({ owner: { wechat: draft.ownerWechat.trim() } }, "已保存"),
 						})),
-					h(Row, { label: "抖音昵称" },
-						h("input", {
-							className: "fy-input fy-w-md", value: draft.douyinOwner, placeholder: "（分享给主人的私信目标）",
-							onChange: (e) => setDraft(Object.assign({}, draft, { douyinOwner: e.target.value })),
-							onBlur: () => save({ douyin: { owner: { name: draft.douyinOwner.trim() } } }, "主人抖音昵称已保存"),
-						}))),
+					// 抖音昵称输入框已随抖音一起移除（10-31）
+					null),
 
 				// 音色
 				h(Card, {
@@ -745,10 +760,10 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						}),
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "关掉就退回「每句都回」"))),
 
-				// 作息与限额（B站和抖音共用的生物钟窗口）
+				// 作息与限额（生物钟窗口）
 				h(Card, {
 					title: "作息与限额",
-					hint: "窗口内随机挑时间醒（拟人，不整点）；B站和抖音共用这个窗口。",
+					hint: "窗口内随机挑时间醒（拟人，不整点）；B站用这个窗口。",
 				},
 					h(Row, { label: "醒来窗口" },
 						h("input", {
@@ -771,139 +786,12 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					h(Row, { label: "观看日报" },
 						h("button", { className: "fy-btn", disabled: busy === "report", onClick: genReport },
 							busy === "report" ? "生成中…" : "生成今日日报"),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "聚合 B站/抖音 当天看过的，不调模型")),
+						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "聚合 B站 当天看过的，不调模型")),
 					h(Row, { label: "复盘学习日记" },
 						h("button", { className: "fy-btn", disabled: busy === "review", onClick: genReview },
 							busy === "review" ? "生成中…" : "写今日复盘"),
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "LLM 提炼今天看过的，追加进私人日记")),
 					report ? h("pre", { className: "fy-report" }, report) : null),
-
-				// 抖音
-				h(Card, {
-					title: "抖音",
-					hint: "刷视频 → 自主决策 →（可选）分享给主人 / 发评论 / 私信陪聊。外发默认全关。",
-				},
-					h(Row, { label: "自主观看" },
-						h("button", { className: "fy-btn primary", disabled: busy === "watch", onClick: startWatch },
-							busy === "watch" ? "启动中…" : "开始看（10 分钟）"),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "feed → 自主决策 → 记兴趣（后台跑，日志 ~/.feiyu-ai/watch.log）")),
-					h(Row, { label: "静默模式" },
-						h(Switch, {
-							on: draft.douyinSilent,
-							label: "douyinSilent",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { douyinSilent: v }));
-								save({ douyin: { watch: { silent: v } } }, v ? "已开启静默：刷/看/分享都无头后台跑" : "已关闭静默（有头，可看操作过程）");
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "无头后台：不弹 Chrome")),
-					h(Row, { label: "分享给主人" },
-						h(Switch, {
-							on: draft.douyinShare,
-							label: "douyinShare",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { douyinShare: v }));
-								save({ douyin: { shareToOwner: v } }, v ? "已开启：看到有意思的视频会抖音私信发你" : "已关闭分享给主人");
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "抖音私信发你链接+她的评论（替代 @）")),
-					h(Row, { label: "自主评论" },
-						h(Switch, {
-							on: draft.douyinAutoComment,
-							label: "douyinAutoComment",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { douyinAutoComment: v }));
-								save({ douyin: { autoComment: v } }, v ? "已开启：刷到也会以自学习人格发评论" : "已关闭自主评论");
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "douyin.dryRun=false 才真发")),
-					h(Row, { label: "私信陪聊" },
-						h(Switch, {
-							on: draft.douyinDm,
-							label: "douyinDm",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { douyinDm: v }));
-								save({ douyin: { dm: { enabled: v } } }, v ? "私信陪聊已开启" : "私信陪聊已关闭");
-								restartService("douyin-dm", v ? "start" : "stop");
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "常驻轮询主人私信，新消息自动回")),
-					h(Row, { label: "随 DSH 自启" },
-						h(Switch, {
-							on: draft.douyinDmStartWithDsh,
-							label: "douyinDmStartWithDsh",
-							onChange: async (v) => {
-								setDraft(Object.assign({}, draft, { douyinDmStartWithDsh: v }));
-								// 开"自启"时顺手把私信也打开：否则自启只是"开机后再关一次"
-								const patch = v ? { dm: { startWithDsh: true, enabled: true } } : { dm: { startWithDsh: false } };
-								const ok = await save({ douyin: patch }, v ? "私信陪聊随 DSH 自启（退出时不会被自动关掉）" : "私信陪聊不再自启：DSH 退出时会自动关掉");
-								if (ok && v && !draft.douyinDm) {
-									setDraft(Object.assign({}, draft, { douyinDmStartWithDsh: true, douyinDm: true }));
-									restartService("douyin-dm", "start");
-								}
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "关着的话，DSH 一重启私信陪聊就被自动关掉（10-25 那个「还是没回复」就是这原因）")),
-					h(Row, { label: "评论 @ 通知" },
-						h(Switch, {
-							on: draft.douyinAt,
-							label: "douyinAt",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { douyinAt: v }));
-								save({ douyin: { atMention: v } }, v ? "已开启评论 @（风控风险高）" : "已关闭评论 @（推荐，防风控）");
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "抖音评论带 @ 是风控主因，默认关")),
-					h(Row, { label: "每次条数" },
-						h("input", {
-							className: "fy-input fy-w-sm", type: "number", min: 0, max: 5, value: draft.douyinCount,
-							onChange: (e) => setDraft(Object.assign({}, draft, { douyinCount: e.target.value })),
-							onBlur: () => save({ douyin: { maxPerRun: String(draft.douyinCount).trim() === "" ? 2 : Math.max(0, Number(draft.douyinCount) || 0) } }, "抖音条数已保存（0 = 不限）"),
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "一轮刷几条（0 = 不限，防 shadowban 慎全开）")),
-					h(Row, { label: "分享上限" },
-						h("input", {
-							className: "fy-input fy-w-sm", type: "number", min: 0, max: 50, value: draft.douyinShareDaily,
-							onChange: (e) => setDraft(Object.assign({}, draft, { douyinShareDaily: e.target.value })),
-							onBlur: () => save({ douyin: { shareDaily: String(draft.douyinShareDaily).trim() === "" ? 5 : Math.max(0, Number(draft.douyinShareDaily) || 0) } }, "每天分享上限已保存（0 = 不限）"),
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，抖音私信卡片（0 = 不限）")),
-					h("div", { className: "fy-sub", style: { marginTop: 10 } }, "自由刷 · 大肥鱼自己逛"),
-					h(Row, { label: "自由刷" },
-						h(Switch, {
-							on: draft.douyinFreeRoam,
-							label: "douyinFreeRoam",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { douyinFreeRoam: v }));
-								save({ douyin: { freeRoam: { enabled: v } } }, v ? "已开启抖音自由刷" : "已关闭抖音自由刷");
-								toggleFreeRoam("douyin", v);
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "开着就一直刷，看到有意思的抖音私信发你")),
-					h(Row, { label: "不限量" },
-						h(Switch, {
-							on: draft.douyinUnlimited,
-							label: "douyinUnlimited",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { douyinUnlimited: v }));
-								save({ douyin: { freeRoam: { unlimited: v } } }, v ? "自由：不限条数/时长" : "按下面限度刷");
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "自由选项（默认开）")),
-					h(Row, { label: "最大条数" },
-						h("input", {
-							className: "fy-input fy-w-sm", type: "number", min: 0, value: draft.douyinMaxVideos, placeholder: "0",
-							onChange: (e) => setDraft(Object.assign({}, draft, { douyinMaxVideos: e.target.value })),
-							onBlur: () => save({ douyin: { freeRoam: { maxVideos: Number(draft.douyinMaxVideos) || 0 } } }, "抖音自由刷条数已保存"),
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "0 = 不限（关掉「不限量」才按这个数）")),
-					h(Row, { label: "最长时长" },
-						h("input", {
-							className: "fy-input fy-w-sm", type: "number", min: 0, value: draft.douyinMaxMinutes, placeholder: "0",
-							onChange: (e) => setDraft(Object.assign({}, draft, { douyinMaxMinutes: e.target.value })),
-							onBlur: () => save({ douyin: { freeRoam: { maxMinutes: Number(draft.douyinMaxMinutes) || 0 } } }, "抖音自由刷时长已保存"),
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "分钟，0 = 不限"))),
 
 				// B站
 				h(Card, {
@@ -1152,7 +1040,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("span", { className: "fy-hint", style: { marginTop: 0 } },
 							mem && mem.stats
 								? "对话 " + mem.stats.episodes + " · 世界设定 " + mem.stats.lore + " · 主人事实 " + mem.stats.facts
-								+ (mem.stats.byPlatform ? " · 上网 " + (mem.stats.byPlatform.web || 0) + " · QQ " + (mem.stats.byPlatform.qq || 0) + " · 抖音 " + (mem.stats.byPlatform.douyin || 0) + " · B站 " + (mem.stats.byPlatform.bilibili || 0) : "")
+								+ (mem.stats.byPlatform ? " · 上网 " + (mem.stats.byPlatform.web || 0) + " · QQ " + (mem.stats.byPlatform.qq || 0) + " · B站 " + (mem.stats.byPlatform.bilibili || 0) : "")
 								: "还没读到"),
 						h("button", {
 							className: "fy-btn",

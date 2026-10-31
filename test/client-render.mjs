@@ -163,7 +163,7 @@ for (const must of ['大肥鱼', '运行状态', '平台开关', '主人', '音�
 for (const must of ['3082864371', 'sunshine_girl', '20:00', '在的，主人。', '运行中']) {
   assert.ok(text.includes(must), '缺少数据：' + must)
 }
-// 四个平台开关（在 .fy-grid 里），另外微信卡片还有一个「自己判断该不该接」的开关
+// 三个平台开关（B站/QQ/微信，在 .fy-grid 里），另外微信卡片还有一个「自己判断该不该接」的开关
 const collect = (node, predicate, acc = []) => {
   if (!node || typeof node !== 'object') return acc
   if (node.props && predicate(node)) acc.push(node)
@@ -173,12 +173,12 @@ const collect = (node, predicate, acc = []) => {
 const platforms = collect(tree, (n) => n.props.className === 'fy-grid')
 assert.equal(platforms.length, 1, '平台开关网格应该只有一个')
 const switches = collect(platforms[0], (n) => String(n.props.className || '').includes('fy-switch'))
-assert.equal(switches.length, 4, '平台开关数量应为 4，实际 ' + switches.length)
-assert.equal(switches.filter((n) => n.props.className.includes('on')).length, 3, '默认应有 3 个平台开启')
+assert.equal(switches.length, 3, '平台开关数量应为 3（B站/QQ/微信），实际 ' + switches.length)
+assert.equal(switches.filter((n) => n.props.className.includes("on")).length, 2, "默认应有 2 个平台开启（B站/QQ）")
 const allSwitches = collect(tree, (n) => String(n.props.className || '').includes('fy-switch'))
-assert.equal(allSwitches.length, 31, '全页开关应为 31 个（28 + 完全自由 + 干跑总闸 + 私信随DSH自启）')
+assert.equal(allSwitches.length, 22, "全页开关应为 22 个（抖音已移除，10-31）")
 
 assert.ok(fetchCalls.includes('/dsh-feiyu/api/config'), '没有请求 /config')
 assert.ok(styleTags.length >= 1, '样式没注入')
 
-console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 请求', fetchCalls.length, '次')
+console.log('client-render ✓  渲染通过：9 个区块 · 3 个平台开关 · 请求', fetchCalls.length, '次')

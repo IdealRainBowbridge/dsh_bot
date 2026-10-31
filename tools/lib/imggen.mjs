@@ -114,7 +114,12 @@ export function genQuotaOk(max, file = GEN_FILE()) {
   try {
     const j = JSON.parse(fs.readFileSync(file, 'utf8'))
     return (j.day === dayKey() ? Number(j.count ?? 0) : 0) < max
-  } catch { return true }
+  } catch (e) {
+    // 文件不存在 = 今天还没生成过，放行；
+    // 文件存在但读不了/是坏的 = 记账失真，宁可少画也别悄悄烧额度（10-31 审计）
+    if (e && e.code === 'ENOENT') return true
+    return false
+  }
 }
 export function genQuotaRecord(file = GEN_FILE()) {
   let count = 0

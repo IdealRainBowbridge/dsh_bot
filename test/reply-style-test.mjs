@@ -29,12 +29,6 @@ await ok('类型中文名：日志里说人话', () => {
   assert.equal(describeKind('unknown-x'), '文字')
 })
 
-await ok('抖音：文字/官方表情/表情包/图片四种都可能出现', () => {
-  const seen = new Set()
-  for (let i = 0; i < 4000; i++) seen.add(chooseKind({ platform: 'douyin' }))
-  for (const k of ['text', 'emoji-pack', 'sticker', 'image']) assert.ok(seen.has(k), `抖音 4000 次里没出现 ${k}`)
-  assert.ok(!seen.has('voice'), '语音默认概率是 0，不该自己冒出来')
-})
 
 await ok('B站：没有官方表情、没有语音', () => {
   const seen = new Set()
@@ -121,23 +115,10 @@ await ok('语音条：封面+音轨合成 mp4 的参数对得上', () => {
 })
 
 // ── 命令层接线 ────────────────────────────────────────────────────────────
-const dy = read('tools/commands/douyin.mjs')
 const rep = read('tools/commands/replies.mjs')
-const py = read('D:/social-auto-upload/douyin_interact.py')
 const bw = read('tools/lib/bili-write.mjs')
 
-await ok('抖音 comment：带上 --image / --emoji-pack', () => {
-  assert.match(dy, /emojiPack\s*=\s*-1|emojiPack: -1|emojiPack = style/)
-  assert.match(dy, /'--emoji-pack'/)
-  assert.match(dy, /'--image'/)
-})
 
-await ok('抖音 engage：带图/官方表情时走 UI 那条路（useUi）', () => {
-  assert.match(dy, /const useUi = /)
-  assert.match(dy, /if \(styleImage\) args\.push\('--image'/)
-  assert.match(dy, /if \(styleEmojiPack\) args\.push\('--emoji-pack'/)
-  assert.match(dy, /const out = useUi/)
-})
 
 await ok('B站 postReply：能带 pictures 发图', () => {
   // 10-27 起带图走 `post(withPics)`（楼中楼不能带图，要能去掉图重试），参数名统一叫 withPics
@@ -152,26 +133,7 @@ await ok('B站 replies：⓪①② 三条路都过了一遍 styleReply', () => {
   assert.ok(hits.length >= 3, `只接线了 ${hits.length} 处，应该 ≥3（自己作品/被动回复/主动搭话）`)
 })
 
-await ok('抖音私信：支持 --file，且认准确认框的「发送」按钮', () => {
-  assert.match(dy, /'--file'/)
-  assert.match(py, /MsgInputSendFileModal/)
-  assert.match(py, /file_path: str = ""/)
-})
 
-await ok('抖音语音条命令在（网页版评论区没有录音控件，只能走 mp4）', () => {
-  assert.match(dy, /cmd === 'voice-note'/)
-  assert.match(dy, /voiceNoteArgs/)
-})
 
-await ok('抖音 comment-delete 在（发错能自己删掉）', () => {
-  assert.match(py, /async def cmd_comment_delete/)
-  assert.match(py, /"comment-delete"/)
-  assert.match(py, /删除评论/)
-})
-
-await ok('发送防呆：框里没东西就不发（防止空评论 + 谎报已发送）', () => {
-  assert.match(py, /框里什么都没有/)
-  assert.match(py, /emoji_text/)
-})
 
 console.log(`\n任意类型评论测试：${n}/${n} 通过`)

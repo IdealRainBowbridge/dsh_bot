@@ -14,7 +14,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { config } from './config.mjs'
-import { ffmpegBin } from './video.mjs'
+import { ffmpegBin, ffprobeBin } from './video.mjs'
 
 const WIN = 0.01
 const TH = 0.06
@@ -119,17 +119,20 @@ export function compactRef(src, opt = {}) {
 
 function probeDur(file) {
   const cfg = config()
-  for (const bin of [cfg.video?.ffprobe, 'D:/rvc/bin/ffprobe.exe']) {
-    if (!bin) continue
-    try {
-      const out = execFileSync(bin, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file],
-        { encoding: 'utf8', windowsHide: true })
-      const d = parseFloat(String(out).trim())
-      if (d > 0) return d
-    } catch {}
-  }
+  // 10-31 修：以前候选只有 [cfg.video.ffprobe, 'D:/rvc/bin/ffprobe.exe'] ——
+  // Linux 容器里两个都不存在，直接落到 ffmpeg 正则；而 ffmpeg 的 Duration 打在 stderr，
+  // execFileSync 成功时 stdout 是空 → probeDur 永远 0 → 清洗后"0 秒"。
+  // 统一走 video.mjs 的 ffprobeBin()（跨平台候选 + PATH 兜底）。
   try {
-    const e = execFileSync(ffmpegBin(cfg), ['-v', 'info', '-i', file, '-f', 'null', '-'], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const out = execFileSync(ffprobeBin(cfg), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file],
+      { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const d = parseFloat(String(out).trim())
+    if (d > 0) return d
+  } catch {}
+  // 兜底：ffmpeg 的 Duration 在 stderr，必须 2>&1（以前读 stdout 必然空）
+  try {
+    const e = execFileSync(ffmpegBin(cfg), ['-v', 'info', '-i', file, '-f', 'null', '-'],
+      { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     const m = String(e).match(/Duration: (\d+):(\d+):([\d.]+)/)
     if (m) return (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3])
   } catch {}

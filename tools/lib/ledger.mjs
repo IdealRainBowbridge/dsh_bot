@@ -12,7 +12,7 @@
 //
 // 余额（官方钱包）走可选接口：config.ledger.balanceUrl + apiKey 配了才查，
 // 查不到就明确说"看不到余额"，绝不编一个 0（宁可让她去问主人，也不能骗她）。
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { createHash } from 'node:crypto'
 import os from 'node:os'
@@ -79,8 +79,25 @@ export async function usage(opts = {}) {
   if (!opts.fresh) {
     try {
       const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'))
-      if (c.signature === sig && c.data) return { ...c.data, cached: true }
+      if (c.signature === sig && c.data) return { ...(await mergeDirect({ ...c.data })), cached: true }
     } catch {}
+  }
+  // 10-31 审计：容器里没有 python3，原来这条路整个走不通（账本永远 ✗）。
+  // 先试 python（Windows 宿主仍可走），拿不到就回落到纯 Node 的 zstd 解码。
+  const pyOk = (() => {
+    try {
+      execFileSync(opts.python || pythonPath(cfg), ['-c', 'import zstandard'], { stdio: 'ignore', timeout: 4000 })
+      return true
+    } catch { return false }
+  })()
+  if (!pyOk) {
+    const { collectUsage } = await import('./usage-node.mjs')
+    const data = collectUsage(dir, cfg.ledger?.mineWorkspace || 'feiyu-work')
+    try {
+      fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
+      fs.writeFileSync(cacheFile, JSON.stringify({ signature: sig, at: Date.now(), data }, null, 0))
+    } catch {}
+    return { ...(await mergeDirect({ ...data })), cached: false, via: 'node' }
   }
   const py = opts.python || pythonPath(cfg)
   // 用 fileURLToPath 拼脚本路径：Windows 上 import.meta.url 带盘符和中文/空格路径，
@@ -99,7 +116,43 @@ export async function usage(opts = {}) {
     fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
     fs.writeFileSync(cacheFile, JSON.stringify({ signature: sig, at: Date.now(), data }, null, 0))
   } catch {}
-  return { ...data, cached: false }
+  return { ...(await mergeDirect({ ...data })), cached: false }
+}
+
+// ── 直连通道用量合并（10-31）────────────────────────────────────────────────
+// llm.mjs 的直连调用不落 DSH 会话日志，必须单独并进账本，否则"她陪老爹聊天"这段
+// 是账本的盲区（实测：DSH 记 5131 token 的同时，a2a 余额掉了 241 credit）。
+// 动态 import：llm.mjs 现在会 import ledger 里没有的东西，静态 import 会造成环。
+async function mergeDirect(data) {
+  try {
+    const llm = await import('./llm.mjs')
+    if (typeof llm.readDirectUsage !== 'function') return data
+    const d = llm.readDirectUsage()
+    if (!d || !Array.isArray(d.days) || !d.days.length) return data
+    const days = Array.isArray(data.days) ? data.days : []
+    const byDay = new Map(days.map((x) => [x.day, x]))
+    const empty = () => ({ input: 0, output: 0, cache: 0, total: 0, calls: 0 })
+    for (const row of d.days) {
+      let t = byDay.get(row.day)
+      if (!t) { t = { day: row.day, mine: empty(), other: empty(), all: empty() }; byDay.set(row.day, t); days.push(t) }
+      if (!t.mine) t.mine = empty()
+      if (!t.other) t.other = empty()
+      if (!t.all) t.all = empty()
+      for (const k of ['input', 'output', 'cache', 'calls', 'total']) {
+        const v = Number(row[k]) || 0
+        t.mine[k] = (Number(t.mine[k]) || 0) + v
+        t.all[k] = (Number(t.all[k]) || 0) + v
+      }
+    }
+    days.sort((a, b) => (a.day < b.day ? 1 : -1))
+    const lt = data.lifetime || {}
+    if (!lt.mine) lt.mine = empty()
+    for (const k of ['input', 'output', 'cache', 'calls', 'total']) lt.mine[k] = (Number(lt.mine[k]) || 0) + (Number(d.lifetime?.[k]) || 0)
+    data.days = days
+    data.lifetime = lt
+    data.directMerged = true
+    return data
+  } catch { return data }
 }
 
 // ── 饭钱折算 ────────────────────────────────────────────────────────────────

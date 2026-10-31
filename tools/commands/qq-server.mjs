@@ -4,7 +4,7 @@
 // 无第三方依赖，node 内置 http 即可。
 //
 //   node feiyu.mjs qq-server [port]     # 默认 8080
-//   NapCat WebUI → 网络配置 → 新建 HTTP 服务器(3000) + HTTP 上报 → http://127.0.0.1:8080/onebot
+//   SnowLuma WebUI → OneBot配置 → HTTP服务器(3000) + HTTP上报 → http://127.0.0.1:8080/onebot
 //   上报格式 messagePostFormat 选 array
 import http from 'node:http'
 import fs from 'node:fs'
@@ -145,7 +145,13 @@ export async function run(argv = []) {
   // 账本：每 10 分钟刷一版（persona 的【账本】块读这份缓存，同步、不打网络）
   if (cfg.ledger?.enabled !== false) startBriefRefresher(10, (m) => console.log('[feiyu] ' + m))
   const QQ = cfg.qq ?? {}
-  if (!QQ.enabled) { logErr('✗ qq.enabled=false —— 先在 feiyu.config.json 开 qq.enabled'); process.exit(1) }
+  // 10-31：platforms.qq 以前是纯装饰 —— 面板关了它，qq-server 照样收发消息（假开关）。
+  // 现在这里也认它：两个开关任一说"关"就不启动，并且说清是哪个。
+  // 单一真相：qq.enabled（用户意图，持久）。platforms.qq 由面板同步写入，两者任一为 false 都不启动。
+  if (!QQ.enabled) {
+    logErr('✗ qq.enabled=false —— QQ 平台是关的：面板上打开 QQ 开关，或改 feiyu.config.json 的 qq.enabled')
+    process.exit(1)
+  }
   if (!llm.apiKey()) { logErr('✗ 没有 LLM API key（设环境变量 DEEPSEEK_API_KEY，或填 llm.api_key）'); process.exit(1) }
   try { const n = memory.sweepEpisodes(); if (n) log(`[qq] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch {}
   const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
@@ -316,7 +322,10 @@ export async function run(argv = []) {
     try {
       // 每次处理消息都重读最新配置：热改 voice_enabled / voice_chance / minGapSec 立即生效，
       // 不用重启 qq-server（原版只在进程启动时读一次，改了配置也不生效 —— 语音一直不发的根因）。
-      const QQ = config().qq ?? {}
+      const live = config()
+      // 10-31：面板关了 QQ 就该真闭嘴 —— 以前只认 qq.enabled，platforms.qq 是装饰。
+      if (live.platforms?.qq === false || live.qq?.enabled === false) return
+      const QQ = live.qq ?? {}
       const selfId = String(evt.self_id ?? '')
       const isGroup = evt.message_type === 'group'
       const groupId = isGroup ? String(evt.group_id ?? '') : ''
@@ -724,7 +733,7 @@ export async function run(argv = []) {
     }
   }
 
-  // ── NapCat 看门狗：它才是 QQ 的消息网关。网关不通 = 服务在跑但永远不回复 ──
+  // ── OneBot 看门狗（SnowLuma/NapCat 通用）：它才是 QQ 的消息网关。网关不通 = 服务在跑但永远不回复 ──
   const LAUNCHER = QQ.napcat_launcher || 'D:/NapCat/launcher-user.bat'
   let napcatOk = false
   let napcatCheckedAt = 0
@@ -855,7 +864,7 @@ export async function run(argv = []) {
   const QQ_BIND = process.env.QQ_BIND_HOST || '127.0.0.1'
   server.listen(port, QQ_BIND, () => {
     log(`[qq] 监听 http://${QQ_BIND}:${port}/onebot`)
-    log(`    NapCat WebUI → 网络配置 → HTTP 上报 → http://127.0.0.1:${port}/onebot（messagePostFormat=array）`)
+    log(`    SnowLuma WebUI → OneBot配置 → HTTP上报 → http://127.0.0.1:${port}/onebot（messagePostFormat=array）`)
     log(`    dryRun=${!!config().guard?.dryRun} · at_only=${QQ.at_only !== false} · voice=${!!QQ.voice_enabled} · napcat=${NAPCAT}`)
     // 群聊认人护栏自检（10-26）：启动就把三件套的状态打出来 —— 换了代码却忘了重启时，
     // 看这一行就知道跑的是哪一版，不用再猜"到底生效了没有"。
@@ -871,18 +880,16 @@ export async function run(argv = []) {
         }
       } catch (e) { logErr('[qq] 引用索引预热失败：' + (e?.message ?? e)) }
     })()
-    // 辅助服务监工（10-27）：抖音私信陪聊崩了没人管 —— 09:46 起过一次，之后一整天没进程，
-    // 主人发的私信一条都没回。qq-server 是唯一常驻体，所以让它探活+拉起（带退避），
-    // 顺带每 autoMin 分钟跑一次 B站 自己作品评论巡检（"有新评论就自己去回"）。
+    // 辅助服务监工（10-27 起）：qq-server 是唯一常驻体，所以让它当监工。
+    // 10-31 抖音整体移除后，这里只剩「每 autoMin 分钟跑一次 B站 自己作品评论巡检」。
     void (async () => {
       try {
         // 注意：文件名不能叫 aux.mjs —— AUX 是 Windows 的保留设备名，Win32 打开它一律报"找不到路径"，
-        // 动态 import 会静默失败（aux.mjs 时代监工从没真正启动过，抖音私信崩了没人管就是这个）。
-        const { ensureDouyinDm, ensureBiliOwnReply, superviseAux } = await import('../lib/auxsvc.mjs')
-        const dm = await ensureDouyinDm({ force: true })
-        log(`[aux] 抖音私信：${dm.alive ? (dm.started ? `已拉起 PID ${dm.pid}` : '本来就在跑') : (dm.skipped || dm.backedOff ? '跳过（' + (dm.skipped || '退避中') + '）' : '没活')}`)
+        // 动态 import 会静默失败（aux.mjs 时代监工从没真正启动过）。
+        const { ensureBiliOwnReply, superviseAux } = await import('../lib/auxsvc.mjs')
+        // 抖音私信陪聊已整体移除（10-31），监工只剩 B站 自己作品评论巡检
         superviseAux()
-        log('[aux] 监工已挂上：每 90s 探抖音私信 + B站 自己作品评论巡检')
+        log('[aux] 监工已挂上：每 90s 探 B站 自己作品评论巡检')
         setTimeout(() => { void ensureBiliOwnReply().then((r) => { if (r.ran) log('[aux] B站 首轮巡检：' + (r.out || '无新评论')) }) }, 20_000)
       } catch (e) { logErr('[aux] 监工启动失败：' + (e?.message ?? e)) }
     })()
@@ -1194,6 +1201,17 @@ export async function run(argv = []) {
       const cfgNow = config()
       const pp = cfgNow.qq?.proactive ?? {}
       if (pp.enabled !== true) return
+      // 统一规划（10-31）：她自己定了"接下来干什么"，就别在人家做事时插话。
+      // 只有真的闲下来（rest / free / 没计划）才轮到主动搭话。
+      if (cfgNow.mind?.respectBusy !== false) {
+        try {
+          const M = await import('../lib/mind.mjs')
+          const b = M.busy()
+          if (b.busy && b.activity && b.activity !== 'rest' && b.activity !== 'free') {
+            return   // 她在专心，不打扰
+          }
+        } catch {}
+      }
       // 启动宽限（10-25）：刚拉起来就"你很久没理我"纯属噪音 —— 重启当天连发三条同义句的教训
       if (Date.now() - STARTED_AT < Number(pp.startupGraceMin ?? 10) * 60_000) return
       // 晚间限制（用户 10-25 拍板可关）：activeHours 配成 null / [] = 全天可主动搭话；[a,b] 才限时
@@ -1479,12 +1497,13 @@ export async function run(argv = []) {
         }).catch((e) => console.log("[qq] 睡眠钩子失败：" + String(e && e.message || e).slice(0, 80)))
       }
       // share-queue consumer (10-31): fun non-report events -> timed casual share.
-      import('../lib/wander.mjs').then(async ({ doWander }) => {
+      // 10-31 审计：wander 在 commands/ 不在 lib/ —— 之前这行每 60s 静默失败，自主探索从未跑过
+      import('./wander.mjs').then(async ({ doWander }) => {
         try {
           const wr = await doWander()
-          if (wr) log('[qq] ð 自主探索：' + wr.want.slice(0, 60))
-        } catch {}
-      }).catch(() => {})
+          if (wr) log('[qq] 🌊 自主探索：' + wr.want.slice(0, 60))
+        } catch (e) { log('[qq] wander 执行失败：' + String((e && e.message) || e).slice(0, 80)) }
+      }).catch((e) => log('[qq] wander 加载失败：' + String((e && e.message) || e).slice(0, 80)))
       import('../lib/share-queue.mjs').then(async ({ shareTick }) => {
         try {
           const r = await shareTick()
@@ -1565,6 +1584,14 @@ export async function run(argv = []) {
       const QQ = config().qq ?? {}
       const gc = QQ.groupChat ?? {}
       if (gc.enabled !== true) return
+      // 统一规划：在专心做事时不主动插群嘴
+      if (config().mind?.respectBusy !== false) {
+        try {
+          const M = await import('../lib/mind.mjs')
+          const b = M.busy()
+          if (b.busy && b.activity && b.activity !== 'rest' && b.activity !== 'free') return
+        } catch {}
+      }
       if (config().guard?.dryRun) return   // 干跑：群插话也不真发（10-25 统一闸门）
       const now = Date.now()
       const day = new Date().toLocaleDateString('sv-SE')

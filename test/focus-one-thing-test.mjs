@@ -26,13 +26,12 @@ const ok = (name, cond, extra = '') => {
 // ① 别名归一（她可能写 bili / B站 / 抖音 / 歇着）
 ok('bili → bilibili', normActivity('bili') === 'bilibili')
 ok('B站 → bilibili', normActivity('B站') === 'bilibili')
-ok('抖音 → douyin', normActivity('抖音') === 'douyin')
 ok('歇着 → rest', normActivity('歇着') === 'rest')
 ok('收工 → off', normActivity('收工') === 'off')
 ok('web 认', normActivity('web') === 'web')
 
 // ② 只有三种活动会占住一个循环进程（rest/off 不占）
-ok('web/bilibili/douyin 算常驻活动', ['web', 'bilibili', 'douyin'].every(isLoopActivity))
+ok('web/bilibili 算常驻活动', ['web', 'bilibili'].every(isLoopActivity))
 ok('rest 不占循环', !isLoopActivity('rest'))
 ok('off 不占循环', !isLoopActivity('off'))
 ok('三种活动各有开关路径', Object.values(LOOP_ACTIVITIES).every((m) => Array.isArray(m.sw) && m.sw.length === 2))
@@ -41,10 +40,9 @@ ok('三种活动各有开关路径', Object.values(LOOP_ACTIVITIES).every((m) =>
 const mkCfg = () => ({
   web: { roam: { enabled: true, restMin: 2 } },
   bilibili: { freeRoam: { enabled: true } },
-  douyin: { freeRoam: { enabled: true } },
   freedom: { enabled: true },
 })
-for (const act of ['web', 'bilibili', 'douyin']) {
+for (const act of ['web', 'bilibili']) {
   const cfg = mkCfg()
   syncSwitches(cfg, act)
   const on = Object.entries(LOOP_ACTIVITIES).filter(([k, m]) => cfg[m.sw[0]][m.sw[1]].enabled === true).map(([k]) => k)

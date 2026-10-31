@@ -3,10 +3,13 @@
 //   [记忆层] 关于对方的 facts + 相关旧记忆（memory 三层记忆）
 //   [状态层] 情绪/饥饿/时段/今日轮次（mood 状态机）
 import fs from 'node:fs'
-import { dreamToMention } from '../commands/dream.mjs'
+// 10-31 分层修正：以前从 ../commands/dream.mjs 取（lib → commands 反向依赖），
+// 现在读取端在 lib 自己的 dream-read.mjs，方向正过来了。
+import { dreamToMention } from './dream-read.mjs'
 import * as brainRecall from '../brain/recall.mjs'
 import { lastUnansweredPush } from './memory.mjs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { config } from './config.mjs'
 import { homePath } from './paths.mjs'
 import * as mood from './mood.mjs'
@@ -19,13 +22,32 @@ import * as promises from './promises.mjs'
 import { hasPlaceholder, placeholderHint } from './normalize.mjs'
 import { gapText } from './timefix.mjs'
 import { readBrief } from './ledger.mjs'
+import { swallow } from './swallow.mjs'
+
+// 真实 CLI 调用前缀（10-31）：以前写死 `node D:/dsh-feiyu/tools/feiyu.mjs`，
+// 那是 Windows 开发机的路径，Linux 容器里不存在 —— 她照着跑必然 ENOENT。
+// 从本文件位置回推：tools/lib/persona.mjs → ../../feiyu.mjs
+const CLI_INVOKE = (() => {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const cli = path.resolve(here, '..', 'feiyu.mjs')
+    // node 不一定在 PATH（DSH 是 Electron 主进程），带上当前解释器更稳
+    return `${process.execPath} ${cli}`
+  } catch { return 'node tools/feiyu.mjs' }
+})()
 
 /** 人设文件（与 B站会话共用同一份，换机器连 ~/.feiyu-ai 一起拷）。 */
 export function personaText() {
   try {
     const t = fs.readFileSync(homePath('.feiyu-ai', 'persona.md'), 'utf8').trim()
     if (t) return t.slice(0, 3000)
-  } catch {}
+  } catch (e) {
+    // 10-31 审计：以前这里吞掉一切错误 —— 人格文件读失败时她**静默变成没有设定的人**，
+    // 外面没有任何信号。ENOENT（还没写过）是正常状态，不吵；其它错误（权限/编码/IO）必须留痕。
+    if (e && e.code !== 'ENOENT') {
+      try { console.error('[persona] 读 persona.md 失败，本次以空人设运行：' + String(e.message || e)) } catch (e) { swallow(e, 'tools/lib/persona.mjs:47') }
+    }
+  }
   return ''
 }
 
@@ -74,7 +96,7 @@ export function clockBlock(platform, chatId, userText, isGroup = false) {
       if (rows.lastUser) lines.push(`主人最后一次说话：${gapText(Date.now() - rows.lastUser)}前`)
       if (rows.lastAssistant) lines.push(`你上一次说话：${gapText(Date.now() - rows.lastAssistant)}前`)
     }
-  } catch {}
+  } catch (e) { swallow(e, 'tools/lib/persona.mjs:98') }
   lines.push('时间就用上面这个；**别自己编天数**（"四天""好几天"这类没依据的话不要说）。')
   return '【现在】' + lines.join('\n')
 }
@@ -236,6 +258,18 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   if (persona) parts.push(persona)
   const idLine = identityLine(cfg, isGroup)
   if (idLine) parts.push(idLine)
+  // 统一自主规划（10-31）：告诉她"你自己决定此刻在做的事"。
+  // 目的：她说"我刚在看番"不是编的 —— 那是真计划，还能说出理由。
+  // 这里同步读文件而不是 import mind.mjs：buildMessages 是同步的，且避免循环依赖。
+  try {
+    const mp = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'mind-plan.json'), 'utf8'))
+    const act = String(mp.activity || '')
+    if (act && Number(mp.until || 0) > Date.now()) {
+      const LABEL = { web: '自由上网', bilibili: '刷B站', binge: '看番/看剧', rest: '歇着', free: '自由时间' }
+      const remain = Math.max(0, Math.round((Number(mp.until) - Date.now()) / 60_000))
+      parts.push(`【你正在做的事】${LABEL[act] || act}${remain ? `（还剩 ${remain} 分钟）` : ''}${mp.why ? `，理由：${mp.why}` : ''}`)
+    }
+  } catch (e) { swallow(e, 'tools/lib/persona.mjs:271') }
 
   // 关系层：对方是不是主人（决定语气与隐私红线）；群聊单独一条语境
   if (platform === 'qq' || platform === 'wechat' || platform === 'douyin-dm') parts.push(ownerLine(cfg, platform, userId, isGroup))
@@ -296,7 +330,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     try {
       const B = brainRecall.bundle({ platform, chatId, userId, userText, isGroup, limit: 8 })
       if (B.lines && B.lines.length) all = { lines: B.lines, count: B.lines.length }
-    } catch {}
+    } catch (e) { swallow(e, 'tools/lib/persona.mjs:332') }
     if (!all.lines.length) all = memory.recallAll(chatId, { hours: 12, max: 12 })
     // 群聊里**照旧**注入（主人 10-26 拍板：不许让她"忘了私聊"，只要分得清人）。
     // 分得清靠的是 recallAll 的标签：私聊行是「[QQ] 主人：…」，群聊行是「[QQ群] 昵称：…」，
@@ -355,7 +389,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     if (v < -0.15) parts.push('【内在情绪】你现在有点低落——语气自然带一点，别演苦情戏。')
     else if (v > 0.2) parts.push('【内在情绪】你现在心情不错——语气可以轻快一点。')
     if (t > 0.3) parts.push('【内在压力】你有点惦记着没做完的事。')
-  } catch {}
+  } catch (e) { swallow(e, 'tools/lib/persona.mjs:391') }
 
   // 账本层（10-26）：她的记忆里反复问"账本/饭钱"，因为她读不到账 —— 于是只能问主人。
   // 这里把今天的饭钱和剩余额度摊给她，并说清"这是你自己翻的账"。群里不注入（家里的账不外扬）。
@@ -367,7 +401,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     try {
       const d = dreamToMention()
       if (d) dreamLine = "【昨晚的梦（虚构，不是真事）】" + d.text.replace(/^【梦】/, "") + "（醒了还记得一点。他问起就说梦；不问别硬聊。梦里的内容和真实记忆无关。）"
-    } catch {}
+    } catch (e) { swallow(e, 'tools/lib/persona.mjs:403') }
   }
   if (books) parts.push(books)
   if (dreamLine) parts.push(dreamLine)
@@ -375,7 +409,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   try {
     const up = lastUnansweredPush(chatId)
     if (up && userText) parts.push(`【上下文】你之前给他发过推送：` + JSON.stringify(up.text).slice(1, -1) + `。他现在回复了——接住话题。`)
-  } catch {}
+  } catch (e) { swallow(e, 'tools/lib/persona.mjs:411') }
 
   // push 上下文（10-31 B 项）：主人回复的是她之前的推送时，把原推送带进来。
 
@@ -457,22 +491,19 @@ export function quoteBlock(quote) {
 }
 
 export function capabilityBlock(cfg) {
-  const lines = CAPABILITIES.map(([cmd, what]) => `· ${cmd} —— ${what}`)
   const upgrade = cfg?.web?.selfUpgrade !== false
+  // 10-31：以前把 12 条命令逐条列进 system prompt（937 字符 ≈ 480 token，占 28%，每轮都发）。
+  // 那是"查手册"的信息量，不是"每句话都得记住"的东西 —— 命令全集以 feiyu.mjs 的
+  // COMMANDS 为唯一权威，用 `help` 现查，永远不会漂移。这里只留分组摘要。
+  const groups = [...new Set(CAPABILITIES.map(([cmd]) => String(cmd).trim().split(/\s+/)[0]))]
+  const brief = groups.slice(0, 12).join(' / ')
   return '【你能自己动手】（别把"做不了"当借口，也别拿"这就去看"糊过去）\n'
-    + lines.join('\n')
-    + '\n跑法：`node D:/dsh-feiyu/tools/feiyu.mjs <命令>`（这是你自己的手，不是主人的）。'
+    + '这是你的手，不是主人的工具：`' + CLI_INVOKE + ' <命令>`。'
+    + '常用：' + brief + '。全部命令 `help`，单条用法 `help <命令>`。'
     + (upgrade
-      ? '\n真缺能力就自己补：`selfup backup` → 改 tools/ 下的代码 → 跑测试 → `selfup log "改了什么"`。你有这个权限。'
+      ? '真缺能力就自己补：`selfup backup` → 改 tools/ → `node --check` → 跑测试 → `selfup log "改了什么"`（造新命令 = 在 tools/commands/ 写 .mjs + 在 feiyu.mjs 的 COMMANDS 加一行）。'
       : '')
     + '\n做不到的事只有一种说法：照实说"这个我现在看不了/做不了"，并说清卡在哪。**不许只回一句"这就去看"**。'
-    + '\n但说完之后：如果这件事**值得做**且你有思路，就自己造一个新命令——'
-    + '\n  1. `selfup backup`（备份）'
-    + '\n  2. 在 tools/commands/ 下写一个 .mjs 文件（参考任意现有命令的结构）'
-    + '\n  3. 在 tools/feiyu.mjs 的 COMMANDS 里加一行注册'
-    + '\n  4. `node --check` + 跑一遍验证'
-    + '\n  5. `selfup log "我写了 xxx 命令来做 xxx"`'
-    + '\n  下次你就能用了。做完了跟笨蛋老爹说一声——他会开心。'
 }
 
 /**

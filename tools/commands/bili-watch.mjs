@@ -173,7 +173,7 @@ export async function run(argv = []) {
       else if (comment && cfg.tattle?.enabled !== false) {
         // 低分/未到线但有内容 → 分享欲队列（不直接发，tick 评估时机）
         try {
-          const { enqueue } = await import(../lib/share-queue.mjs)
+          const { enqueue } = await import('../lib/share-queue.mjs')
           enqueue({ kind: 'video', title: it.title, text: comment.slice(0, 80), meta: '评分 ' + Math.round(score) })
         } catch {}
       }

@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { readJsonl } from '../brain/json.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const STATE = () => dataPath('wander-state.json')
 
@@ -24,26 +25,26 @@ function writeState(st) {
 function gatherMaterial() {
   const out = []
   try {
-    const lore = JSON.parse(fs.readFileSync(dataPath('feiyu-ai/lore.json'), 'utf8'))
+    const lore = JSON.parse(fs.readFileSync(dataPath('lore.json'), 'utf8'))
     for (const l of (lore || []).slice(-8)) {
       if (/想|试试|该|值得|好奇/.test(l.text)) out.push(l.text.slice(0, 60))
     }
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:31') }
   try {
     const st = JSON.parse(fs.readFileSync(dataPath('sleep-state.json'), 'utf8'))
     const opt = (st.lastSleep?.phases || []).find(p => p.name === '优化')
     if (opt?.result?.problems > 0) out.push('睡眠审查发现：' + opt.result.note.slice(0, 60))
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:36') }
   try {
     const pr = JSON.parse(fs.readFileSync(dataPath('promises.json'), 'utf8'))
     const due = (pr || []).filter(p => p.state === 'pending' && Date.now() > Number(p.dueAt || 0))
     for (const p of due.slice(0, 2)) out.push('答应过的：' + p.text)
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:41') }
   try {
-    const eps = readJsonl(dataPath('feiyu-ai/episodes.jsonl'), { limit: 30 })
+    const eps = readJsonl(dataPath('episodes.jsonl'), { limit: 30 })
       .filter(e => Date.now() - Number(e.ts || 0) < 24 * 3600_000 && /值得|有趣|好奇|想/.test(e.summary || ''))
     for (const e of eps.slice(0, 3)) out.push(e.summary.slice(0, 60))
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:46') }
   return out
 }
 
@@ -120,18 +121,19 @@ export async function doWander() {
   }
 
   try {
-    const memory = await import('./memory.mjs')
+    // 10-31 审计：原来是 './memory.mjs'（commands/ 下没有这个文件）—— 自主探索的记忆从没写进去过
+    const memory = await import('../lib/memory.mjs')
     memory.remember('web', 'wander', 'self', 'assistant',
       `自主探索：${idea.want}（${idea.reason}）→ ${results.map(r => r.ok ? '✓' : '✗').join('')}`,
       { kind: 'wander' })
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:128') }
 
   try {
     const { emit } = await import('../brain/event.mjs')
     emit({ proc: 'wander', platform: 'web', chatId: 'wander', userId: 'self', role: 'assistant',
       text: `[自主探索] ${idea.want} → ${results.map(r => r.ok ? '✓' : '✗').join('')}`,
       act: 'action' })
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:135') }
 
   st.count = Number(st.count ?? 0) + 1
   st.lastAt = Date.now()

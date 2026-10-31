@@ -95,6 +95,18 @@ export const DEFAULTS = {
     proxy: 'http://127.0.0.1:7897',
   },
 
+  // 统一自主规划（10-31）：**一个决策点**决定她接下来做什么。
+  // 以前是四条流水线各跑各的（主动搭话/群插话/wander/focus）互相不知道对方存在；
+  // 这里是单一意识层：每 minGapMin 分钟醒一次，把记忆+情绪+承诺+最近经历摊在一起，
+  // 问她自己「接下来想做什么」，答案写进 focus（宿主照办）。
+  // enabled=false 时行为完全回到从前（各跑各的），不改变任何老逻辑。
+  mind: {
+    enabled: true,
+    minGapMin: 25,          // 两次规划的最小间隔（分钟）
+    replanBelowMin: 5,      // 计划剩余时间低于这个就允许重规划
+    respectBusy: true,      // 她在专心做事时，压掉不相干的打扰（搭话/插话）
+    idleMinutes: 20,        // 如果她"没在做任何事"超过这么久，主动触发一次规划
+  },
   // 完全自由（10-25 总开关）：开了之后她自己决定干什么——上网/刷B站/刷抖音/做视频/写代码/玩/歇着。
   // 唤醒走 DSH 会话（未分组那个），额度系统自动把关（作品量/评论量/分享量都还是那套额度）。
   freedom: {
@@ -126,10 +138,10 @@ export const DEFAULTS = {
     content_temperature: 0.7,
   },
 
-  // QQ（NapCat / OneBot v11）
+  // QQ（OneBot v11 网关：SnowLuma / NapCat 通用）
   qq: {
     enabled: false,
-    napcat_http: 'http://127.0.0.1:3000',   // NapCat HTTP 服务器地址（在 NapCat WebUI 配置）
+    napcat_http: 'http://127.0.0.1:3000',   // OneBot HTTP 服务器地址（SnowLuma/NapCat 的 WebUI 里配置）
     allow_groups: [],                        // 空 = 全部群
     at_only: true,                           // 群里只被 @ 才回；设 false = 群里所有消息都回（像私聊一样）
     voice_enabled: false,                    // 语音条开关
@@ -216,37 +228,6 @@ export const DEFAULTS = {
     python: '',                  // 韵律打分用的解释器，留空用 sovitsCmd（那边一定有 librosa）
   },
 
-  // 抖音（social-auto-upload 发布）
-  douyin: {
-    enabled: false,
-    account: 'creator',                        // sau 账号别名
-    // 评论不带 @（LockyBee 结论：公开评论含 @ 是抖音风控主因）；显式开才真 @
-    atMention: false,
-    // 看到有意思的视频，直接分享给主人（替代评论 @）；每天最多 shareDaily 条（0 = 不限）
-    shareToOwner: false,
-    shareDaily: 5,
-    // 真发评论的每日上限（自由刷不限量跑通宵，评论必须设顶，防 shadowban；0 = 不限）
-    commentDaily: 8,
-    shareVia: 'douyin',    // douyin=抖音私信发视频链接+评论 / qq=QQ私聊 / both=两边都发
-    owner: { name: '' },   // 主人抖音昵称（私信分享目标）
-    // 自主观看时也以"自学习人格"发评论（受 douyin.dryRun 控制，默认只演练）
-    autoComment: false,
-    watch: { enabled: false, durationMin: 10, maxVideos: 3, dry: true, silent: false },
-    // 自由刷：大肥鱼自己长时间刷抖音看世界，不限条数/时长（unlimited），限度可调。
-    // unlimited=true 时刷到「每日分享额度用完」或手动停；unlimited=false 按 maxVideos/maxMinutes。
-    freeRoam: { enabled: false, unlimited: true, maxVideos: 0, maxMinutes: 0, restMin: 3 },
-    // 运营（10-25）：她自己的账号自己运营——评论区按需回复（LLM 判断）+ 短视频生产（投稿点击归主人）
-    // maxPerUserPerDay（10-26）：同一个人每天最多回几次。0 = 不限。
-    //   以前水位按"视频+用户+文本"记、又看不到子回复，等于一人只能被回一句；
-    //   现在能连续聊了，用这个数当刹车（默认 5，别追着一个人刷屏）。
-    engage: { enabled: true, dailyMax: 3, maxPerUserPerDay: 5 },
-    produce: { enabled: true, dailyMax: 2 },   // 每天最多生产几条（0 = 不限）
-    // 私信陪聊（参照 QQ 模式）：常驻轮询主人私信，新消息→LLM 回
-    // 端口默认 8095：8090 常被 Wondershare 推送组件（WsToastNotification.exe）抢占，绑不上
-    // 随 DSH 启停：true = 开机自启、DSH 退出不关；false = DSH 一退就自动关掉
-    // （10-25 教训：默认 false 意味着"开了私信陪聊，重启一次就永远关了"，主人以为坏了）
-    dm: { enabled: false, pollSec: 300, port: 8095, startWithDsh: false },
-  },
 
   // ── B站社交日报（第 17 轮，主人："除了@我的其它我都不知道发生了什么"）────────
   // 每天到点把她"没 @ 主人"的发言/动作摘要推一条 QQ；没动静就不推（不制造噪音）。

@@ -62,12 +62,26 @@ export async function run(argv = []) {
   } else add('B站 登录态', false, '没有 SESSDATA，跳过')
 
   // ④ 数据目录可写（记忆/账本/情绪都住这里）
+  // 10-31：这一项以前只说"能不能写"，但最常见的失败是 **DSH 沙箱**而不是文件权限：
+  //   宿主上 docker exec 跑 selftest 全绿，她自己的会话里却 EACCES —— 因为 DSH 的
+  //   workspace-write 只允许写 session.cwd（~/.dsh/feiyu-work），而记忆在 ~/.feiyu-ai。
+  // 现在把原因写清楚，并告诉人怎么修（面板「修复记忆写入」或 session 权限设 danger-full-access）。
   try {
     fs.mkdirSync(dataPath(), { recursive: true })
     const probe = dataPath('.write-probe')
     fs.writeFileSync(probe, 'ok'); fs.rmSync(probe)
     add('数据目录', true, dataPath())
-  } catch (e) { add('数据目录', false, e.message) }
+  } catch (e) {
+    const msg = String(e?.message ?? e)
+    const sandboxish = /EACCES|EPERM|permission denied/i.test(msg)
+    const hasDsh = !!(process.env.DSH_HOME || process.env.DSH_SESSION_ID)
+    const hint = sandboxish
+      ? (hasDsh
+        ? ' —— 这是 DSH 文件沙箱（workspace-write 只允许写会话工作目录）；把 panel「修复记忆写入」点一下，或把该会话权限设成 danger-full-access'
+        : ' —— 文件权限问题：检查 ~/.feiyu-ai 的属主与 mode（应 700/600）')
+      : ''
+    add('数据目录', false, msg + hint)
+  }
 
   // ⑤ 工作目录（会话 cwd + 两本日记）
   try {
@@ -103,7 +117,7 @@ export async function run(argv = []) {
   const napcatUrl = (cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   let napcatOk = false
   try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(napcatUrl, { signal: c.signal }); napcatOk = true } catch {}
-  add('QQ·NapCat（可选）', true, napcatOk ? `NapCat 已连（${napcatUrl}）` : 'NapCat 未启动 —— 接 QQ 前先装 NapCat 并扫码登录')
+  add('QQ·OneBot 网关（SnowLuma）', true, napcatOk ? `OneBot 网关已连（${napcatUrl}）` : 'OneBot 网关未启动 —— 先确认 snowluma.service 在跑且已登录 QQ')
 
   // ⑬ TTS（GPT-SoVITS）
   const sovitsUrl = cfg.voice?.sovits_url || 'http://127.0.0.1:9880/tts'
@@ -149,16 +163,15 @@ export async function run(argv = []) {
   // 缓存是新的。这条挂了，她就会退回去反复问主人"我们还有钱吗"（那就又断圈了）。
   try {
     const L = await import('../lib/ledger.mjs')
-    const py = L.pythonPath()
-    if (!fs.existsSync(py)) {
-      add('账本', false, `找不到 python（${py}）—— 账本查不了，她会一直问主人饭钱`)
-    } else {
+    // 10-31 审计：以前这里先查 python 存不存在，没有就直接判 ✗ —— 但账本现在有纯 Node 兜底，
+    // python 缺失不再是致命项。改成：直接跑 usage()，真读不到数据才提示。
+    {
       const u = await L.usage({})
       const days = Array.isArray(u.days) ? u.days.length : 0
       const b = L.readBrief()
       const total = u.lifetime?.mine?.total ?? 0
       if (!days) {
-        add('账本', false, '会话日志里没读到任何用量（python 侧 zstandard 环境没装好？pip install zstandard）')
+        add('账本', true, '账本可用（' + (u.via === 'node' ? '纯 Node 解码' : 'python') + '），但会话日志里还没有模型用量 —— 她跑完第一次对话就会出数字')
       } else if (!b) {
         add('账本', true, `${days} 天记录（她累计 ${(total / 1e4).toFixed(1)} 万 token）；摘要缓存还没生成，下次唤醒会自动刷`)
       } else if (b.stale) {
@@ -218,13 +231,6 @@ export async function run(argv = []) {
     }
   } catch (e) { add('B站社交记录', false, '流水读不出：' + String(e.message).slice(0, 80)) }
 
-  // ⑭ 抖音互动（douyin_interact.py + patchright 环境）
-  let dyOk = false
-  try { fs.accessSync('D:/social-auto-upload/douyin_interact.py'); fs.accessSync('D:/social-auto-upload/.venv/Scripts/python.exe'); dyOk = true } catch {}
-  let dyCookie = fs.existsSync(dataPath('douyin-cookies.json'))
-  add('抖音互动（可选）', true, dyOk
-    ? (dyCookie ? '脚本+环境+登录态就绪（刷视频/读评论/发评论可用，默认干跑）' : '脚本+环境就绪，但还没扫码登录 —— node feiyu.mjs douyin login')
-    : '抖音互动脚本未装 —— 需要 D:/social-auto-upload 下的 patchright 环境')
 
   const allOk = items.every(i => i.ok)
   if (allOk) {

@@ -7,7 +7,7 @@
 //   node feiyu.mjs focus                              # 我现在在干什么
 //   node feiyu.mjs focus web      --min 25            # 接下来 25 分钟上网
 //   node feiyu.mjs focus bilibili --min 30 --note "想看那个唱见的新投稿"
-//   node feiyu.mjs focus douyin   --min 15
+//   node feiyu.mjs focus bilibili --min 15
 //   node feiyu.mjs focus rest     --min 40 --note "吃饱了犯困"   # 歇着也是正经事
 //   node feiyu.mjs focus off                          # 收工，回到没安排的自由时间
 import fs from 'node:fs'
@@ -41,7 +41,7 @@ export async function run(argv = []) {
     const s = focusSnapshot()
     if (!s.activity) {
       console.log('（没有记录：现在是自由时间，什么都没在跑 —— 可以挑一件事了）')
-      console.log('挑法：node feiyu.mjs focus web|bilibili|douyin --min <分钟>  ／ focus rest --min <分钟>')
+      console.log('挑法：node feiyu.mjs focus web|bilibili --min <分钟>  ／ focus rest --min <分钟>')
       return
     }
     const tail = s.expired
@@ -70,7 +70,7 @@ export async function run(argv = []) {
   }
 
   if (!isLoopActivity(first)) {
-    console.log(`不认识的活法：${argv[0]}。可选：web / bilibili / douyin / rest / off`)
+    console.log(`不认识的活法：${argv[0]}。可选：web / bilibili / rest / off`)
     process.exit(1)
   }
 

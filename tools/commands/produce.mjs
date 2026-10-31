@@ -421,50 +421,12 @@ export async function run(argv = []) {
       try { fs.writeFileSync(path.join(s.dir, 'bvid.txt'), bvid) } catch {}
     }
     console.log(`🔓 首条已发布${bvid ? `（${bvid}）` : ''} —— produce 从此自由，想剪什么剪什么`)
-  // auto-publish (10-31): fully automatic upload+submit
-  {
-    const videoFile = path.join(dir, 'video.mp4')
-    const coverFile = path.join(dir, 'cover.jpg')
-    if (fs.existsSync(videoFile) && platform === 'bili') {
-      const tags = (plan.tags || ['自制', '大肥鱼']).slice(0, 10).join(',')
-      const intro = plan.intro || meta.intro || ''
-      console.log('自动投稿中...')
-      try {
-        const { submitVideo } = await import('../lib/bili-submit.mjs')
-        const result = await submitVideo(videoFile, {
-          title: meta.title, tid: 21, tags, desc: intro,
-          cover: fs.existsSync(coverFile) ? coverFile : '',
-        })
-        if (result.ok) {
-          console.log('投稿成功！BV：' + result.bvid)
-          try {
-            const { emit } = await import('../brain/event.mjs')
-            emit({ proc: 'produce', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant',
-              text: '投稿成功：' + meta.title + ' BV' + result.bvid, act: 'action' })
-            const mem2 = await import('../lib/memory.mjs')
-            mem2.remember('bilibili', 'bilibili:self', '40048138', 'assistant',
-              '投稿成功：' + meta.title + ' BV' + result.bvid, { kind: 'post' })
-          } catch {}
-          try {
-            const { sendOwnerQQ } = await import('../lib/notify.mjs')
-            await sendOwnerQQ('投稿了！《' + meta.title + '》 https://www.bilibili.com/video/' + result.bvid)
-          } catch {}
-        } else {
-          console.log('投稿失败：' + result.why)
-          try {
-            const { sendOwnerQQ } = await import('../lib/notify.mjs')
-            await sendOwnerQQ('投稿失败：' + meta.title + ' ' + (result.why || '').slice(0, 100) + ' 投稿包在 ' + dir)
-          } catch {}
-        }
-      } catch (e) { console.log('投稿异常：' + e.message) }
-    }
-  }
     if (bvid) console.log(`   已记进投稿包：replies 会自动回这条下面别人的评论（任何类型）`)
-  // brain 事件（10-31 融合）：成片产出进统一记忆
-  try {
-    const { emit } = await import('../brain/event.mjs')
-    emit({ proc: 'produce', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant', text: `完成视频制作：《${meta.title}》（${meta.durationSec}s，${meta.resolution}）` })
-  } catch {}
+    // brain 事件（10-31 融合）：首条解锁也是一件值得记住的事（这里 meta 还没定义，别引用它）
+    try {
+      const { emit } = await import('../brain/event.mjs')
+      emit({ proc: 'produce', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant', text: '首条投稿已发布并解锁：' + (bvid || '(无BV)'), act: 'action' })
+    } catch {}
     void s
     return
   }
@@ -695,6 +657,45 @@ export async function run(argv = []) {
   }
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2))
   fs.writeFileSync(path.join(dir, '投稿说明.md'), renderPostDoc({ meta, plan, platform, cfg }))
+
+  // auto-publish (10-31): fully automatic upload+submit
+  {
+    const videoFile = path.join(dir, 'video.mp4')
+    const coverFile = path.join(dir, 'cover.jpg')
+    if (!lockedDebut && cfg.video?.autoSubmit !== false && fs.existsSync(videoFile) && platform === 'bili') {
+      const tags = (plan.tags || ['自制', '大肥鱼']).slice(0, 10).join(',')
+      const intro = plan.intro || meta.intro || ''
+      console.log('自动投稿中...')
+      try {
+        const { submitVideo } = await import('./bili-submit.mjs')
+        const result = await submitVideo(videoFile, {
+          title: meta.title, tid: 21, tags, desc: intro,
+          cover: fs.existsSync(coverFile) ? coverFile : '',
+        })
+        if (result.ok) {
+          console.log('投稿成功！BV：' + result.bvid)
+          try {
+            const { emit } = await import('../brain/event.mjs')
+            emit({ proc: 'produce', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant',
+              text: '投稿成功：' + meta.title + ' BV' + result.bvid, act: 'action' })
+            const mem2 = await import('../lib/memory.mjs')
+            mem2.remember('bilibili', 'bilibili:self', '40048138', 'assistant',
+              '投稿成功：' + meta.title + ' BV' + result.bvid, { kind: 'post' })
+          } catch {}
+          try {
+            const { sendOwnerQQ } = await import('../lib/notify.mjs')
+            await sendOwnerQQ('投稿了！《' + meta.title + '》 https://www.bilibili.com/video/' + result.bvid)
+          } catch {}
+        } else {
+          console.log('投稿失败：' + result.why)
+          try {
+            const { sendOwnerQQ } = await import('../lib/notify.mjs')
+            await sendOwnerQQ('投稿失败：' + meta.title + ' ' + (result.why || '').slice(0, 100) + ' 投稿包在 ' + dir)
+          } catch {}
+        }
+      } catch (e) { console.log('投稿异常：' + e.message) }
+    }
+  }
 
   // ⑤ 首条锁：投稿包就绪 → ready（还没解锁，等主人点发布）
   if (lockedDebut) {

@@ -37,7 +37,13 @@ export function configure(cfg = config()) {
 }
 
 export function mode() {
-  try { return String(config().brain?.mode || 'off') } catch { return 'off' }
+  // 10-31 修：这里原来兜底 'off'，而 config.mjs 的 DEFAULTS.brain.mode 是 'shadow'。
+  // 两边不一致 → 实际配置里没写 brain 键时，插件壳认为 shadow、脑自己认为 off，
+  // "shadow 只写不读"这个对照实验从来没真正开始过。现在统一以 DEFAULTS 为准。
+  try {
+    const m = String(config().brain?.mode || 'shadow')
+    return ['off', 'shadow', 'live'].includes(m) ? m : 'shadow'
+  } catch { return 'shadow' }
 }
 
 /**

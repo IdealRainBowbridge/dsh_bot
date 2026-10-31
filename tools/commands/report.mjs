@@ -1,5 +1,5 @@
 // report —— 观看日报：把今天（或 N 天）真实看过的 B站/抖音 汇总成 Markdown。
-// 纯数据聚合，不调模型（参考 dsh-douyin-agent 的"日报不调用模型"做法）。
+// 纯数据聚合，不调模型（参考 dsh-bili-whale 的"日报不调用模型"做法）。
 //
 //   node feiyu.mjs report [--days 1] [--out <path>]
 import fs from 'node:fs'
@@ -19,12 +19,12 @@ export async function run(argv = []) {
     for (const line of lines) {
       try {
         const r = JSON.parse(line)
-        if ((r.platform === 'bilibili' || r.platform === 'douyin') && Number(r.ts ?? 0) >= since) rows.push(r)
+        if (r.platform === 'bilibili' && Number(r.ts ?? 0) >= since) rows.push(r)
       } catch {}
     }
   } catch {}
 
-  const by = { bilibili: [], douyin: [] }
+  const by = { bilibili: [] }
   for (const r of rows) {
     const id = String(r.chatId || '').split(':').pop() || ''
     const title = String(r.summary || r.text || '').trim()
@@ -43,7 +43,6 @@ export async function run(argv = []) {
   }
 
   for (const [platform, label, urlOf] of [
-    ['douyin', '抖音', (id) => `https://www.douyin.com/video/${sec(id)}`],
     ['bilibili', 'B站', (id) => `https://www.bilibili.com/video/${sec(id)}`],
   ]) {
     const list = by[platform]

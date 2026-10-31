@@ -127,6 +127,26 @@ export async function run(argv = []) {
     }))
   } catch { /* 热评也是可选路 */ }
 
+  // ③.5 真的看一眼画面（10-31 新增，补上头注释里许诺的 v0.2 抽帧）
+  // 只在前三路都不够用时才看：字幕够长就不必花这笔视觉钱。
+  let visionDesc = null
+  let visionWhy = ''
+  try {
+    const BF = await import('../lib/bili-frames.mjs')
+    const cfg = config()
+    const wantVision = cfg.vision?.debrief !== false
+    const subtitleEnough = subtitles.length >= 8
+    if (!wantVision) visionWhy = 'config.vision.debrief=false'
+    else if (!BF.framesReady()) visionWhy = '没有 ffmpeg'
+    else if (subtitleEnough && cfg.vision?.debriefAlways !== true) visionWhy = '字幕已够用，省一次视觉'
+    else {
+      const r = await BF.seeVideo(bvid, { frames: Number(cfg.vision?.debriefFrames ?? 3) })
+      if (r?.desc) visionDesc = r.desc
+      else visionWhy = '抽帧/描述没成（受限视频或视觉通道失败）'
+    }
+  } catch (e) { visionWhy = String(e.message || e).slice(0, 60) }
+  if (!visionDesc && visionWhy && !json) process.stderr.write(`[debrief] 画面没看成：${visionWhy}\n`)
+
   // ④ 看过就留痕：上报 click + heartbeat，这条视频才会出现在账号的观看历史里
   //    （纯 API 读永远不进历史——手机端会以为她什么都没看。bilibili.reportHistory=false 可关）
   if (config().bilibili?.reportHistory !== false) {
@@ -156,7 +176,8 @@ export async function run(argv = []) {
     subtitleLang,
     subtitleLines: subtitles.slice(0, 40),
     topComments,
-    seenVia: ['元信息', subtitles.length ? '官方字幕' : null, topComments.length ? '热评' : null, '简介'].filter(Boolean),
+    visionDesc: visionDesc || null,
+    seenVia: ['元信息', subtitles.length ? '官方字幕' : null, topComments.length ? '热评' : null, '简介', visionDesc ? '画面' : null].filter(Boolean),
   }
   // 10-29：字幕串片第三次（10-27 两次、10-29 两次，全是"只有一条 ai-zh 轨"）。
   // 选轨顺序救不了"唯一一条就是错的"，所以补一道贴合度检查：标题+简介的中文二字组，
@@ -185,6 +206,11 @@ export async function run(argv = []) {
   if (pack.topComments?.length) {
     console.log('【热评】')
     for (const c of pack.topComments) console.log(`  ${c.name}（${c.like} 赞，rpid=${c.rpid}）：${c.text}`)
+    console.log('')
+  }
+  if (pack.visionDesc) {
+    console.log('【画面（真抽帧看的，不是猜的）】')
+    console.log('  ' + pack.visionDesc)
     console.log('')
   }
   console.log('—— 基于以上材料打分（0–20），不足 share.minScore 就是「这条不值得占主人一次注意力」，合法结果 ✓')

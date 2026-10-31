@@ -312,7 +312,7 @@ await ok('辅助服务：探活靠端口 /health，不是靠手里有没有 chil
   const aux = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'lib', 'auxsvc.mjs'), 'utf8')
   assert.ok(/export async function probeHealth/.test(aux), '要有探活函数')
   assert.ok(/http:\/\/127\.0\.0\.1:\$\{port\}\/health/.test(aux), '探 /health 而不是只看进程')
-  assert.ok(/export async function ensureDouyinDm/.test(aux), '抖音私信要能自愈')
+  assert.ok(/export async function ensureBiliOwnReply/.test(aux), 'B站评论巡检要能自愈')
   assert.ok(/tries\.length >= 3/.test(aux), '要有退避，别 crash-loop 刷进程')
   const idx = fs.readFileSync(path.join(import.meta.dirname, '..', 'lib', 'index.js'), 'utf8')
   assert.ok(/function portHealthy/.test(idx), '插件侧也要端口级探活')

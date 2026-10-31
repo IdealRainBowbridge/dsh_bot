@@ -7,6 +7,7 @@ import { config } from './config.mjs'
 import * as memory from './memory.mjs'
 import * as brainDelivery from '../brain/delivery.mjs'
 import * as brainEvent from '../brain/event.mjs'
+import { swallow } from './swallow.mjs'
 
 /**
  * 给主人发一条 QQ 私聊（成功后记进 QQ 记忆，对话流里她"记得自己说过"）。
@@ -32,7 +33,7 @@ export async function sendOwnerQQ(text) {
       try {
         const ddPath = dataPath('send-dedup.json')
         let dd = {}
-        try { dd = JSON.parse(fs.readFileSync(ddPath, 'utf8')) } catch {}
+        try { dd = JSON.parse(fs.readFileSync(ddPath, 'utf8')) } catch (e) { swallow(e, 'tools/lib/notify.mjs:35') }
         const fp = String(content).slice(0, 30)
         const now2 = Date.now()
         for (const [k, v] of Object.entries(dd)) {
@@ -45,11 +46,11 @@ export async function sendOwnerQQ(text) {
         // 清理 >10s 的旧记录
         for (const [k, v] of Object.entries(dd)) { if (now2 - Number(k) > 10000) delete dd[k] }
         fs.writeFileSync(ddPath, JSON.stringify(dd))
-      } catch {}
+      } catch (e) { swallow(e, 'tools/lib/notify.mjs:48') }
       // 打字标识（10-31）：推送也是"她在打字"—— 先显示输入状态，发完停止
       try {
         await fetch(`${napcat}/set_input_status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: Number(ownerQQ), event_type: 1 }), signal: AbortSignal.timeout(4000) })
-      } catch {}
+      } catch (e) { swallow(e, 'tools/lib/notify.mjs:52') }
       const r = await fetch(`${napcat}/send_private_msg`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(8000),
       })
@@ -57,10 +58,10 @@ export async function sendOwnerQQ(text) {
       const ok = r.ok && (j.retcode === 0 || j.status === 'ok' || j.message_id)
       try {
         await fetch(`${napcat}/set_input_status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: Number(ownerQQ), event_type: 0 }), signal: AbortSignal.timeout(4000) })
-      } catch {}
+      } catch (e) { swallow(e, 'tools/lib/notify.mjs:60') }
       if (ok) {
         // 发送成功 = 她"亲口说过"这句话：记进 QQ 对话记忆，主人接着聊才接得上
-        try { memory.remember('qq', `qq:${ownerQQ}`, ownerQQ, 'assistant', content, { kind: 'push' }) } catch {}
+        try { memory.remember('qq', `qq:${ownerQQ}`, ownerQQ, 'assistant', content, { kind: 'push' }) } catch (e) { swallow(e, 'tools/lib/notify.mjs:63') }
         // 交付证据（v3 §11）：推送也是"她说出去的话"，声称闸要能查到这一条
         try {
           const msgId = j.message_id || j.data?.message_id || ''
@@ -69,7 +70,7 @@ export async function sendOwnerQQ(text) {
             proc: 'notify', platform: 'qq', chatId: `qq:${ownerQQ}`, userId: ownerQQ,
             role: 'assistant', text: content, kind: 'push', msgId,
           })
-        } catch {}
+        } catch (e) { swallow(e, 'tools/lib/notify.mjs:72') }
         if (attempt > 0) console.log(`[notify] 第 ${attempt + 1} 次尝试成功（前一次：${lastErr}）`)
         return true
       }

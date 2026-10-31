@@ -24,10 +24,16 @@ fs.mkdirSync(DATA, { recursive: true })
 const L = await import('../tools/lib/ledger.mjs')
 
 let passed = 0
+const pending = []
 function ok(name, fn) {
-  fn()
-  passed += 1
-  console.log(`  ✓ ${name}`)
+  const r = fn()
+  // 异步用例要收集起来最后 await —— 否则它会在 cleanup 之后才跑，读到的目录已被删
+  if (r && typeof r.then === 'function') {
+    pending.push(r.then(() => { passed += 1; console.log(`  ✓ ${name}`) }))
+  } else {
+    passed += 1
+    console.log(`  ✓ ${name}`)
+  }
 }
 
 const TODAY = (() => {
@@ -296,7 +302,7 @@ ok('命令表里有 ledger，且 run 导出对得上（feiyu.mjs 只认 run）',
 })
 
 ok('两个常驻服务都起了账本刷新（否则聊天里永远是旧数字）', () => {
-  for (const f of ['tools/commands/qq-server.mjs', 'tools/commands/douyin-dm-server.mjs']) {
+  for (const f of ['tools/commands/qq-server.mjs']) {
     const s = read(f)
     assert.match(s, /startBriefRefresher/)
   }
@@ -355,5 +361,6 @@ if (fs.existsSync(py)) {
   console.log(`  ⚠ 没有 python（${py}），跳过真扫用例`)
 }
 
+await Promise.all(pending)
 console.log(`\n账本测试：${passed} 项全过`)
 fs.rmSync(sandbox, { recursive: true, force: true })

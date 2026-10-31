@@ -5,6 +5,7 @@ import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'
 import { config } from '../lib/config.mjs'
 import { readJsonl } from '../brain/json.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const DREAMS = () => dataPath('dreams.jsonl')
 const NL = String.fromCharCode(10)
@@ -18,50 +19,38 @@ function appendDream(d) {
       const kept = lines.slice(-180).map((l) => { try { const o = JSON.parse(l); o.consumed = true; return JSON.stringify(o) } catch { return l } })
       fs.writeFileSync(DREAMS(), kept.join(NL) + NL)
     }
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:21') }
   fs.appendFileSync(DREAMS(), JSON.stringify({ dream: true, isFake: true, ...d }) + NL)
 }
-export function recentDreams(n = 10) {
-  try { return readJsonl(DREAMS(), { limit: n }) } catch { return [] }
-}
-export function dreamToMention() {
-  const all = recentDreams(5)
-  const d = all.find((x) => !x.consumed)
-  if (!d) return null
-  try {
-    const lines = fs.readFileSync(DREAMS(), 'utf8').trim().split(NL)
-    const idx = lines.findIndex((l) => l.includes('"at":' + d.at))
-    if (idx >= 0) { const o = JSON.parse(lines[idx]); o.consumed = true; lines[idx] = JSON.stringify(o); fs.writeFileSync(DREAMS(), lines.join(NL) + NL) }
-  } catch {}
-  return d
-}
+// 读取端已提到 lib 层（10-31）：这里只做 re-export，保证老调用方不受影响。
+export { recentDreams, dreamToMention } from '../lib/dream-read.mjs'
 
 async function seeds(now = Date.now()) {
   const pool = []
   try {
-    const eps = readJsonl(dataPath('feiyu-ai/episodes.jsonl'), { limit: 40 }).filter((e) => now - Number(e.ts || 0) < 48 * 3600_000 && e.summary)
+    const eps = readJsonl(dataPath('episodes.jsonl'), { limit: 40 }).filter((e) => now - Number(e.ts || 0) < 48 * 3600_000 && e.summary)
     for (const e of eps) pool.push(String(e.summary).slice(0, 50))
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:32') }
   try {
-    const lore = JSON.parse(fs.readFileSync(dataPath('feiyu-ai/lore.json'), 'utf8'))
+    const lore = JSON.parse(fs.readFileSync(dataPath('lore.json'), 'utf8'))
     for (const l of (lore || []).slice(-6)) pool.push(String(l.text).slice(0, 50))
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:36') }
   try {
     const brain = await import('../brain/index.mjs')
     const a = brain.affect?.state?.() || {}
     if (a.tension > 0 || a.valence !== 0) pool.push('情绪：' + (a.valence < 0 ? '低落' : '雀跃') + (a.tension > 0 ? '、紧绷' : ''))
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:41') }
   try {
     const brain = await import('../brain/index.mjs')
     const t = brain.tick()
     for (const x of (t.due || []).slice(0, 3)) pool.push('欠着的事：' + x.object)
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:46') }
   try {
     const st = JSON.parse(fs.readFileSync(dataPath('sleep-state.json'), 'utf8'))
     for (const p of (st.lastSleep?.phases || []).find((p) => p.name === '审查')?.result || []) {
       if (!p.ok) pool.push('心事：' + p.name)
     }
-  } catch {}
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:52') }
   return pool
 }
 
@@ -111,7 +100,7 @@ export async function dream() {
   const pool = await seeds()
   const chosen = pickSeeds(pool)
   let text = ''
-  try { text = await compose(chosen) } catch {}
+  try { text = await compose(chosen) } catch (e) { swallow(e, 'tools/commands/dream.mjs:102') }
   if (!text) text = fallbackDream(chosen)
   if (!text) return null
   const d = { at: Date.now(), text: '【梦】' + text, seeds: chosen, mood: '虚构，非真实记忆' }

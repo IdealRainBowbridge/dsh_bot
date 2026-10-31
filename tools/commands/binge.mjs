@@ -195,6 +195,18 @@ async function watchOne(bvid, opt = {}) {
     : ''
   const danmaku = await fetchDanmaku(cid, H)
 
+  // ③.5 真的看一眼画面（10-31，补上头注释里许诺的抽帧）：番剧的字幕轨/弹幕都可能对不上，
+  // 画面是最不会骗人的一路。任何一步失败都返回 null —— 绝不编。
+  let visionDesc = null
+  try {
+    const BF = await import('../lib/bili-frames.mjs')
+    const vcfg = config()
+    if (vcfg.vision?.binge !== false && BF.framesReady()) {
+      const r = await BF.seeVideo(bvid, { frames: Number(vcfg.vision?.bingeFrames ?? 3) })
+      if (r?.desc) visionDesc = r.desc
+    }
+  } catch {}
+
   // 弹幕够多的时候**不用字幕轨**：番剧投稿的字幕轨串片率极高（实测本片字幕是"iPhone16 钢化膜测评"），
 // 拿它当剧情来源等于让她编。弹幕是观众当场打在现场的，反而最贴这一集。
   const useSubs = Boolean(material) && danmaku.length < 40
@@ -215,6 +227,7 @@ async function watchOne(bvid, opt = {}) {
             ? `\n\n【字幕轨节选 · 轨 ${subLang || '?'}】（⚠️ 番剧投稿的字幕轨经常串片或只是片尾曲歌词；对不上就忽略它）\n${material.slice(0, 3000)}`
             : (subs.length ? '\n\n（有字幕轨，但内容跟本片对不上，已忽略）' : '\n\n（这条没有字幕轨）'))
           + (danmaku.length ? `\n\n【弹幕 · 观众当场打的，主要材料】\n${danmaku.slice(0, 120).join(' / ').slice(0, 3800)}` : '')
+           + (visionDesc ? `\n\n【画面 · 真抽帧看到的，不是猜的】${visionDesc}` : '')
           + (hot.length ? `\n\n【热评】${hot.map((x) => x.text).slice(0, 4).join(' / ')}` : '')
           + '\n\n只根据上面这些写，输出 JSON（**字符串里不要再用英文双引号包词，要强调就用「」**）：'
           + '{"understood":true|false,"plot":"这一集讲了什么（60~140字，只能用材料里出现过的人名/事件）；看不出来就 understood=false 且 plot 写「这条看不到剧情」",'

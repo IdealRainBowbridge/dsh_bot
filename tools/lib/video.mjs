@@ -355,7 +355,19 @@ export function renderCard({ out, dur, w, h, fps = 30, lines = [], bg = '0x0b122
 }
 
 export function fontFile(cfg = config()) {
-  const cands = [cfg.video?.font, 'C:/Windows/Fonts/msyhbd.ttc', 'C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/simhei.ttf']
+  // 10-31 审计：原来候选全是 Windows 路径，Linux/容器上必然找不到 → 字幕全是方块。
+  // 现在 Windows 候选保留（宿主仍可能是 Windows），并补上 Linux 常见路径与她自己的 fonts 目录。
+  const HOME = process.env.USERPROFILE || process.env.HOME || ''
+  const cands = [
+    cfg.video?.font,
+    'C:/Windows/Fonts/msyhbd.ttc', 'C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/simhei.ttf',
+    HOME ? `${HOME}/.feiyu-ai/fonts/NotoSansCJK.ttc` : '',
+    '/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc',
+    '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',
+    '/usr/share/fonts/noto-cjk/NotoSansCJK-Light.ttc',
+    '/usr/share/fonts/opentype/noto/NotoSansCJKsc-Bold.otf',
+    '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+  ]
     .filter(Boolean)
   for (const c of cands) {
     try { if (fs.existsSync(c)) return c } catch {}

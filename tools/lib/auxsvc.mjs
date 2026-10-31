@@ -1,5 +1,5 @@
 // 辅助服务守护（10-27）
-// 病根：抖音私信陪聊（douyin-dm-server）是**插件启动时 spawn 一次**的子进程，
+// 病根：辅助服务是**插件启动时 spawn 一次**的子进程，一崩就再没人管。
 // 它一崩就再没人管 —— 真实发生：09:46 起过一次，之后进程没了，主人发私信一整天没人回。
 // qq-server 是唯一的常驻体（插件会拉它、dsd 里也能看见），所以让它当监工：
 //   · 每 90s 探一次 /health，死了就拉起来（带退避，别 crash-loop）
@@ -57,39 +57,8 @@ function spawnDetached(args, logName, env = {}) {
   return child
 }
 
-/**
- * 保证抖音私信陪聊活着。
- * 退避：同一个服务 10 分钟内最多拉起 3 次，之后改成 10 分钟一次并喊一声（防止死循环刷进程）。
- */
-export async function ensureDouyinDm({ force = false } = {}) {
-  const cfg = config()
-  if (cfg.platforms?.douyin === false || cfg.douyin?.enabled === false) return { skipped: 'douyin.enabled 关着' }
-  if (cfg.douyin?.dm?.enabled === false) return { skipped: 'douyin.dm.enabled 关着' }
-  const port = String(cfg.douyin?.dm?.port || 8095)
-  const h = await probeHealth(port)
-  if (h.alive) return { alive: true, port, json: h.json }
-
-  const st = readState()
-  const key = 'douyin-dm'
-  const now = Date.now()
-  const rec = st[key] || { tries: [], lastStart: 0 }
-  rec.tries = (rec.tries || []).filter((t) => now - t < 10 * 60_000)
-  if (!force) {
-    if (rec.tries.length >= 3 && now - rec.lastStart < 10 * 60_000) {
-      say(`抖音私信 10 分钟内已拉起 ${rec.tries.length} 次都没活，先等一等（端口 ${port}）`)
-      st[key] = rec; writeState(st)
-      return { alive: false, port, backedOff: true, tries: rec.tries.length }
-    }
-  }
-  const child = spawnDetached(['douyin-dm-server', '--port', port], 'douyin-dm-watchdog.log')
-  rec.tries.push(now); rec.lastStart = now
-  st[key] = rec; writeState(st)
-  say(`抖音私信没在跑（${h.why || '端口空'}）→ 已拉起 PID ${child.pid}，端口 ${port}`)
-  return { alive: true, started: true, pid: child.pid, port }
-}
-
 /** B站 自己作品评论巡检：到点就跑一次 replies --own-only --go（额度/自刹车由它自己管）。 */
-const lastOwnScan = { at: 0, running: false }
+const lastOwnScan = { at: 0, running: false, tries: [], lastStart: 0 }
 export async function ensureBiliOwnReply({ everyMin = 0 } = {}) {
   const cfg = config()
   const rp = cfg.bilibili?.replies ?? {}
@@ -98,6 +67,15 @@ export async function ensureBiliOwnReply({ everyMin = 0 } = {}) {
   const every = Number(everyMin || rp.autoMin || 12) * 60_000
   if (!everyMin && Date.now() - lastOwnScan.at < every) return { skipped: '还没到点' }
   if (lastOwnScan.running) return { skipped: '上一轮还在跑' }
+
+  // 退避（10-31 补）：10 分钟内连续起 3 次都没成 → 拉长间隔，别 crash-loop 刷进程。
+  const nowMs = Date.now()
+  lastOwnScan.tries = (lastOwnScan.tries || []).filter((t) => nowMs - t < 10 * 60_000)
+  if (lastOwnScan.tries.length >= 3 && nowMs - Number(lastOwnScan.lastStart || 0) < 10 * 60_000) {
+    return { skipped: '退避中', backedOff: true, tries: lastOwnScan.tries.length }
+  }
+  lastOwnScan.lastStart = nowMs
+  lastOwnScan.tries.push(nowMs)
   lastOwnScan.running = true
   try {
     const out = await new Promise((resolve) => {
@@ -120,7 +98,6 @@ export async function ensureBiliOwnReply({ everyMin = 0 } = {}) {
 /** qq-server 启动时挂上：先原地修一次，之后每 90s 探活。 */
 export function superviseAux({ intervalMs = 90_000 } = {}) {
   const tick = async () => {
-    try { await ensureDouyinDm() } catch (e) { say('探抖音私信出错：' + String(e.message).slice(0, 80)) }
     try { await ensureBiliOwnReply() } catch (e) { say('B站 巡检出错：' + String(e.message).slice(0, 80)) }
   }
   setTimeout(() => { void tick() }, 8_000)

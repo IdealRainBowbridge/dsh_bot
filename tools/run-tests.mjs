@@ -19,8 +19,6 @@ const TESTS = [
   'memory-recall-test.mjs',
   'qq-human-test.mjs',
   'group-persona-test.mjs',
-  'douyin-card-test.mjs',
-  'card-match-test.mjs',
   'freedom-quota-test.mjs',
   'tts-sanitize-test.mjs',
   'focus-one-thing-test.mjs',

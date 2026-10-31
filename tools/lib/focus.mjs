@@ -22,19 +22,17 @@ export const FOCUS_PATH = dshPath('feiyu-focus.json')
 export const LOOP_ACTIVITIES = {
   web: { label: '自由上网', sw: ['web', 'roam'], hint: '逛网页/搜索/读文章/写小说' },
   bilibili: { label: '刷B站', sw: ['bilibili', 'freeRoam'], hint: '看视频/深读/评论/发动态' },
-  douyin: { label: '刷抖音', sw: ['douyin', 'freeRoam'], hint: '刷视频/看评论/回私信' },
   // 看番（10-27 新增）：她说"这就去看"必须真有个动作。binge 是一次性命令，
   // 不需要自己的循环；这里让它占住时间（其余循环全关），她会调 `feiyu binge --show … --go`。
   binge: { label: '看番/看剧', sw: ['bilibili', 'bingeLoop'], hint: '用 binge 真的看完一集，看完写感受' },
 }
 
-/** 别名 → 规范名（她可能写 bili / B站 / douyin） */
+/** 别名 → 规范名（她可能写 bili / B站） */
 export function normActivity(a) {
   const s = String(a ?? '').trim().toLowerCase()
   if (!s) return ''
   if (['web', '上网', 'browse', 'net'].includes(s)) return 'web'
   if (['bili', 'bilibili', 'b站', 'b站刷', 'bl'].includes(s)) return 'bilibili'
-  if (['douyin', 'dy', '抖音'].includes(s)) return 'douyin'
   if (['binge', '看番', '看剧', '追番', 'anime'].includes(s)) return 'binge'
   if (['rest', '歇', '歇着', '休息', 'idle', '躺'].includes(s)) return 'rest'
   if (['off', 'stop', '收工', '结束', 'none', '空'].includes(s)) return 'off'
@@ -62,7 +60,7 @@ export function readFocus() {
 
 /**
  * 写下"我现在在干什么"。
- * @param {string} activity web|bilibili|douyin|rest|off
+ * @param {string} activity web|bilibili|rest|off
  * @param {number} min 打算干多久（分钟，0 = 不设时限，靠她自己收工）
  * @param {string} note 一句话（写给自己/给主人看的由头）
  */

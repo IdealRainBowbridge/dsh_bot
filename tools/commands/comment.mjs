@@ -12,6 +12,7 @@ import { validateShare } from '../lib/share-policy.mjs'
 import * as guard from '../lib/guard.mjs'
 import * as memory from '../lib/memory.mjs'
 import { sanitizeFor, loadBiliFaces } from '../lib/stickers.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 function arg(argv, name) {
   const i = argv.indexOf(name)
@@ -119,7 +120,7 @@ export async function run(argv = []) {
     signal: AbortSignal.timeout(30000),
   })
   let j = null
-  try { j = await res.json() } catch {}
+  try { j = await res.json() } catch (e) { swallow(e, 'tools/commands/comment.mjs:122') }
   if (Number(j?.code) !== 0) {
     console.error(`✗ 发送失败：${explainCode(j?.code)}` + (j?.message ? `（B站原文：${j.message}）` : ''))
     if (HARD_STOP_CODES.has(Number(j?.code))) {
@@ -133,7 +134,7 @@ export async function run(argv = []) {
   const quota = await import('./quota.mjs')
   quota.run(['record', '--type', isShare ? 'share' : 'reply', '--target', bvid, '--note', title.slice(0, 30)])
   memory.remember('bilibili', chatId, cfg.identity?.name ?? 'feiyu', 'assistant', message)
-  try { const { recordBili } = await import('../lib/outbox.mjs'); recordBili({ kind: isShare ? '分享评论' : (root ? '回评' : '评论'), title, bvid, text: message }) } catch {}
+  try { const { recordBili } = await import('../lib/outbox.mjs'); recordBili({ kind: isShare ? '分享评论' : (root ? '回评' : '评论'), title, bvid, text: message }) } catch (e) { swallow(e, 'tools/commands/comment.mjs:136') }
   // 登记 rpid：回评论扫描（replies 命令）靠它找到这条评论下的新回复
   // 10-29：先分清两件事再记账 ——
   //   ① 存在性：带登录态问 /x/v2/reply/detail（不带 cookie 一律 12006，会误判成"没发出去"）
@@ -151,8 +152,8 @@ export async function run(argv = []) {
       if (visible === true) console.log('  ✓ 匿名也看得见：这条真出去了（' + vis.how + '）')
       if (visible === false) console.log('  ⚠ 存在，但匿名看不到 —— 被挂「仅自己可见」了，别人还没看见')
     }
-  } catch {}
-  try { const { recordMyComment } = await import('../lib/bili-write.mjs'); recordMyComment(bvid, aid, j?.data?.rpid, { exists, visible }) } catch {}
+  } catch (e) { swallow(e, 'tools/commands/comment.mjs:154') }
+  try { const { recordMyComment } = await import('../lib/bili-write.mjs'); recordMyComment(bvid, aid, j?.data?.rpid, { exists, visible }) } catch (e) { swallow(e, 'tools/commands/comment.mjs:155') }
   console.log(`✓ 已发送（rpid=${j?.data?.rpid ?? '?'}）${isShare ? ' · 分享额度已扣' : ''}`)
   console.log(`  ${title} → ${message.slice(0, 60)}`)
 
@@ -164,6 +165,6 @@ export async function run(argv = []) {
       const { sendOwnerQQ } = await import('../lib/notify.mjs')
       const ok = await sendOwnerQQ(`【B站分享】《${title.slice(0, 40)}》\n${message.slice(0, 80)}\nhttps://www.bilibili.com/video/${bvid}`)
       console.log(ok ? '  📨 已推送到主人 QQ（评论区 @ 自己账号不会弹通知）' : '  ⚠️ QQ 推送失败（NapCat 没起？主人可能注意不到这条分享）')
-    } catch {}
+    } catch (e) { swallow(e, 'tools/commands/comment.mjs:167') }
   }
 }
