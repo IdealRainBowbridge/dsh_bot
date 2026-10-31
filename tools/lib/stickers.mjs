@@ -14,6 +14,9 @@ import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { homePath } from './paths.mjs'
+import { findPythonWith } from './python-runtime.mjs'
+import { renderSticker, available as stickerRendererAvailable } from './sticker-render.mjs'
+import { swallow } from './swallow.mjs'
 
 export const STICKER_DIR = homePath('.feiyu-ai', 'stickers')
 
@@ -154,15 +157,56 @@ export function ensureSelfSticker(caption, cfg) {
   const hash = crypto.createHash('md5').update(cap).digest('hex').slice(0, 12)
   const out = path.join(dir, hash + '.png')
   if (fs.existsSync(out)) return out
-  const py = cfg?.wechat?.python
-  if (!py || !fs.existsSync(py)) return null
-  try {
-    fs.mkdirSync(dir, { recursive: true })
-    execFileSync(py, [RENDERER, cap, out], { timeout: 25000, stdio: 'ignore', windowsHide: true })
-    return fs.existsSync(out) ? out : null
-  } catch {
+
+  // v5 修死链路：原来这里写死 cfg.wechat.python（D:/wechat-bot/.venv/...），
+  // 容器里那个文件不存在 → 恒返 null，"AI 画不出来就退 PIL 文字贴纸"从未生效。
+  //
+  // 现在的降级链（每一级都实测过）：
+  //   ① ffmpeg + 中文字体（容器自带，零新增依赖）—— 主路径
+  //   ② python + PIL（如果哪天真的装了）
+  //   ③ 都没有 → 明确记一条 swallow，让 diagnose 的"吞错留痕"能看见
+  const viaFfmpeg = renderSticker(cap, out)
+  if (viaFfmpeg) return viaFfmpeg
+
+  const py = pythonFor(['PIL'])
+  if (!py.ok) {
+    // 只在第一次说清楚，之后保持安静（这是个降级路径，不该刷日志）
+    if (!ensureSelfSticker._warned) {
+      ensureSelfSticker._warned = true
+      try { swallow(new Error(py.why), 'stickers:no-python') } catch { /* ignore */ }
+    }
     return null
   }
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+    execFileSync(py.bin, [RENDERER, cap, out], { timeout: 25000, stdio: 'ignore', windowsHide: true })
+    return fs.existsSync(out) ? out : null
+  } catch (e) {
+    try { swallow(e, 'stickers:render-failed') } catch { /* ignore */ }
+    return null
+  }
+}
+
+/**
+ * 找"能画图"的 python（要 PIL），带缓存。
+ * 抽成函数是为了让 diagnose 也能调用同一套判定 —— 面板说"自制表情不可用"时，
+ * 原因必须和这里一致，不能两套说法。
+ */
+export function pythonFor(mods = ['PIL']) {
+  try {
+    return findPythonWith(mods)
+  } catch (e) {
+    return { ok: false, bin: '', why: String(e?.message || e), missing: mods }
+  }
+}
+
+/** 自制贴纸现在能不能用（diagnose 与面板问同一句，避免两套说法）。 */
+export function selfStickerAvailable() {
+  const ff = stickerRendererAvailable()
+  if (ff.ok) return { ok: true, via: 'ffmpeg', detail: ff.font }
+  const py = pythonFor(['PIL'])
+  if (py.ok) return { ok: true, via: 'python', detail: py.bin }
+  return { ok: false, via: '', detail: ff.why + '；' + (py.why || '') }
 }
 
 /** 注入 prompt 的「发表情规矩」。 */

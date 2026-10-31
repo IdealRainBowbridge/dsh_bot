@@ -48,6 +48,10 @@ export const DEFAULTS = {
     balanceTimeoutMs: 8000,
     promptInQQ: true,                   // 聊天时把账本一行塞进提示语（她用不着问主人）
   },
+  // 平台开关（**用户意图**，持久）。语义见 tools/lib/platforms.mjs：
+  //   platforms.<id> === false → 该平台彻底关；与 <svc>.enabled 取"与"。
+  // v5 起放进 DEFAULTS —— 以前它只存在于实际配置文件里，diagnose 每次报"配置多出"。
+  platforms: { qq: true, wechat: false, bilibili: true },
   // 风控闸门（来自 dafeiyu 骨架 ops/guard.py 的设计）
   guard: {
     dryRun: true,       // ⚠️ 默认干跑：只打印不真发。观察一周后再改 false
@@ -57,6 +61,13 @@ export const DEFAULTS = {
   },
   // 日记（写日记不可关；push 留给将来的通知渠道）
   diary: { push: false },
+  // 梦境（睡觉时做的梦，纯虚构、与真实记忆隔离）。v5 补进 DEFAULTS：
+  // 代码里 persona.mjs / sleep.mjs 都在读 cfg.dream.*，但默认值里没有 → 老报"配置多出"。
+  dream: { enabled: true, mentionChance: 0.3 },
+  // 打小报告（看完好视频 → QQ 汇报给主人）。bili-watch / share-queue / tattle 都会读。
+  tattle: { enabled: true, dailyMax: 3, minScore: 15 },
+  // 自主探索（wander）：自己产生念头并执行。v5 补进 DEFAULTS。
+  wander: { enabled: true, dailyMax: 2, minGapMin: 240 },
 
   // AI 表情包自动生成（10-25 新增）：Pollinations flux 免费无 key，直连被墙走本机 Clash。
   // QQ 回复里图库没有的标签 / 自制表情 → 异步生成入库补发；B站图片评论同源。
@@ -141,6 +152,13 @@ export const DEFAULTS = {
   // QQ（OneBot v11 网关：SnowLuma / NapCat 通用）
   qq: {
     enabled: false,
+    // 随 DSH 自启（false = 只在面板上手动点开）。代码里有 4 处读它，
+    // 缺省必须是显式 false —— undefined 会让"没配"和"配了 false"分不出来。
+    startWithDsh: false,
+    // v5 入口鉴权：空 = 只接受本机回环（跨容器/局域网一律 401）；
+    // 填了值就强制校验（Authorization: Bearer / X-Feiyu-Token / ?token=）。
+    // 想给微信桥或外部脚本调用，就在这里发一个 token，别把服务裸奔在 0.0.0.0 上。
+    inboundToken: '',
     napcat_http: 'http://127.0.0.1:3000',   // OneBot HTTP 服务器地址（SnowLuma/NapCat 的 WebUI 里配置）
     allow_groups: [],                        // 空 = 全部群
     at_only: true,                           // 群里只被 @ 才回；设 false = 群里所有消息都回（像私聊一样）
@@ -163,6 +181,32 @@ export const DEFAULTS = {
       similarityMax: 0.25,  // 跟 6 小时内任一条 3-gram 相似度超这个就不发（换措辞重复也算重）
       activeHours: [10, 23],// 活跃时段（10:00~23:00 之外不打扰）；null = 不限时（10-25 用户拍板可关）
       chance: 0.12,         // 每 60s tick 命中概率（不定点闹钟，随机开口）
+      // ── v5：全局主动发言闸门（三条主动通道共用一张账）────────────────────
+      // 治"一小时内连发 6 条、其中 4 条在接自己的话"。以前这四个键只写在
+      // proactive-gate.mjs 的注释里，DEFAULTS 没有 → diagnose 天天报配置缺项。
+      globalGapMin: 45,     // 任意两条主动消息的最小间隔（分钟）
+      globalDailyMax: 8,    // 全局每天最多主动发几条（0 = 不限）
+      maxStreak: 2,         // 主人没说话时最多连发几条（专治自言自语）
+      ownerActiveMin: 3,    // 主人刚说过话的 N 分钟内不许插嘴
+    },
+    // 统一通道（10-31；v5 补进 DEFAULTS）。语义见 tools/lib/channel.mjs。
+    channel: {
+      debounceMs: 900,       // 同会话合并窗口：他连发几条当成一句说完
+      maxConcurrency: 4,     // 全局并行会话数
+      ttlMs: 600000,         // 排队超过 10 分钟就丢（不答隔夜话）
+      maxQueuePerChat: 20,   // 单会话最多积压
+      maxMerge: 6,           // 一次最多合并几条
+    },
+    // 接话判断（10-31；v5 补进 DEFAULTS）。见 tools/lib/reply-gate.mjs。
+    replyGate: {
+      enabled: true,         // false = 退回"每条必回"
+      minDelayMs: 1200,      // 停顿下界
+      maxDelayMs: 4200,      // 停顿上界
+      callDelayMin: 900,     // 呼叫语（在吗）快回
+      callDelayMax: 1600,
+      imageDelayMin: 1200,   // 发图给个短反应
+      imageDelayMax: 2600,
+      contextLines: 6,       // 判"要不要接"时带几行上下文
     },
     // 群聊自主插话（10-25）：不等 @，她自己看着群聊决定要不要接话。
     // 趁话题正热（recentSec 内有人说话）+ 稍微等一下（minQuietSec 不抢话）+ 概率 + 双额度。
@@ -190,6 +234,7 @@ export const DEFAULTS = {
   // 自制贴纸（stickers.mjs 取 cfg.wechat.python）恒返 null、面板合并窗口/上下文条数落回硬编码。
   wechat: {
     enabled: false,
+    startWithDsh: false,
     python: 'D:/wechat-bot/.venv/Scripts/python.exe',
     script: 'D:/wechat-bot/wechat_bot.py',
     owner_nickname: '',                       // 主人在微信里的昵称（认人用）
@@ -304,10 +349,39 @@ export const DEFAULTS = {
   },
 }
 
+/**
+ * 深合并：base 打底，over 覆盖。
+ *
+ * ⚠️ v5 修的一个隐蔽大 bug：旧实现是 `const out = { ...base }` —— **只浅拷贝顶层**。
+ * 于是 over 里没有覆盖到的嵌套对象（guard / qq / llm / brain …）全都是
+ * DEFAULTS 里**同一个对象的引用**。任何调用方只要写一句
+ *     const cfg = config(); cfg.guard.dryRun = false
+ * 就会把模块级的 DEFAULTS.guard.dryRun 永久改成 false ——
+ * 之后同一个进程里每一次 config() 拿到的 dryRun 都是 false，
+ * 即使配置文件里根本没写这一项、即使把配置文件删掉重读也一样。
+ *
+ * 现场表现：面板改一项设置后，某些"没动过"的默认值突然不再恢复；
+ * 跑一轮测试后再跑业务，行为跟前一轮不一样（测试污染了默认值）。
+ * 这类问题最难查 —— 因为每次单独复现都正常，只有"先跑过别的"才出错。
+ *
+ * 修法：递归时**复制** base 的每个嵌套对象（structuredClone 语义），
+ * 保证 DEFAULTS 永远是只读常量，谁也改不到。
+ */
+const cloneDeep = (v) => {
+  if (v === null || typeof v !== 'object') return v
+  if (Array.isArray(v)) return v.map(cloneDeep)
+  // 只处理普通对象（配置里不会有 Date/Map 之类）
+  const out = {}
+  for (const [k, x] of Object.entries(v)) out[k] = cloneDeep(x)
+  return out
+}
+
 const merge = (base, over) => {
-  const out = { ...base }
+  const out = cloneDeep(base)
   for (const [k, v] of Object.entries(over || {})) {
-    out[k] = (v && typeof v === 'object' && !Array.isArray(v)) ? merge(base[k] ?? {}, v) : v
+    out[k] = (v && typeof v === 'object' && !Array.isArray(v))
+      ? merge(base?.[k] ?? {}, v)
+      : cloneDeep(v)
   }
   return out
 }

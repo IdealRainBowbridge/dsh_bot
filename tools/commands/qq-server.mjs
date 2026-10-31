@@ -53,6 +53,11 @@ const LOG_FILE = dataPath('qq-server.log')
 import { channel as CHANNEL } from '../lib/channel.mjs'
 import * as CHANNEL_IO from '../lib/channel-io.mjs'
 import { gate as replyGate } from '../lib/reply-gate.mjs'
+// v5：平台语义与"这次在处理谁"的上下文，从闭包变量搬出来（并发安全的根）
+import * as PLATFORMS from '../lib/platforms.mjs'
+import { current as currentCtx, runWithContext } from '../lib/reply-context.mjs'
+import { inboundTokenOk, requireInboundToken } from '../lib/inbound-auth.mjs'
+import { createPromiseExecutor, promiseOutcomePath } from '../lib/promise-executor.mjs'
 
 /** 宿主是 stdio:'ignore' 起的进程，不打文件日志等于瞎 —— 出问题只能靠猜。 */
 function logLine(level, args) {
@@ -168,21 +173,28 @@ export async function run(argv = []) {
       return false
     } catch { return false }
   }
-  // 10-31：当前正在处理的平台（handle 里设置）。'qq' 走 OneBot，其它走 outbox。
-  let CUR_PLATFORM = 'qq'
-  let CUR_CHAT = ''
+  // v5：**不再**用闭包变量存"当前平台/会话"。
+  // 旧写法（10-31）在统一通道并发时会串台：A 会话 await LLM 期间 B 会话改掉全局变量，
+  // A 醒来后把回复发到 B 的平台/会话。现在改读 AsyncLocalStorage 里的本次上下文，
+  // 每条 handle() 调用链各拿各的，天然隔离。
+  const ctxOf = () => currentCtx()
 
   const send = async (action, payload) => {
-    const currentChat = payload?.user_id ? 'qq:' + payload.user_id : payload?.group_id ? 'qq:group:' + payload.group_id : ''
+    const ctx = ctxOf()
+    const platform = ctx?.platform || 'qq'
+    const currentChat = payload?.user_id ? platform + ':' + payload.user_id
+      : payload?.group_id ? platform + ':group:' + payload.group_id : (ctx?.chatId || '')
 
-    // ── 非 QQ 平台：不调 OneBot，落到出站队列，由该平台自己的进程来取 ──────────
-    if (CUR_PLATFORM !== 'qq' && String(action).startsWith('send_')) {
+    // ── 非 QQ 平台：不调 OneBot，落到该平台自己的出站队列 ──────────────────────
+    // v5 修正：出站只认**本次上下文**的 platform，且必须带 chatId。
+    // 旧代码没有 chatId 时会写一条空 chatId 的出站记录，拉取端只能靠猜。
+    if (platform !== 'qq' && String(action).startsWith('send_')) {
       const txt = Array.isArray(payload?.message)
         ? payload.message.map((s2) => (s2?.type === 'text' ? s2.data?.text ?? '' : s2?.type === 'image' ? '【图片】' : '')).join('')
         : String(payload?.message ?? '')
       const imgs = Array.isArray(payload?.message) ? payload.message.filter((s2) => s2?.type === 'image').map((s2) => s2.data?.file || s2.data?.url || '') : []
-      CHANNEL_IO.pushOutbox({ platform: CUR_PLATFORM, chatId: CUR_CHAT, text: txt, images: imgs })
-      log('[channel] ' + CUR_PLATFORM + ' 回复已入出站队列（' + CUR_CHAT + '）：' + txt.slice(0, 40))
+      CHANNEL_IO.pushOutbox({ platform, chatId: ctx?.chatId || currentChat, userId: ctx?.userId || '', text: txt, images: imgs })
+      log('[channel] ' + platform + ' 回复已入出站队列（' + (ctx?.chatId || currentChat) + '）：' + txt.slice(0, 40))
       return true
     }
 
@@ -303,24 +315,34 @@ export async function run(argv = []) {
   }
 
   const handle = async (evt) => {
+    const EVT_PLATFORM = String(evt.__platform || 'qq')
+    const isGroupEvt = evt.message_type === 'group'
+    const groupIdEvt = isGroupEvt ? String(evt.group_id ?? '') : ''
+    const userIdEvt = String(evt.user_id ?? '')
+    // v5：把本次"平台/会话"钉进异步上下文，后面所有 await 里都能拿到同一份。
+    // 这解决了旧版并发串台（A 会话醒来发现平台被 B 改了）。
+    const chatIdEvt = isGroupEvt ? EVT_PLATFORM + ':' + groupIdEvt : EVT_PLATFORM + ':' + userIdEvt
+    return runWithContext({
+      platform: EVT_PLATFORM, chatId: chatIdEvt, userId: userIdEvt, isGroup: isGroupEvt,
+    }, () => handleInner(evt, EVT_PLATFORM, isGroupEvt, groupIdEvt, userIdEvt))
+  }
+
+  const handleInner = async (evt, EVT_PLATFORM, isGroup, groupId, userId) => {
     try {
       // 每次处理消息都重读最新配置：热改 voice_enabled / voice_chance / minGapSec 立即生效，
       // 不用重启 qq-server（原版只在进程启动时读一次，改了配置也不生效 —— 语音一直不发的根因）。
       const live = config()
-      // 10-31：面板关了 QQ 就该真闭嘴 —— 以前只认 qq.enabled，platforms.qq 是装饰。
-      if (live.platforms?.qq === false || live.qq?.enabled === false) return
+      // v5 修 P0：平台开关只判**自己**。旧代码在这里写死 `platforms.qq === false`，
+      // 而 handle() 是所有平台共用的入口 → 关 QQ 会把微信一起杀掉。
+      const gate = PLATFORMS.enabled(live, EVT_PLATFORM)
+      if (!gate.on) { log('[qq] ' + EVT_PLATFORM + ' 平台关闭（' + gate.why + '），这条不处理'); return }
+      if (isGroup && !PLATFORMS.allowsGroup(EVT_PLATFORM)) return
       // 10-31：主人开口了 → 重置"连续主动"计数，并标记他正在聊（3 分钟内不插话）
       await ownerSpoke()
       const QQ = live.qq ?? {}
       const selfId = String(evt.self_id ?? '')
-      // 10-31 统一通道：平台从事件里读（QQ 是默认，微信/抖音从 /inbound 带 __platform）
-      const EVT_PLATFORM = String(evt.__platform || 'qq')
-      const isGroup = evt.message_type === 'group'
-      const groupId = isGroup ? String(evt.group_id ?? '') : ''
-      const userId = String(evt.user_id ?? '')
-      // 声明顺序：isGroup 必须先于 CUR_CHAT（10-31 踩过 TDZ：Cannot access 'isGroup' before initialization）
-      CUR_PLATFORM = EVT_PLATFORM
-      CUR_CHAT = isGroup ? EVT_PLATFORM + ':' + groupId : EVT_PLATFORM + ':' + userId
+      // isGroup / groupId / userId 已由 handle() 作为参数传入（v5）
+      // 旧版在这里给闭包变量 CUR_PLATFORM/CUR_CHAT 赋值 —— 并发串台的根源，已删。
       const allow = QQ.allow_groups ?? []
       if (isGroup && allow.length && !allow.includes(groupId)) return
 
@@ -438,7 +460,7 @@ export async function run(argv = []) {
       // 不再靠"昵称：正文"回推。brain 是旁路，失败也不影响这一轮回复。
       try {
         brain.onEvent({
-          proc: 'qq-server', platform: 'qq', chatId, userId, role: 'user',
+          proc: 'qq-server', platform: EVT_PLATFORM, chatId, userId, role: 'user',
           text: memText, isGroup, groupId, name: display || undefined,
           msgId: evt.message_id, at: Date.now(), atMe,
           isOwner: String(userId) === String(config().owner?.qq || ''),
@@ -466,7 +488,7 @@ export async function run(argv = []) {
       // 生成回复（三段式 prompt + 走神注入）
       const turns = memory.recent(chatId).length
       // 装配：live 模式走脑的 8 槽装配（只切 QQ 私聊），否则照旧走三段式 —— 两条路都能回滚。
-      const brained = brain.assembleFor({ platform: 'qq', userText, chatId, userId, turnsToday: turns, isGroup, quote: quoteLine })
+      const brained = brain.assembleFor({ platform: EVT_PLATFORM, userText, chatId, userId, turnsToday: turns, isGroup, quote: quoteLine })
       if (brained && brained.chars > 0) {
         log(`[qq] 🧠 新装配 ${brained.chars} 字${brained.dropped.length ? `（截断 ${brained.dropped.length} 块）` : ''}`)
       }
@@ -641,7 +663,16 @@ export async function run(argv = []) {
       // 干跑：只打印不真发（dafeiyu 铁律：第一周先观察）
       if (config().guard?.dryRun) {
         log(`[qq][干跑] ${isGroup ? '群' + groupId : '私聊' + userId} → ${plain}${stickerFile ? ' [表情图]' : ''}${aiWanted ? ` +AI表情「${tag || caption}」` : ''}`)
-        memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', plain || out, { isGroup })
+        // v5 修 P0：**绝不能**把没发出去的话记成"她说过"。
+        // 旧代码在这里 memory.remember(..., 'assistant', plain)：干跑期间每一条拟回复
+        // 都被当成真实发言写进 episodes / brain，之后她会引用这些"幽灵发言"，
+        // 而 brain.onSent 只在真发后记 → 两套记忆开始分叉。
+        // 现在只落一条带 dryRun 标记的审计，供事后核对；不进对话记忆。
+        memory.rememberAudit({
+          platform: EVT_PLATFORM, chatId, userId, isGroup,
+          kind: 'dryrun', text: plain || out,
+          note: 'guard.dryRun=true：只打印未发送',
+        })
 
       // 长期记忆：跟主人私聊时，每 6 条回复把这段对话压成摘要 + 更新主人画像（不阻塞回复）
       try {
@@ -721,9 +752,9 @@ export async function run(argv = []) {
       memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', plain || out, { isGroup })
       // 交付证据（v3 §11）：真发出去才记；干跑在上面已经 return，走不到这里。
       try {
-        brain.onSent({ chat: chatId, platform: 'qq', text: plain || out, msgId: '', at: Date.now() })
+        brain.onSent({ chat: chatId, platform: EVT_PLATFORM, text: plain || out, msgId: '', at: Date.now() })
         brain.onEvent({
-          proc: 'qq-server', platform: 'qq', chatId, userId, role: 'assistant',
+          proc: 'qq-server', platform: EVT_PLATFORM, chatId, userId, role: 'assistant',
           text: plain || out, isGroup, groupId, msgId: evt.message_id,
         })
       } catch (e) { logErr('[qq] 交付记账失败：' + (e?.message ?? e)) }
@@ -751,6 +782,12 @@ export async function run(argv = []) {
     const synth = CHANNEL_IO.synthBatch(batch, { ttlMs: 10 * 60_000 })
     if (!synth) return
     if (synth.__merged > 1) log('[qq] 📚 合并 ' + synth.__merged + ' 条连发消息成一次回复：' + String(synth.__text || '').slice(0, 60))
+    // v5：批次里第一条的 platform 就是这一批的平台（同会话必然同平台），
+    // 交给 handle() 自己去建上下文；这里只做一次防御性校验。
+    if (!PLATFORMS.isKnownPlatform(synth.__platform || 'qq')) {
+      logErr('[qq] 未知平台，丢弃这批消息：' + String(synth.__platform))
+      return
+    }
     await handle(synth)
   })
 
@@ -802,6 +839,17 @@ export async function run(argv = []) {
   setInterval(checkNapcat, 30_000)
 
   const server = http.createServer((req, res) => {
+    // ── v5 统一鉴权闸 ────────────────────────────────────────────────────────
+    // 旧版本 /onebot /inbound /outbound /task /event /sent 全部裸奔，而 im-gateway.sh
+    // 把服务绑在 0.0.0.0 上 —— 同一个 docker 网桥里的任何容器都能读她的出站消息、
+    // 往队列里塞任务、冒充任意用户跟她说话。当时唯一挡住的是 guard.dryRun=true。
+    //
+    // 现在：/health 保持开放（只读、给监工用、不含私密内容）；
+    // 其余入口统一过 inbound-auth：配了 qq.inboundToken 就强制校验 token，
+    // 没配就只允许本机回环（跨容器/局域网一律 401）。
+    if (req.url !== '/health') {
+      if (requireInboundToken(req, res, config())) return
+    }
     if (req.method === 'POST' && req.url === '/onebot') {
       let body = ''
       req.on('data', c => { body += c; if (body.length > 1024 * 1024) req.destroy() })
@@ -820,6 +868,13 @@ export async function run(argv = []) {
       res.end(JSON.stringify({
         ok: true,
         dryRun: !!config().guard?.dryRun,
+        // v5：把"入口有没有设防"直接暴露在健康检查里 —— 这是最容易被忽略的一项。
+        inboundAuth: (() => {
+          const c = config()
+          const t = String(c.qq?.inboundToken || '')
+          return { mode: t ? 'token' : 'loopback-only', hasToken: !!t, bindHost: process.env.QQ_BIND_HOST || '127.0.0.1' }
+        })(),
+        platforms: PLATFORMS.snapshot(config()),
         napcat: { ok: napcatOk, url: NAPCAT, checkedAt: napcatCheckedAt, downSince: napcatDownSince || null },
         brain: brainHealth(),
         channel: (() => { try { return CHANNEL.snapshot() } catch (e) { return { error: String(e?.message ?? e) } } })(),
@@ -1040,186 +1095,12 @@ export async function run(argv = []) {
     return 0
   }
 
-  // ── 到期承诺的独立执行器（10-28）────────────────────────────────────
-  // 主人第二次抓的病根："说了去看可塑性记忆，实际一直没行动"。
-  // 这次不是"她不想做"，是三层结构性毛病：
-  //   ① 执行原先挂在主动搭话链里（12% 掷骰子 + 日上限 + 最小间隔 + 沉默时长 + 启动宽限）→ 到点也大概率不执行；
-  //   ② 机器一睡（实测 01:07 睡 → 08:02 醒）就整夜没人；醒来先补做最老那条**认错作品**的承诺，正主还在排队；
-  //   ③ 就算执行过，`--ep 1` 写死 → 永远重看第 1 集，seen 停在 [1]（账本里连着三条都是第 1 集）。
-  // 修法：独立 tick（60s，不掷骰子、不占搭话配额）+ 一次最多处理 3 条 + 认作品名（笼统词落到"最近在追的那部"）
-  // + 交给 binge 的 `--ep next` 续看下一集。
-  const PROMISE_OUT = () => dataPath('promise-outcome.json')
-  let promiseRunning = false
-
-  // 11-01（S4）：执行者可以从旧账本换成脑的意图账本（config.brain.executor='intents'）。
-  // 换过去以后：认领走 intents 的租约（fencing，防双开），结算必须有证据；旧账本退成只读历史。
-  // 两条账本**只走一条**，绝不双写 —— 否则"做完了"会有两份口径。
-
-  /** 执行完一条怎么记账。 */
-  function finishJob(job, ok, why) {
-    if (!job?.brainId) return ok ? promises.done(job.id, why) : promises.fail(job.id, why)
-    if (ok) {
-      return brain.intents.settle(job.brainId, {
-        ok: true,
-        evidence: [`promise-outcome:${job.id}`, String(why || '').slice(0, 120)],
-        reason: String(why || '').slice(0, 120),
-      })
-    }
-    return brain.intents.settle(job.brainId, { ok: false, reason: String(why || '没做成') })
-  }
-
-  function deferJob(job, mins, why) {
-    if (!job?.brainId) return promises.defer(job.id, mins, why)
-    return brain.intents.defer(job.brainId, mins, why)
-  }
-
-  /** 该执行的活：默认旧账本；换成 intents 后由脑说了算（拿不到租约就跳过）。 */
-  function dueJobs() {
-    const useIntents = String(config().brain?.executor || 'promises') === 'intents'
-    if (!useIntents) return promises.dueNow().map((x) => ({ ...x, brainId: '' }))
-    const out = []
-    for (const x of brain.intents.executable()) {
-      const lease = brain.intents.lease(x.id, `qq-server:${process.pid}`, { leaseMs: 15 * 60_000 })
-      if (!lease.ok) continue
-      out.push({
-        id: x.id, brainId: x.id, what: String(x.object || ''), text: String(x.lastWhy || ''),
-        kind: String(x.verify || ''), dueAt: Number(x.dueAt || 0), fencing: lease.fencing,
-      })
-    }
-    return out
-  }
-
-  /** 从承诺文本里认出"到底是哪部"。认不出返回 ''（宁可照实说不知道，也不许乱搜一条充数）。 */
-  function resolveShow(what, text = '') {
-    const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim()
-    const w = clean(what)
-    const all = (() => {
-      try {
-        const dir = dataPath('binge')
-        return fs.readdirSync(dir).filter((f) => f.endsWith('.json'))
-          .map((f) => { try { return JSON.parse(fs.readFileSync(dir + '/' + f, 'utf8')) } catch { return null } })
-          .filter(Boolean)
-      } catch { return [] }
-    })()
-    const byShow = (n) => all.find((b) => clean(b.show) === clean(n))
-    // ① 她说的名字本身就在追番账本里 —— 最可靠
-    if (w && byShow(w)) return clean(byShow(w).show)
-    // ② 正文里的《…》且在账本里
-    const inBook = /《([^》]{1,24})》/.exec(clean(text)) || /《([^》]{1,24})》/.exec(w)
-    if (inBook && byShow(inBook[1])) return clean(byShow(inBook[1]).show)
-    // ③ 笼统词（番/剧/动画…）→ 最近真在追的那部（要排除账本里混进的整句，那是解析错的产物）
-    if (/^(?:番|番剧|剧|动画|动漫|番组|追番|那个|这部|那部|它)$/.test(w)) {
-      const looksTitle = (s) => {
-        const t = clean(s)
-        return t.length >= 2 && t.length <= 20 && !/[\s，,。！!？?、；;：:（）()「」“”"]/.test(t)
-      }
-      const recent = all.filter((b) => looksTitle(b.show) && (b.seen?.length || 0) > 0)
-        .sort((a, b) => (b.log?.at?.(-1)?.at || 0) - (a.log?.at?.(-1)?.at || 0))[0]
-      return recent ? clean(recent.show) : ''
-    }
-    // ④ 正文里有《…》但不在账本里 → 新番，交给 binge 自己搜
-    if (inBook) return clean(inBook[1])
-    // ⑤ 只有"像作品名"的干净短词才认（"嗯，我承认，三次了…"这种整句直接不认）
-    if (/^[\u4e00-\u9fa5A-Za-z0-9·・]{2,16}$/.test(w) && !/^(?:这个|那个|什么|怎么|真的|就是)$/.test(w)) return w
-    return ''
-  }
-
-  /** 到点就真去做 —— 不看搭话配额、不掷骰子。一次最多 3 条。 */
-  async function runDuePromises(reason = 'tick') {
-    if (promiseRunning) return
-    promiseRunning = true
-    try {
-      const due = dueJobs().sort((a, b) => Number(a.dueAt) - Number(b.dueAt))
-      if (!due.length) return
-      if (reason === '醒来补做') log(`[qq] ⏰ 醒来补做 ${due.length} 条到点承诺（夜里机器睡了）`)
-      for (const job of due.slice(0, 3)) {
-        const what = String(job.what || '')
-        const text = String(job.text || '')
-        const wantsWatch = /看|追|番|剧/.test(what + text + String(job.kind || ''))
-        const shown = resolveShow(what, text)
-        if (!wantsWatch) {
-          finishJob(job, false, '这条我没有能执行的动作')
-          log(`[qq] ✗ 承诺做不了：${what || text}（没有对应的执行动作）`)
-          continue
-        }
-        if (!shown) {
-          // "行，看完就回来讲" / "看完了再开口" 这类没点名的承诺：只要 12 小时内已经真看完过一部，
-          // 就算并账做掉了 —— 她欠的是"去看番"，不是"再说一遍这句空话"。
-          const recentDone = promises.list('done')
-            .filter((x) => Date.now() - Number(x.doneAt || 0) < 12 * 3600_000 && /^看完了/.test(String(x.why || '')))
-            .sort((a, b) => Number(b.doneAt) - Number(a.doneAt))[0]
-          if (wantsWatch && recentDone) {
-            finishJob(job, true, `并到「${recentDone.what}」那条看番承诺了 —— ${recentDone.why}`)
-            log(`[qq] ✓ 承诺并账：${what || text} → ${recentDone.what}`)
-            continue
-          }
-          finishJob(job, false, '不知道是哪部作品（她答应时没把名字说清）')
-          log(`[qq] ✗ 承诺做不了：${what || text}（认不出作品名）`)
-          continue
-        }
-        log(`[qq] 📌 到期承诺（${reason}）：${shown}（${job.id}）→ 真去看`)
-        // 看几集也从她自己的话里读（顺序要紧：她说"看到第 6 集"是**看到那儿**，不是"再看 6 集"）：
-        //   "看到第 6 集" → --to 6；"连看三集" → --count 3；"这部看完/一口气刷完" → --count all；
-        //   没说过就一集 —— 她没许这个愿，别替她加码。节奏归她，不归配置。
-        const said = `${what} ${text}`
-        const toEp = Number((said.match(/第\s*(\d{1,3})\s*[集话]/) || [])[1] || 0)
-        const numWord = (said.match(/([一二三四五六七八九十两\d]+)\s*集/) || [])[1] || ''
-        const CN = { 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 }
-        const extra = []
-        let count = '1'
-        if (toEp) extra.push('--to', String(toEp))
-        else if (numWord) count = String(CN[numWord] ?? (Number(numWord) || 1))
-        else if (/全(?:集|部)|整部|这部|一口气|刷完|看完它|看完这部|都看完|看到底/.test(said)) count = 'all'
-        if (!toEp) extra.push('--count', count)
-        const budget = Math.max(240000, (count === 'all' || toEp ? 13 : Number(count) || 1) * 180000)
-        let r = ''
-        try { r = await runCliAsync(['binge', '--show', shown, '--ep', 'next', ...extra, '--go', '--json', '--promise', job.id], budget) } catch (e) {
-          logErr('[qq] binge 起不来：' + (e?.message ?? e))
-        }
-        let rec = null
-        try {
-          const raw = String(r || '')
-          const j = JSON.parse(raw.slice(raw.indexOf('{')).trim() || '{}')
-          rec = {
-            at: Date.now(), id: job.id, show: shown, ok: !!j.ok,
-            title: String(j.title || ''), ep: Number(j.ep || 0),
-            watched: Math.max(1, Number(j.watched || 1)),
-            epFirst: Number(j.episodes?.[0]?.ep || j.ep || 0),
-            epLast: Number(j.episodes?.filter((x) => x?.ok).at(-1)?.ep || j.ep || 0),
-            plot: String(j.plot || '').slice(0, 400), feel: String(j.feel || '').slice(0, 200),
-            via: String(j.via || '').slice(0, 120), used: false,
-          }
-          fs.writeFileSync(PROMISE_OUT(), JSON.stringify(rec, null, 1) + '\n')
-          log(rec.ok
-            ? `[qq] ✓ 真看完了《${rec.title}》${rec.watched > 1 ? `第 ${rec.epFirst}~${rec.epLast} 集（${rec.watched} 集）` : `第 ${rec.ep} 集`}`
-            : `[qq] ✗ 没看成：${rec.via || '没有可用材料'}`)
-        } catch (e) { logErr('[qq] 承诺结果没记上：' + (e?.message ?? e)) }
-        // 脑的账本：binge 不认识这个 id（旧账本才认），所以结果在这里结掉 —— 有证据才算 done
-        if (job.brainId) {
-          if (rec?.ok) finishJob(job, true, `真看完了《${rec.title || shown}》第 ${rec.ep || 0} 集`)
-          else if (rec?.quota) {
-            const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(9, 30, 0, 0)
-            deferJob(job, Math.max(30, Math.round((t.getTime() - Date.now()) / 60_000)), `今天额度满了：${rec?.via || ''}`)
-            log(`[qq] ⏳ 今天看番额度满了 → 这条顺延到明天 09:30 再做：${what || text}`)
-          } else finishJob(job, false, `这次没看上：${rec?.via || 'binge 没给出结果'}`)
-          continue
-        }
-        // binge 自己会把承诺标 done/failed；要是它还 open（进程崩了/没走完/额度满），只顺延，不判她失信
-        const still = promises.list('open').find((x) => x.id === job.id)
-        if (still) {
-          let mins = 360
-          if (rec?.quota) {
-            // 额度满了就顺延到明天上午 —— 别每 6 小时白撞一次
-            const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(9, 30, 0, 0)
-            mins = Math.max(30, Math.round((t.getTime() - Date.now()) / 60_000))
-            log(`[qq] ⏳ 今天看番额度满了 → 这条顺延到明天 09:30 再做：${what || text}`)
-          }
-          deferJob(job, mins, `这次没看上：${rec?.via || 'binge 没给出结果'}`)
-        }
-      }
-    } catch (e) { logErr('[qq] 执行承诺失败：' + (e?.message ?? e)) }
-    finally { promiseRunning = false }
-  }
+  // ── 承诺执行器（v5：整块逻辑抽到 tools/lib/promise-executor.mjs）──────────
+  // 这里只接线。抽出的动机：qq-server 是 1700+ 行主闭包，而这 181 行是自洽的；
+  // 独立成模块后可单测，也让本文件回到规模护栏以内。
+  const promiseExec = createPromiseExecutor({ runCliAsync, log, logErr })
+  const { runDuePromises, resolveShow } = promiseExec
+  const PROMISE_OUT = promiseOutcomePath
 
   async function tryProactive() {
     try {

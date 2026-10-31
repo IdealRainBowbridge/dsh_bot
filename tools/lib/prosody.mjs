@@ -9,14 +9,41 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config } from './config.mjs'
+import { findPythonWith } from './python-runtime.mjs'
+import { swallow } from './swallow.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SCRIPT = path.join(HERE, 'prosody.py')
 
-/** 分析用的 python（要装 librosa）。默认用 GPT-SoVITS 的解释器 —— 那边一定有。 */
+/**
+ * 分析用的 python（要 numpy/librosa）。
+ *
+ * v5 修死链路：原来这里默认 `D:/GPT-SoVITS/.venv/Scripts/python.exe`（Windows），
+ * 容器里不存在 → scoreWavs 每次抛错 → 全部返回 0 分 → bestOf 永远选第一条。
+ * 更糟的是它只在 console.warn 里说一句，diagnose 完全看不出来。
+ * 现在：走统一探测，并把"为什么不可用"暴露成 available()，让 diagnose 能判红。
+ */
 export function pythonPath() {
   const v = config().voice ?? {}
-  return v.python || process.env.FEIYU_TTS_PYTHON || 'D:/GPT-SoVITS/.venv/Scripts/python.exe'
+  if (v.python && fs.existsSync(v.python)) return v.python
+  const p = findPythonWith(['numpy'])
+  return p.ok ? p.bin : (v.python || process.env.FEIYU_TTS_PYTHON || 'python3')
+}
+
+/** 打分器现在能不能真用（diagnose 与 bestOf 都问这一句）。 */
+export function available() {
+  const v = config().voice ?? {}
+  if (v.python) {
+    const p = findPythonWith(['numpy'])
+    // 显式配了就用配的，但仍然要能 import numpy
+    if (!p.ok) return { ok: false, why: p.why }
+    if (p.missing.length) return { ok: false, why: 'python 可用但缺库：' + p.missing.join(', '), bin: p.bin }
+    return { ok: true, bin: p.bin, why: '' }
+  }
+  const p = findPythonWith(['numpy'])
+  if (!p.ok) return { ok: false, why: p.why }
+  if (p.missing.length) return { ok: false, why: 'python 可用但缺库：' + p.missing.join(', ') + '（韵律打分将退化为全 0 分 → 择优等于选第一条）', bin: p.bin }
+  return { ok: true, bin: p.bin, why: '' }
 }
 
 /**
@@ -40,10 +67,12 @@ export function scoreWavs(items) {
     const byPath = new Map((parsed.items || []).map((x) => [x.path, x]))
     return list.map((it) => byPath.get(it.path) || { path: it.path, ok: false, score: 0, why: '没拿到评分' })
   } catch (e) {
-    // 评分器坏了不能拖累语音：全部返回 0 分，调用方会退化成"用第一条"
-    const msg = '评分器不可用：' + String(e.message).slice(0, 80)
-    if (!scoreWavs._warned) { scoreWavs._warned = true; console.warn(`   ⚠ ${msg}`) }
-    return list.map((it) => ({ path: it.path, ok: false, score: 0, why: msg }))
+    // 评分器坏了不能拖累语音：全部返回 0 分，调用方会退化成"用第一条"。
+    // v5：不再只是 console.warn 一句 —— 走 swallow，diagnose 的"吞错留痕"能看到；
+    // 同时把"这次是真的降级了"写进返回值，调用方能区分"分低"和"没法打分"。
+    const msg = '评分器不可用：' + String(e.message).slice(0, 120)
+    try { swallow(e, 'prosody:score-unavailable', { force: true }) } catch { /* ignore */ }
+    return list.map((it) => ({ path: it.path, ok: false, score: 0, why: msg, degraded: true }))
   } finally {
     try { fs.rmSync(payload, { force: true }) } catch {}
   }

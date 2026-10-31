@@ -9,6 +9,7 @@ import { promisify } from "node:util"
 const execFileAsync = promisify(execFile)
 import { dataPath } from "../lib/paths.mjs"
 import { config } from "../lib/config.mjs"
+import { swallow } from "../lib/swallow.mjs"
 import * as brain from "../brain/index.mjs"
 import { backlog as inboxBacklog } from "../brain/event.mjs"
 // progress via stdout
@@ -129,19 +130,71 @@ export async function sleepNow(opts = {}) {
       else console.log("[sleep] 今晚无梦")
     } catch (e) { console.log("[sleep] 梦没做成：" + String(e.message).slice(0, 80)) }
   }
+  /**
+   * 归档代码：git 可用就提交；不可用就 tar.gz 快照（v5）。
+   * 返回 { ok, via, file?, files?, bytes?, why?, error? } —— 调用方必须能看见失败。
+   */
+  async function archiveCode(atMs, note) {
+    const stamp = new Date(atMs).toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const repos = [ROOT, "/opt/dsh"]
+    // ① git 路线（有就用，保持原行为）
+    let gitOk = false
+    try { await runCmd("git", ["--version"]); gitOk = true } catch { gitOk = false }
+    if (gitOk) {
+      const done = []
+      for (const repo of repos) {
+        try {
+          const status = await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "status", "--porcelain"])
+          if (status.trim()) {
+            await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "add", "-A"])
+            await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "-c", "user.name=sleep", "-c", "user.email=sleep@feiyu", "commit", "-qm", "睡眠归档 " + stamp + "：" + String(note || '').slice(0, 60)])
+            done.push(repo)
+          }
+        } catch (e) { swallow(e, 'sleep:git-commit') }
+      }
+      return { ok: true, via: 'git', repos: done }
+    }
+    // ② tar.gz 路线（容器里没有 git 时的兜底）
+    try {
+      const { tarGzDir, listTarGz } = await import("../lib/tar.mjs")
+      const dest = dataPath('archive', `code-${stamp}.tar.gz`)
+      const r = tarGzDir(ROOT, dest, {
+        exclude: [/node_modules/, /\.bak[-.]/, /^\\.git\//, /^test\/.*\.tmp/],
+        maxFiles: 5000, maxBytes: 64 * 1024 * 1024,
+      })
+      if (!r.ok) return { ok: false, via: 'tar', error: r.error }
+      // 自检：写出来的包必须能读回来（防"写出一个没法用的包"这种假成功）
+      const names = listTarGz(dest, 3)
+      if (!names.length) return { ok: false, via: 'tar', error: '包写完了但读不回来' }
+      // 只保留最近 7 个快照
+      try {
+        const dir = dataPath('archive')
+        const olds = fs.readdirSync(dir).filter((f) => /^code-.*\.tar\.gz$/.test(f)).sort()
+        for (const f of olds.slice(0, Math.max(0, olds.length - 7))) fs.rmSync(path.join(dir, f), { force: true })
+      } catch (e) { swallow(e, 'sleep:archive-prune') }
+      return { ok: true, via: 'tar', file: dest, files: r.files, bytes: r.bytes }
+    } catch (e) {
+      return { ok: false, via: 'tar', error: String(e?.message || e) }
+    }
+  }
+
   if (!phases.some(p => p.name === "审查")) mark("审查", await threeReviews())
   if (!phases.some(p => p.name === "优化")) {
     const reviews = ((phases.find(p => p.name === "审查") || {}).result) || []
     const bad = reviews.filter(r => !r.ok)
     const optimize = { problems: bad.length, note: bad.length ? bad.map(b => b.name + ": " + b.detail).join(" | ") : "全部健康，无需修复" }
-    for (const repo of [ROOT, "/opt/dsh"]) {
-      try {
-        const status = await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "status", "--porcelain"])
-        if (status.trim()) {
-          await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "add", "-A"])
-          await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "-c", "user.name=sleep", "-c", "user.email=sleep@feiyu", "commit", "-qm", "睡眠归档 " + new Date(started).toISOString().slice(0, 16) + "：" + optimize.note.slice(0, 60)])
-        }
-      } catch {}
+    // ── 归档（v5 修死链路）────────────────────────────────────────────────
+    // 旧代码：`runCmd("git", ...)` 提交脏文件。但容器里**根本没装 git**（Debian 精简镜像），
+    // 异常被 `catch {}` 吞掉 —— "睡一觉会归档代码"这件事从来没发生过，而报告里打着勾。
+    //
+    // 现在：先用 git（如果哪天镜像装了，行为不变）；检测不到 git 就退到内置的 tar.gz
+    // 快照（tools/lib/tar.mjs，零依赖）。两条路都失败 → 记进 optimize 的 note，
+    // 让她（和 diagnose）看见"这次没归档"，而不是假装成功。
+    const arch = await archiveCode(started, optimize.note)
+    optimize.archive = arch
+    if (!arch.ok) {
+      optimize.note = String(optimize.note || '') + ' | 归档失败：' + String(arch.error || arch.why || '未知')
+      try { swallow(new Error('archive failed: ' + (arch.error || arch.why)), 'sleep:archive', { force: true }) } catch {}
     }
     mark("优化", optimize)
   }

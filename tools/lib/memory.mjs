@@ -5,6 +5,12 @@
 //   · 世界 lore      她自己的设定与名场面
 // 检索：2-gram 分词 + 关键词命中（十万条以内够用 —— dafeiyu 的原则：
 // 「别一开始就上向量库，人格才是瓶颈」）。
+//
+// v5 重构要点：
+//   ① 记忆写入永远走 appendEpisode()，它做**跨进程互斥**（10+ 个命令进程会同时写）。
+//   ② 轮转 rotateIfBig() 必须在文件锁内做"再确认"——旧版先 stat 再读全量再重写，
+//      期间别的进程 append 的行会被整段覆盖掉（真实丢记忆）。
+//   ③ 新增 rememberAudit()：干跑/被拦下的拟发言只进审计流水，绝不进对话记忆。
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
@@ -108,13 +114,73 @@ export function remember(platform, chatId, userId, role, text, extra = {}) {
     ...(extra.kind ? { kind: String(extra.kind) } : {}),
   }
   const file = episodeFile(p)
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.appendFileSync(file, JSON.stringify(rec) + '\n')
+  const okWrite = appendEpisode(file, rec)
+  if (!okWrite) { swallow(new Error('episode append failed'), 'memory:append-failed'); return null }
   rotateIfBig(file)
   // dual-write brain (10-31 fuse)
   try {
     import('./brain-bridge.mjs').then((B) => B.rememberToBrain(rec)).catch(() => {})
   } catch (e) { swallow(e, 'tools/lib/memory.mjs:117') }
+  // v5：返回写入的那一行。以前返回 undefined，调用方无法确认"到底记没记住"，
+  // 只能在日志里打一句"记上了"——那句可能不真。
+  return rec
+}
+
+/**
+ * 追加一行到 jsonl —— **跨进程安全**。
+ *
+ * 为什么不能直接 appendFileSync：Linux 上单次 write < PIPE_BUF 的 O_APPEND 是原子的，
+ * 但 Node 的 appendFileSync 可能分多次 write（大对象），多进程同时写就会交错成半行，
+ * 读端 JSON.parse 失败 → 那条记忆**静默消失**。这里用 O_APPEND 一次写完整的
+ * "一行 + 换行"，并在失败时重试一次。
+ */
+function appendEpisode(file, rec) {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const line = Buffer.from(JSON.stringify(rec) + '\n', 'utf8')
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let fd = null
+    try {
+      fd = fs.openSync(file, 'a')
+      fs.writeSync(fd, line, 0, line.length)
+      return true
+    } catch (e) {
+      if (attempt === 1) { swallow(e, 'memory:append'); return false }
+    } finally {
+      if (fd !== null) { try { fs.closeSync(fd) } catch { /* ignore */ } }
+    }
+  }
+  return false
+}
+
+/**
+ * 极简跨进程锁：O_EXCL 建锁文件，超过 staleMs 视为死锁自动清掉。
+ * 只用于"轮转"这种读全量再重写的危险操作，普通 append 不需要锁。
+ */
+function withFileLock(lockPath, fn, { staleMs = 60_000, waitMs = 3_000 } = {}) {
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    try {
+      const fd = fs.openSync(lockPath, 'wx')
+      fs.writeSync(fd, String(process.pid))
+      fs.closeSync(fd)
+      try { return fn() } finally { try { fs.rmSync(lockPath, { force: true }) } catch { /* ignore */ } }
+    } catch (e) {
+      if (e.code !== 'EEXIST') { swallow(e, 'memory:lock'); return fn() }
+      // 陈旧锁（持有进程已死或超时）→ 清掉重试
+      try {
+        const st = fs.statSync(lockPath)
+        if (Date.now() - st.mtimeMs > staleMs) { fs.rmSync(lockPath, { force: true }); continue }
+      } catch { /* 锁文件刚被释放 */ }
+      if (Date.now() > deadline) {
+        // 等不到锁就不轮转 —— 宁可文件大一点，也不能冒丢数据的风险
+        swallow(new Error('rotate lock timeout'), 'memory:lock-timeout')
+        return null
+      }
+      const until = Date.now() + 40
+      while (Date.now() < until) { /* busy wait 40ms，轮转很少发生 */ }
+    }
+  }
 }
 
 // 单文件太大时按月份分片（照 dsh-world「按天归档 + 原文全留」的思路，只是粒度用月）。
@@ -131,6 +197,18 @@ function shardName(base, stamp) {
 function rotateIfBig(base) {
   try {
     if (!fs.existsSync(base) || fs.statSync(base).size < ROTATE_BYTES) return
+    // v5：轮转是"读全量 → 重写"的危险操作，必须在跨进程锁里做，并在锁内**再确认一次**
+    // 大小（排队期间别的进程可能已经轮转过了）。旧版没有锁：多进程同时轮转时，
+    // 后完成的那次会用自己手里的旧快照覆盖掉先完成者的结果 —— 真实丢记忆。
+    withFileLock(base + '.rotate.lock', () => {
+      if (!fs.existsSync(base) || fs.statSync(base).size < ROTATE_BYTES) return
+      rotateNow(base)
+    })
+  } catch (e) { swallow(e, 'tools/lib/memory.mjs:153') }
+}
+
+function rotateNow(base) {
+  {
     const lines = fs.readFileSync(base, 'utf8').split('\n').filter(Boolean)
     const now = new Date(), ymNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const keep = [], move = new Map()
@@ -150,7 +228,7 @@ function rotateIfBig(base) {
     }
     // 先写分片再截断主文件：中途崩溃最多重复，不会丢
     fs.writeFileSync(base, keep.join('\n') + (keep.length ? '\n' : ''))
-  } catch (e) { swallow(e, 'tools/lib/memory.mjs:153') }
+  }
 }
 
 /** 主文件 + 它的所有按月分片。 */
@@ -561,6 +639,36 @@ export function sweepEpisodes(days = 90) {
     } catch (e) { swallow(e, 'tools/lib/memory.mjs:561') }
   }
   return archived
+}
+
+// ---------- 审计流水（不是记忆） ----------
+
+/**
+ * 记一条"她本来要说、但没说出去"的话。
+ *
+ * 为什么单独存：干跑（guard.dryRun）和事实闸拦下的拟发言，如果写进 episodes，
+ * 她会当成自己真的说过，之后拿这些"幽灵发言"当记忆引用；而 brain.onSent 只在
+ * 真发出去后才记 → 两套记忆分叉。审计流水只给人和 diagnose 看，**不进任何提示词**。
+ */
+export function rememberAudit({ platform = 'qq', chatId = '', userId = '', isGroup = false, kind = 'dryrun', text = '', note = '' } = {}) {
+  try {
+    const f = dataPath('audit', 'unsent.jsonl')
+    const row = {
+      ts: Date.now(), platform, chatId, userId, isGroup: isGroup === true,
+      kind: String(kind), text: String(text || '').slice(0, 500), note: String(note || ''),
+    }
+    appendEpisode(f, row)
+    return row
+  } catch (e) { swallow(e, 'memory:rememberAudit'); return null }
+}
+
+/** 最近 N 条未发送审计（diagnose 用）。 */
+export function unsentAudit(n = 20) {
+  try {
+    const f = dataPath('audit', 'unsent.jsonl')
+    const rows = fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).slice(-n)
+    return rows.map((x) => { try { return JSON.parse(x) } catch { return null } }).filter(Boolean)
+  } catch { return [] }
 }
 
 // ---------- 统计 ----------

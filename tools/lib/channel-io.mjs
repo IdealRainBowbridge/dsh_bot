@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
+import { isKnownPlatform, RETIRED_PLATFORMS } from './platforms.mjs'
 
 const OUTBOX = () => dataPath('outbox.json')
 const MAX_OUT = 200
@@ -28,22 +29,35 @@ export function writeOutbox(list) {
   } catch (e) { swallow(e, 'channel-io:write') }
 }
 /** 一条出站消息（非 QQ 平台用）。 */
-export function pushOutbox({ platform, chatId, text = '', images = [], meta = {} }) {
+export function pushOutbox({ platform, chatId, userId = '', text = '', images = [], meta = {} }) {
+  const p = String(platform || '').trim()
+  if (!p || !chatId) {
+    // v5：入队必须有平台和会话，否则拉取端只能靠猜（旧版允许空 chatId 落库）
+    return { ok: false, reason: 'platform-and-chatId-required' }
+  }
   const q = readOutbox()
-  q.push({
+  const row = {
     id: 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-    at: Date.now(), platform, chatId,
+    at: Date.now(), platform: p, chatId: String(chatId), userId: String(userId || ''),
     text: String(text || '').slice(0, 4000),
     images: (images || []).slice(0, 4),
     ...meta,
-  })
+  }
+  q.push(row)
   writeOutbox(q)
+  return { ok: true, id: row.id, queued: q.length }
 }
 /** 取（并按需清空）某平台的出站。 */
 export function drainOutbox(platform = '', { drain = true } = {}) {
+  const p = String(platform || '').trim()
+  // v5 修 P0：旧代码 `!platform || x.platform === platform` —— 不传 platform 时会
+  // **把全部平台的出站消息一起取走并清空**。实测：qq + wechat 两条被一次 drain 掉。
+  // 任何一个"拉取端"（哪怕只是探活）都能偷走别家的消息。
+  // 现在：platform 必填，未知平台直接拒绝，不做"通配"。
+  if (!p) return { count: 0, items: [], error: 'platform-required' }
   const all = readOutbox()
-  const mine = all.filter((x) => !platform || x.platform === platform)
-  const rest = platform ? all.filter((x) => x.platform !== platform) : []
+  const mine = all.filter((x) => x.platform === p)
+  const rest = all.filter((x) => x.platform !== p)
   if (drain && mine.length) writeOutbox(rest)
   return { count: mine.length, items: mine }
 }
@@ -81,13 +95,16 @@ export function handleChannelRoutes(req, res, channel, log = () => {}) {
   // ── 出站：任何平台来取自己的回复 ───────────────────────────────────────
   if (url.startsWith('/outbound')) {
     let out = { ok: false }
+    let code = 200
     try {
       const u = new URL(url, 'http://x')
       const platform = String(u.searchParams.get('platform') || '')
       const drain = u.searchParams.get('drain') !== '0'
-      out = { ok: true, ...drainOutbox(platform, { drain }) }
-    } catch (e) { out = { ok: false, reason: String(e?.message ?? e) } }
-    res.writeHead(200, { 'Content-Type': 'application/json' })
+      const r = drainOutbox(platform, { drain, })
+      out = { ok: !r.error, ...r }
+      if (r.error) code = 400
+    } catch (e) { out = { ok: false, reason: String(e?.message ?? e) }; code = 400 }
+    res.writeHead(code, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(out))
     return true
   }
@@ -104,6 +121,15 @@ export function handleChannelRoutes(req, res, channel, log = () => {}) {
         if (!evt.__text) out = { ok: false, reason: 'empty' }
         else {
           const platform = String(j.platform || 'qq')
+          // v5：只接受有实现的平台。抖音已整体下线，旧脚本若还在推会被明确拒绝，
+          // 而不是继续往记忆里写一批没人处理的 douyin 行。
+          if (!isKnownPlatform(platform) || RETIRED_PLATFORMS.includes(platform)) {
+            out = { ok: false, reason: 'unknown-or-retired-platform:' + platform }
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify(out))
+            return
+          }
+          if (!evt.__text) { out = { ok: false, reason: 'empty' } }
           const chatId = String(j.chatId || (platform + ':' + (j.userId ?? j.groupId ?? 'unknown')))
           const r = channel.push({ chatId, platform, evt, at: Number(j.at) || Date.now() })
           out = { ok: true, queued: r.position, chatId }

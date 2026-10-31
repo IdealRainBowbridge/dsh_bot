@@ -1,7 +1,7 @@
 // run-tests —— 不依赖 npm 的测试跑轮（这台机器上 PATH 里没有 node/npm，
 // `npm test` 跑不了，而她自己改完代码必须验证）。
 //
-//   node tools/run-tests.mjs            # 顺序跑全部 32 套，全绿退出 0
+//   node tools/run-tests.mjs            # 顺序跑全部 39 套，全绿退出 0
 //   node tools/run-tests.mjs memory     # 只跑文件名含 "memory" 的
 //
 // 与 package.json 的 `test` 脚本等价：同样的文件、同样的顺序、失败即停。
@@ -44,6 +44,15 @@ const TESTS = [
   'brain-isolation-test.mjs',
   'brain-meta-test.mjs',
   'brain-claim-test.mjs',
+  // ── v5 重构新增：新地基模块必须有测试，否则等于没写 ──────────────────────
+  'platforms-test.mjs',        // 平台枚举 + 开关单一真相（回归：关一个不许杀另一个）
+  'reply-context-test.mjs',    // 异步上下文隔离（回归：4 会话并发不串台）
+  'channel-test.mjs',          // 统一队列：串行/并行/合并/限流/TTL/积压/容错
+  'inbound-auth-test.mjs',     // 入口鉴权：回环/token/定长比较/401
+  'memory-write-test.mjs',     // 记忆写入：干跑隔离/并发不丢行/平台隔离
+  'config-truth-test.mjs',     // 配置单一真相：DEFAULTS 必须覆盖代码读的键
+  'config-file-test.mjs',      // 配置读写：合并/剔除默认值/600/原子写
+  'lifecycle-test.mjs',        // 定时器生命周期：幂等/替换/清理/容错
 ]
 
 const filter = process.argv[2] || ''

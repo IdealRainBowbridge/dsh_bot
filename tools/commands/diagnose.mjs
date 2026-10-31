@@ -196,6 +196,71 @@ export async function run(argv = []) {
     } else items.push(warn('DSH 契约', '读不到 /opt/dsh/package.json（非 DSH 环境？）'))
   } catch (e) { items.push(warn('DSH 契约', '检查失败：' + e.message)) }
 
+  // ── v5 新增体检：把"看起来正常、其实已经死了"的链路摊开 ──────────────────
+
+  // 5.6) 入口鉴权：这是最容易被忽略的一项（服务一旦绑 0.0.0.0 就等于门户大开）
+  try {
+    const token = String(config().qq?.inboundToken || process.env.FEIYU_INBOUND_TOKEN || '')
+    const bind = String(process.env.QQ_BIND_HOST || '127.0.0.1')
+    if (token) {
+      items.push(ok('入口鉴权', '已设 token（' + token.slice(0, 3) + '***，长度 ' + token.length + '）· 绑 ' + bind))
+    } else if (bind === '127.0.0.1' || bind === 'localhost') {
+      items.push(ok('入口鉴权', '未设 token，但只绑回环 ' + bind + '（跨容器/局域网不可达）'))
+    } else {
+      items.push(bad('入口鉴权', '服务绑在 ' + bind + ' 且**没有** qq.inboundToken —— 同网段任何人都能读她的出站消息、往队列塞任务、冒充用户说话。去配置里设一个 token，或把绑定改回 127.0.0.1'))
+    }
+  } catch (e) { items.push(warn('入口鉴权', '检查失败：' + e.message)) }
+
+  // 5.7) 三条"死链路"：python / 自制贴纸 / 代码归档
+  try {
+    const py = await import('../lib/python-runtime.mjs')
+    const p = py.findPythonWith(['numpy'])
+    if (!p.ok) items.push(bad('python 运行时', p.why + ' —— 语音韵律打分 / 自制表情的 python 分支都不可用'))
+    else if (p.missing.length) items.push(warn('python 运行时', p.bin + ' 可用，但缺库：' + p.missing.join(', ') + '（韵律打分将全 0 → 择优=选第一条）'))
+    else items.push(ok('python 运行时', p.bin))
+  } catch (e) { items.push(warn('python 运行时', '检查失败：' + e.message)) }
+
+  try {
+    const st = await import('../lib/stickers.mjs')
+    const a = st.selfStickerAvailable()
+    items.push(a.ok
+      ? ok('自制贴纸', '可用（via ' + a.via + '：' + String(a.detail || '').slice(0, 60) + '）')
+      : bad('自制贴纸', '不可用：' + a.detail + ' —— AI 生成失败后的兜底表情一直是空的'))
+  } catch (e) { items.push(warn('自制贴纸', '检查失败：' + e.message)) }
+
+  try {
+    const { execFileSync } = await import('node:child_process')
+    let hasGit = false
+    try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 5000 }); hasGit = true } catch {}
+    const tarMod = await import('../lib/tar.mjs')
+    items.push(ok('代码归档', hasGit ? 'git 可用（睡眠第三阶段走 git 提交）' : '容器内无 git → 睡眠归档自动走内置 tar.gz（' + (typeof tarMod.tarGzDir === 'function' ? '已就绪' : '模块缺失') + '）'))
+  } catch (e) { items.push(warn('代码归档', '检查失败：' + e.message)) }
+
+  // 5.8) 干跑审计：有多少"她本来要说但没说出去"的话积压着
+  try {
+    const mem = await import('../lib/memory.mjs')
+    const rows = mem.unsentAudit(200)
+    const today = rows.filter((x) => Date.now() - Number(x.ts || 0) < 24 * 3600_000)
+    if (today.length) {
+      items.push(warn('干跑审计', today.length + ' 条拟回复未发送（guard.dryRun）—— 已单独存 audit/unsent.jsonl，不进记忆'))
+    } else {
+      items.push(ok('干跑审计', '没有未发送的拟回复'))
+    }
+  } catch (e) { items.push(warn('干跑审计', '检查失败：' + e.message)) }
+
+  // 5.9) 平台开关一致性（v5：只判自己，不互相牵连）
+  try {
+    const P = await import('../lib/platforms.mjs')
+    const cfgP = config()
+    const snap = P.snapshot(cfgP)
+    const offs = snap.filter((x) => !x.on && x.dialog)
+    const conflicting = []
+    if (cfgP.platforms?.qq === false && cfgP.qq?.enabled === true) conflicting.push('platforms.qq=false 但 qq.enabled=true')
+    if (cfgP.platforms?.wechat === false && cfgP.wechat?.enabled === true) conflicting.push('platforms.wechat=false 但 wechat.enabled=true')
+    if (conflicting.length) items.push(warn('平台开关', conflicting.join('；') + ' —— 平台会被判为关闭（取"与"），面板上请统一'))
+    else items.push(ok('平台开关', snap.filter((x) => x.dialog).map((x) => x.label + '=' + (x.on ? '开' : '关')).join(' · ') + (offs.length ? '（关闭原因见 /health）' : '')))
+  } catch (e) { items.push(warn('平台开关', '检查失败：' + e.message)) }
+
   // 6) 容器/沙箱
   const inDocker = fs.existsSync('/.dockerenv')
   items.push(ok('运行环境', (inDocker ? '容器内' : '宿主机') + ' · ' + process.platform + ' · node ' + process.version))
