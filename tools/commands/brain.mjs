@@ -87,7 +87,7 @@ export async function run(argv = []) {
     let chatFn = null
     if (has('--llm')) {
       const llm = await import('../lib/llm.mjs')
-      chatFn = (messages) => llm.chat(messages, { temperature: 0.3, max_tokens: 400 })
+      chatFn = (messages) => llm.chat(messages, { temperature: 0.3, max_tokens: 400, purpose: 'fast' })
     }
     const r = brain.runConsolidation({ dryRun, chatFn })
     console.log(JSON.stringify(r, null, 1))

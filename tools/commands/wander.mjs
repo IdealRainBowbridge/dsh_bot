@@ -72,7 +72,7 @@ export async function wander() {
   const r = await llm.chat([
     { role: 'system', content: sys },
     { role: 'user', content: user },
-  ], { temperature: 1.0, max_tokens: 300, timeoutMs: 30000 })
+  ], { temperature: 1.0, max_tokens: 300, timeoutMs: 30000, purpose: 'deep' })
 
   const m = String(r || '').match(/\{[\s\S]*\}/)
   if (!m) return null

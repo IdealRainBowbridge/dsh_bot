@@ -25,6 +25,12 @@ export const configPath = process.env.FEIYU_CONFIG || dshPath('feiyu.config.json
 /** 数据目录：凭据 / 账本 / 记忆 / 情绪（换机器时整个拷走）。
  *  ⚠️ 测试一定要隔离：`FEIYU_DATA_DIR` 或把 USERPROFILE 指到临时目录都行。
  *  10-27 的教训：有测试只设了自定义变量、没设 USERPROFILE，结果把真记忆库写成两条假数据。 */
+// 10-31：调试模式必须显式隔离，否则一行 env 就能把测试数据写进她的真实记忆。
+// FEIYU_DEBUG=1 且没给 FEIYU_DATA_DIR → 抛错（宁可启动就吵，也别污染）。
+const __DEBUG = process.env.FEIYU_DEBUG === '1' || process.env.FEIYU_DEBUG === 'true'
+if (__DEBUG && !process.env.FEIYU_DATA_DIR) {
+  throw new Error('FEIYU_DEBUG 已开启，但没设 FEIYU_DATA_DIR —— 拒绝用真实记忆库跑调试（会污染她的记忆）。请设一个临时目录。')
+}
 export const dataDir = process.env.FEIYU_DATA_DIR ? path.resolve(process.env.FEIYU_DATA_DIR) : homePath('.feiyu-ai')
 export const dataPath = (...parts) => path.join(dataDir, ...parts)
 

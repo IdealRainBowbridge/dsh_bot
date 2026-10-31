@@ -453,7 +453,22 @@ export async function run(argv = []) {
         if (/(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut)) return 1.05
         return 0.92
       })()
-      const answer = await llm.chat(messages, { temperature: dynTemp })
+      // 10-31：带工具的一轮（记承诺/查记忆/写日记/上网/看视频），失败自动退回纯文本。
+      const toolsOn = config().qq?.tools?.enabled !== false
+      let answer = ''
+      let toolTrace = []
+      if (toolsOn) {
+        try {
+          const { chatWithTools } = await import('../lib/agent.mjs')
+          const r = await chatWithTools(messages, { temperature: dynTemp, purpose: 'chat' })
+          answer = r.text
+          toolTrace = r.tools || []
+          if (toolTrace.length) log('[qq] 🔧 用了工具：' + toolTrace.map((t) => t.name + (t.ok ? '✓' : '✗')).join(' '))
+        } catch (e) {
+          logErr('[qq] 工具链失败，退回纯文本：' + (e?.message ?? e))
+        }
+      }
+      if (!answer) answer = await llm.chat(messages, { temperature: dynTemp, purpose: 'chat' })
       try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch {}
       // 情绪联动（10-31 智能化）：这轮对话的情感影响 → affect（事件驱动的情绪层）。
       // LLM 顺手判（复用回复的上下文，不额外调模型）：正/负/中性 + 强度。
@@ -462,7 +477,7 @@ export async function run(argv = []) {
         try {
           const sa = await llm.chat([
             { role: 'user', content: '判断这段对话对"大肥鱼"（一只鲸鱼娘AI）的情绪影响。只输出 JSON：{"v": -1到1的数字, "a": 0到1的数字}（v=正负情绪 a=激活度）。无聊闲聊给 {"v":0.1,"a":0.3}，被夸/开心给正v高a，被怼/难过给负v，严肃/沉重给负v低a。只输出JSON。\n\n她的回复：' + String(answer).slice(0, 200) + '\n对方说的：' + String(userText).slice(0, 200) },
-          ], { temperature: 0.3, max_tokens: 60, timeoutMs: 12000 })
+          ], { temperature: 0.3, max_tokens: 60, timeoutMs: 12000, purpose: 'fast' })
           const sm = String(sa?.content ?? sa ?? '').match(/\{[\s\S]*\}/)
           if (sm) {
             const sj = JSON.parse(sm[0])
@@ -485,7 +500,7 @@ export async function run(argv = []) {
               + `\n\n【重写】你刚才那句「${out.slice(0, 40)}」是在叫对方「主人」，但他只是群友（QQ ${userId}）。`
               + `重写这一条：一个字都不许出现"主人"。`,
           }
-          const answer2 = await llm.chat(retry, { temperature: 0.8 })
+          const answer2 = await llm.chat(retry, { temperature: 0.8, purpose: 'chat' })
           const out2 = guard.clean(answer2, config())
           if (out2) out = out2
         } catch (e) { logErr('[qq] 群聊重写失败：' + e.message) }
@@ -507,7 +522,7 @@ export async function run(argv = []) {
             content: messages[messages.length - 1].content
               + `\n\n【重写】你刚才那句「${out.slice(0, 40)}」里的天数是编的。真实是「${gapTxt}」。重写这一条，一个字都别出现"天"。`,
           }
-          const answer2 = await llm.chat(retry, { temperature: 0.8 })
+          const answer2 = await llm.chat(retry, { temperature: 0.8, purpose: 'chat' })
           const out2 = guard.clean(answer2, config())
           if (out2 && !mentionsDays(out2)) out = out2
         } catch (e) { logErr('[qq] 重写失败：' + e.message) }
@@ -578,7 +593,7 @@ export async function run(argv = []) {
         if (!isGroup && ownerQQ && String(userId) === ownerQQ) {
           qqMemory.bump(chatId)
           if (qqMemory.due(chatId)) {
-            qqMemory.refresh({ chatId, owner: config().owner, chat: (m) => llm.chat(m) })
+            qqMemory.refresh({ chatId, owner: config().owner, chat: (m) => llm.chat(m, { purpose: 'fast' }) })
               .then((ok) => { if (ok) log('[qq] 记忆已压缩（摘要 + 主人画像）') })
               .catch((e) => logErr('[qq] 记忆压缩失败：', e.message))
           }
@@ -663,7 +678,7 @@ export async function run(argv = []) {
         if (!isGroup && ownerQQ && String(userId) === ownerQQ) {
           qqMemory.bump(chatId)
           if (qqMemory.due(chatId)) {
-            qqMemory.refresh({ chatId, owner: config().owner, chat: (m) => llm.chat(m) })
+            qqMemory.refresh({ chatId, owner: config().owner, chat: (m) => llm.chat(m, { purpose: 'fast' }) })
               .then((ok) => { if (ok) log('[qq] 记忆已压缩（摘要 + 主人画像）') })
               .catch((e) => logErr('[qq] 记忆压缩失败：', e.message))
           }
@@ -1190,7 +1205,7 @@ export async function run(argv = []) {
         const dResp = await llm.chat([
           { role: 'system', content: '你是大肥鱼。回答"现在要不要主动给笨蛋老爹发消息"。判据（自己权衡，不是规则）：你有真的想说的吗？现在时段合不合适？连续发过就别再发。输出 JSON：{"decision":"yes|later|no","hook":"想说的话头（yes 时给一句，20字内）","reason":"一句话理由"}。decision 必须诚实——没有想说的就说 no，别为了说话而说话。' },
           { role: 'user', content: `现在：${dowText} ${hourNow}点。他已安静 ${quietMin || 0} 分钟。你的情绪值 ${Math.round(Number(moodNow2.value) || 60)}/100。最近：${recentLine || '（安静）'}。上次搭话说了：${lastProact.lastText ? String(lastProact.lastText).slice(0, 40) : '（今天还没说过）'}。` },
-        ], { temperature: 0.8, max_tokens: 80, timeoutMs: 15000, model: cfgNow.llm?.content_model })
+        ], { temperature: 0.8, max_tokens: 80, timeoutMs: 15000, model: cfgNow.llm?.content_model, purpose: 'deep' })
         const m2 = String(dResp?.content ?? dResp ?? '').match(/\{[\s\S]*\}/)
         if (m2) {
           const j2 = JSON.parse(m2[0])
@@ -1313,7 +1328,7 @@ export async function run(argv = []) {
           + (hooks.length ? '你手上的真实素材（自然地用，别照念）：\n- ' + hooks.join('\n- ') + '\n' : '')
           + '像真人发微信：一条，一两句话，自然具体。禁止"在吗/你好"式开场。只输出 JSON：{"type":"日常|思考|疑惑|心情|安利","text":"消息正文"}' },
       ]
-      const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 300 })
+      const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 300, purpose: 'deep' })
       let out = ''
       let usedType = '日常'
       try {
@@ -1341,7 +1356,7 @@ export async function run(argv = []) {
                 + `\n\n【重写】他已经说过「${known.value}」了，你刚才那句还在问，等于没听人说话。`
                 + `换成别的由头重写一条（不许再问吃没吃/在干嘛）。`,
             }
-            const r2 = await llm.chat(retry, { temperature: 0.9, max_tokens: 300 })
+            const r2 = await llm.chat(retry, { temperature: 0.9, max_tokens: 300, purpose: 'deep' })
             let out2 = ''
             try {
               const m2 = String(r2 ?? '').match(/\{[\s\S]*\}/)
@@ -1561,7 +1576,7 @@ export async function run(argv = []) {
             + '只输出 JSON：{"speak":true或false,"text":"要发的话"}\n\n最近群聊：\n'
             + recent.map((m) => (m.role === 'assistant' ? '我' : '群友') + '：' + String(m.content).slice(0, 60)).join('\n') },
         ]
-        const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 200 })
+        const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 200, purpose: 'chat' })
         const m = String(resp ?? '').match(/\{[\s\S]*\}/)
         if (!m) continue
         let j; try { j = JSON.parse(m[0]) } catch { continue }
@@ -1614,7 +1629,7 @@ export async function run(argv = []) {
         { role: 'user', content: '【发说说】现在以你的名义发一条 QQ 空间说说。基于你最近在外面看到的/今天的心情/最近琢磨的小念头，随手一条：'
           + '60~120 字，口语、真实、像发朋友圈，不要话题标签不要 @ 不要称呼主人。可以就是一句碎碎念，也可以带一点小情绪。只输出说说正文。' },
       ]
-      const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 300 })
+      const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 300, purpose: 'deep' })
       const text = guard.clean(String(resp ?? ''), config())
       if (!text || text.length < 8) return
       // 配图：按概率画一张贴题的鲸鱼娘表情包（图生图）

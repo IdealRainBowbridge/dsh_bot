@@ -115,7 +115,7 @@ export async function run(argv = []) {
             + 'comment 里至少要有一样是你从上面信息里真看见的具体东西：一个画面、一句话、一个数字、一个动作。' },
           { role: 'user', content: `视频《${it.title}》\n看懂的信息：${ctxBrief}\n写评论：` },
         ]
-        const resp = await llm.chat(msgs, { temperature: 0.85 })
+        const resp = await llm.chat(msgs, { temperature: 0.85, purpose: 'creative' })
         const m = String(resp?.content ?? resp ?? '').match(/\{[\s\S]*\}/)
         if (m) { const j = JSON.parse(m[0]); comment = String(j.comment || ''); reason = String(j.reason || ''); score = Number(j.score) || 15; danmaku = String(j.danmaku || '').slice(0, 25); sticker = String(j.sticker || '').slice(0, 12) }
       } catch (e) { log('[bili-watch] 评论生成失败：' + e.message); continue }

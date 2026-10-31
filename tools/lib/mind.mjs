@@ -171,7 +171,7 @@ export async function plan({ now = Date.now(), force = false } = {}) {
   const r = await llm.chat([
     { role: 'system', content: sys },
     { role: 'user', content: lines.join('\n') },
-  ], { temperature: 0.95, max_tokens: 200, timeoutMs: 30000, model: cfg.llm?.content_model })
+  ], { temperature: 0.95, max_tokens: 200, timeoutMs: 30000, model: cfg.llm?.content_model, purpose: 'deep' })
 
   const m = String(r || '').match(/\{[\s\S]*\}/)
   if (!m) return null

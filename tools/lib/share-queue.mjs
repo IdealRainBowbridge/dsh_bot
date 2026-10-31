@@ -72,7 +72,7 @@ export async function shareTick() {
     const r = await llm.chat([
       { role: 'system', content: '你是大肥鱼，鲸鱼娘，在 QQ 私信跟笨蛋老爹分享你刚遇到的事。像跟家人随口聊：50 字内，口语，说清是什么事+你的一点真实感受，别客套别总结。只输出消息本身。' },
       { role: 'user', content: `刚发生的事（${ev.kind}）：${ev.title}${ev.text ? '——' + ev.text : ''}${ev.meta ? '（' + ev.meta + '）' : ''}` },
-    ], { temperature: 0.95, max_tokens: 120, timeoutMs: 20000 })
+    ], { temperature: 0.95, max_tokens: 120, timeoutMs: 20000, purpose: 'creative' })
     text = String(r || '').trim()
   } catch {}
   if (!text) text = `老爹，${ev.title}。${ev.text || ''}`

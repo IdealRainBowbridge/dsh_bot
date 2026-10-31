@@ -148,7 +148,7 @@ export async function sing(theme = '', mode = 'rap') {
       { role: 'user', content: `歌词：${lyrics.join(' ')}\nBPM: ${bpm}\n生成旋律序列：` },
     ]
     try {
-      const resp2 = await llm.chat(msgs2, { temperature: 0.7, max_tokens: 200 })
+      const resp2 = await llm.chat(msgs2, { temperature: 0.7, max_tokens: 200, purpose: 'creative' })
       melodyNotes = String(resp2 ?? '').trim().slice(0, 300)
     } catch { melodyNotes = '' }
   }

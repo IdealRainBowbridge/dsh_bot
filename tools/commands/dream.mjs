@@ -81,7 +81,7 @@ async function compose(seedTexts) {
   const r = await llm.chat([
     { role: 'system', content: DREAM_SYS },
     { role: 'user', content: user + NL + NL + '写这个梦。' },
-  ], { temperature: 1.35, max_tokens: 200, timeoutMs: 25000 })
+  ], { temperature: 1.35, max_tokens: 200, timeoutMs: 25000, purpose: 'creative' })
   return String(r || '').trim()
 }
 

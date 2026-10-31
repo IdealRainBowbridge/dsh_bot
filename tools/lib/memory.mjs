@@ -8,6 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 import { config } from './config.mjs'
 import { normalizeMemoryText } from './normalize.mjs'
 
@@ -64,9 +65,38 @@ export function episodeFile(platform) {
 /** 记一条事件。role: user|assistant|event。summary 取前 120 字。
  *  platform 缺省时按 chatId 前缀推断（曾出过 54 条无平台标记的脏数据）。
  *  写入前做占位符归一（normalize.mjs）：裸的 `[分享视频]` 会让模型以为"内容丢了"。 */
+/**
+ * 明显是"自测/调试话术"的文本 —— 不该进她的记忆库（10-31 事故）。
+ * 事故经过：调试时发的「【测试】链路已修复」「打字标识测试」「融合测试：这条应该双写 brain」
+ * 全被 remember 记进去，她后来当成真实对话读，回复里冒出"我这边测试都跑完了"——
+ * 对主人说开发语言，人格直接破功。
+ * 这里挡的是**明确的测试话术**，不是正常聊天（"测试"两个字单独出现不算）。
+ */
+const SELFTEST_PATTERNS = [
+  /^【(测试|调试|验证)[^】]*】/,
+  /打字标识(测试|部署)/,
+  /^(融合测试|双写验证|链路验证|端到端验证)/,
+  /这条是验证消息/,
+  /^【(打字标识|联调)/,
+  /(P0|P1|P2) 修复/,
+  /^收到，确认记录：[sS]*事件类型.*（刚发生）/,
+]
+
+function looksLikeSelfTest(t) {
+  const s = String(t || '').trim()
+  if (!s) return false
+  // 短句里带"测试"但没有具体内容 → 多半是自测；正常聊天很少这么开头
+  return SELFTEST_PATTERNS.some((re) => re.test(s))
+}
+
 export function remember(platform, chatId, userId, role, text, extra = {}) {
   const p = String(platform || platformOf(chatId) || 'misc')
   const t = normalizeMemoryText(String(text ?? ''))
+  // 10-31：自测话术不进记忆（除非显式 allowSelfTest，给真要做回归的测试用）
+  if (!extra.allowSelfTest && looksLikeSelfTest(t)) {
+    try { swallow(new Error('self-test text rejected'), 'memory:remember-selftest-guard') } catch (e) { swallow(e, 'tools/lib/memory.mjs:97') }
+    return null
+  }
   const rec = {
     ts: Date.now(), platform: p, chatId, userId, role,
     text: t, summary: t.slice(0, 120),
@@ -84,7 +114,7 @@ export function remember(platform, chatId, userId, role, text, extra = {}) {
   // dual-write brain (10-31 fuse)
   try {
     import('./brain-bridge.mjs').then((B) => B.rememberToBrain(rec)).catch(() => {})
-  } catch {}
+  } catch (e) { swallow(e, 'tools/lib/memory.mjs:117') }
 }
 
 // 单文件太大时按月份分片（照 dsh-world「按天归档 + 原文全留」的思路，只是粒度用月）。
@@ -106,7 +136,7 @@ function rotateIfBig(base) {
     const keep = [], move = new Map()
     for (const line of lines) {
       let r = null
-      try { r = JSON.parse(line) } catch {}
+      try { r = JSON.parse(line) } catch (e) { swallow(e, 'tools/lib/memory.mjs:139') }
       const ts = Number(r?.ts) || 0
       const d = new Date(ts || Date.now())
       const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -120,7 +150,7 @@ function rotateIfBig(base) {
     }
     // 先写分片再截断主文件：中途崩溃最多重复，不会丢
     fs.writeFileSync(base, keep.join('\n') + (keep.length ? '\n' : ''))
-  } catch {}
+  } catch (e) { swallow(e, 'tools/lib/memory.mjs:153') }
 }
 
 /** 主文件 + 它的所有按月分片。 */
@@ -131,7 +161,7 @@ export function shardsOf(base) {
     for (const f of fs.readdirSync(dir)) {
       if (/^episodes-\d{4}-\d{2}\.jsonl$/.test(f)) out.push(path.join(dir, f))
     }
-  } catch {}
+  } catch (e) { swallow(e, 'tools/lib/memory.mjs:164') }
   return out
 }
 
@@ -155,7 +185,7 @@ function readRows(chatId, opts = {}) {
         const r = JSON.parse(line)
         if (!chatId) { rows.push(r); continue }
         if (r.chatId === chatId) rows.push(r)
-      } catch {}
+      } catch (e) { swallow(e, 'tools/lib/memory.mjs:188') }
     }
   }
   rows.sort((a, b) => Number(a.ts) - Number(b.ts))
@@ -528,7 +558,7 @@ export function sweepEpisodes(days = 90) {
       fs.appendFileSync(file.replace(/\.jsonl$/, '') + '.archive.jsonl', old.join('\n') + '\n')
       fs.writeFileSync(file, keep.length ? keep.join('\n') + '\n' : '')
       archived += old.length
-    } catch {}
+    } catch (e) { swallow(e, 'tools/lib/memory.mjs:561') }
   }
   return archived
 }
@@ -538,7 +568,7 @@ export function sweepEpisodes(days = 90) {
 export function stats() {
   let episodes = 0
   for (const file of [EP_FILE, QQ_EP_FILE, WECHAT_EP_FILE]) {
-    try { episodes += fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).length } catch {}
+    try { episodes += fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).length } catch (e) { swallow(e, 'tools/lib/memory.mjs:571') }
   }
   const f = readJson(FACT_FILE, {})
   return {

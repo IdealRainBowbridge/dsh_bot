@@ -156,26 +156,80 @@ function foldSystemIntoUser(messages, c) {
   return [{ role: 'user', content: head }, ...rest]
 }
 
+/**
+ * 用途分级（10-31）：不同场景对"想多久"的要求不同。
+ *
+ * 实测 deepseek-v4-pro：
+ *   默认（不传 reasoning_effort）  2.1~2.7s  reasoning 0 字
+ *   reasoning_effort=high          4.4s      reasoning 207 字，回答明显更有层次
+ *   thinking:{type:'disabled'}     2.1s      最快
+ *
+ * 所以不搞"全局开/关"，按用途给默认值；单次调用仍可用 opts.reasoningEffort 覆盖。
+ */
+export const PURPOSES = {
+  // ⚠️ 默认全部 effort:'off' —— 这是 5×4 实测出来的结论，不是保守。
+  //   v4-pro + off    成功 5/5  2.8s   ← 最佳
+  //   v4-pro + 不传   成功 5/5  11.6s
+  //   v4-pro + high   成功 4/5  10.1s  还会偶发断连 + 吐 DSML 工具标记
+  // reasoning 是"需要时显式开"的能力；默认开只会让陪聊变慢、变不可靠。
+  chat: { effort: 'off', maxTokens: 700, temperature: 0.92 },      // 日常陪聊
+  deep: { effort: 'off', maxTokens: 1200, temperature: 0.95 },     // 需要想清楚再答（靠更长输出，不靠思考链）
+  tool: { effort: 'off', maxTokens: 800, temperature: 0.3 },       // 要调工具，别啰嗦
+  fast: { effort: 'off', maxTokens: 200, temperature: 0.2 },       // 内部短任务
+  creative: { effort: 'off', maxTokens: 1000, temperature: 1.0 },  // 写日记/评论/说说
+  reason: { effort: 'high', maxTokens: 2000, temperature: 0.6 },   // 显式要"想很久"时才用（会慢 4 倍）
+}
+
+/**
+ * 剥掉模型误输出的原生工具调用标记（deepseek-v4-pro 的 DSML 格式）。
+ * 实测样本：`<｜｜DSML｜｜tool_calls>` / `<｜｜DSML｜｜invoke name="exec_command">` …
+ * 这些是"它想调工具但请求没带 tools 声明"时的产物，绝不能出现在聊天正文里。
+ * @param {string} text 模型原始输出
+ * @returns {string} 清理后的文本（可能为空串）
+ */
+export function stripDsml(text) {
+  let t = String(text ?? '')
+  // ① 整块 tool_calls（含 invoke/parameter）
+  t = t.replace(/<[｜|]{1,2}DSML[｜|]{1,2}[\s\S]*?<\/[｜|]{1,2}DSML[｜|]{1,2}tool_calls>/g, '')
+  // ② 任何残留的单标记（开/闭都算）
+  t = t.replace(/<\/?[｜|]{1,2}DSML[｜|]{1,2}[^>]*>/gi, '')
+  // ③ 收尾：压缩多余空行
+  t = t.replace(/\n{3,}/g, '\n\n').trim()
+  return t
+}
+
 function payloadOf(c, messages, opts = {}) {
-  // 推理模型：max_tokens 至少要 1024，否则正文一个字都出不来（实测 kimi/hy3 在 24 时全空）
-  const base = opts.max_tokens || c.max_tokens || 600
+  // 用途分级：没显式给参数时按 purpose 取默认（chat/deep/tool/fast/creative）
+  const P = PURPOSES[opts.purpose] || PURPOSES.chat
+  const base = opts.max_tokens || c.max_tokens || P.maxTokens || 600
   // 推理模型的下限 1024：实测 kimi-k2.8-preview / hy3 在 max_tokens=24 时
   // finish_reason=length、content 为空的空串（token 全烧在 reasoning_content 上）。
   const cap = isReasoningModel({ ...c, model: opts.model || c.model }) ? Math.max(base, 1024) : base
-  return {
+  const payload = {
     model: opts.model || c.model || 'deepseek-chat',
     // 10-31：中转网关会丢弃 system 角色 → 统一折进 user（c.systemRole='keep' 可关闭）
     messages: foldSystemIntoUser(messages, c),
-    temperature: opts.temperature ?? (c.temperature ?? 0.92),
+    temperature: opts.temperature ?? (c.temperature ?? P.temperature ?? 0.92),
     max_tokens: cap,
     presence_penalty: 0.3,     // 防复读
     frequency_penalty: 0.2,
     stream: opts.stream === true,
     // 供应商私有参数（10-26）：如千问系的 { enable_thinking: false }。
-    // 实测开了思考链，同一段人格 prompt 要 14s；关掉 1.4s —— 陪聊场景必须关。
     ...(c.params || {}),
     ...(opts.params || {}),
   }
+  // ── reasoning（10-31）──────────────────────────────────────────────────
+  // 优先显式 opts.reasoningEffort → 通道配置 c.reasoningEffort → 用途默认值。
+  // 'off' 时发 thinking:{type:'disabled'}（部分供应商认这个），否则发 reasoning_effort。
+  // 注意：这个网关对不认识的字段是静默忽略，不会报错 —— 所以发错了也看不出来，
+  // 只能靠 diagnose 的"推理模型声明"那一条兜底。
+  const effort = opts.reasoningEffort ?? c.reasoningEffort ?? P.effort
+  if (effort === 'off') {
+    payload.thinking = { type: 'disabled' }
+  } else if (effort && effort !== 'auto') {
+    payload.reasoning_effort = effort
+  }
+  return payload
 }
 function payload(messages, opts = {}) {
   return payloadOf(_cfg(), messages, opts)
@@ -276,7 +330,11 @@ export async function chat(messages, opts = {}) {
     }
     // 直连通道自己记账（账本只扫 DSH 会话，扫不到这条路）
     try { recordDirectUsage(j.usage, { model: c.model, via: 'chat' }) } catch {}
-    return out
+    // 10-31：v4-pro 推理模式会吐原生 DSML 工具调用标记，没带 tools 时会泄漏成正文。
+    // 兜底剥离；剥完是空的就抛错（宁可报错，也不能把尖括号垃圾当消息发出去）。
+    const cleaned = stripDsml(out)
+    if (!cleaned) throw new Error('模型只输出了工具调用标记，没有可发的内容')
+    return cleaned
   }
 
   const breakers = readBreakers()
@@ -357,6 +415,56 @@ export async function* chatStream(messages, opts = {}) {
       } catch { /* 忽略坏帧 */ }
     }
   }
+}
+
+/**
+ * 原始调用：返回完整的 message 对象（含 tool_calls / reasoning），给工具调用循环用。
+ * chat() 是它的"只要文本"简化版。
+ * @returns {Promise<{message:object, text:string, usage:object, finishReason:string}>}
+ */
+export async function chatRaw(messages, opts = {}) {
+  const levels = [{ ..._cfg(), __key: 'main' }]
+  if (!opts.noFallback) for (let i = 0; i < _chain().length; i++) levels.push({ ..._chain()[i], __key: 'fb' + (i + 1) })
+  const breakers = readBreakers()
+  const errs = []
+  for (let i = 0; i < levels.length; i++) {
+    const c = levels[i]
+    const key = c.__key
+    if (i > 0 && isOpen(key, breakers)) { errs.push(key + '：熔断中'); continue }
+    try {
+      const payload = payloadOf(c, messages, opts)
+      if (Array.isArray(opts.tools) && opts.tools.length) {
+        payload.tools = opts.tools
+        payload.tool_choice = opts.toolChoice || 'auto'
+      }
+      // 带 tools 时要关掉 thinking（实测 v4-pro 推理模式会和原生工具调用打架，吐 DSML）
+      if (Array.isArray(opts.tools) && opts.tools.length) {
+        payload.thinking = { type: 'disabled' }
+        delete payload.reasoning_effort
+      }
+      const r = await fetch(endpointOf(c), {
+        method: 'POST',
+        headers: headersOf({ ...c, api_key: c.api_key || apiKey() }),
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(opts.timeoutMs || 90000),
+      })
+      if (!r.ok) throw new Error('LLM HTTP ' + r.status + ': ' + (await r.text()).slice(0, 200))
+      const j = await r.json()
+      const msg = j.choices?.[0]?.message || {}
+      try { recordDirectUsage(j.usage, { model: c.model, via: 'raw' }) } catch (e) { swallow(e, 'llm:record') }
+      bumpOk(key)
+      return {
+        message: { ...msg, content: stripDsml(String(msg.content ?? '')) },
+        text: stripDsml(String(msg.content ?? '')),
+        usage: j.usage || {},
+        finishReason: j.choices?.[0]?.finish_reason || '',
+      }
+    } catch (e) {
+      bumpFail(key, e)
+      errs.push(key + '（' + c.model + '）：' + String(e.message).slice(0, 90))
+    }
+  }
+  throw new Error('全部 ' + levels.length + ' 个 LLM 通道失败 → ' + errs.join('；'))
 }
 
 /** 要求模型只回 JSON（用于写脚本/文案）。 */

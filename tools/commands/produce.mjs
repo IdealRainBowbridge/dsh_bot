@@ -363,7 +363,7 @@ async function makePlan({ topic, platform, lockedDebut }) {
   for (let attempt = 1; attempt <= maxTries; attempt++) {
     try {
       const resp = await llm.chat([{ role: 'system', content: system }, { role: 'user', content: user }],
-        { temperature: lockedDebut ? 0.8 : 0.95, max_tokens: 1600 })
+        { temperature: lockedDebut ? 0.8 : 0.95, max_tokens: 1600, purpose: 'deep' })
       plan = extractJson(resp)
       if (!Array.isArray(plan.scenes) || plan.scenes.length < 3) throw new Error('分镜不足（<3 幕）')
       if (!lockedDebut) break

@@ -111,7 +111,7 @@ async function ownWorks(maxLeft, go, log = console.log) {
         + `\n最多挑 ${maxLeft} 条。只输出 JSON：{"replies":[{"index":序号,"text":"回复内容"}]}，都不想接就 {"replies":[]}` },
       { role: 'user', content: news.slice(0, 12).map((n, i) => `${i + 1}. [${String(n.vtitle).slice(0, 12)}] ${n.uname}：${String(n.label || n.text).slice(0, 50)}`).join('\n') },
     ]
-    const resp = await llm.chat(msgs, { temperature: 0.9, max_tokens: 400 })
+    const resp = await llm.chat(msgs, { temperature: 0.9, max_tokens: 400, purpose: 'creative' })
     const m = String(resp ?? '').match(/\{[\s\S]*\}/)
     if (m) for (const r of (JSON.parse(m[0]).replies || [])) {
       const n = news[Number(r.index) - 1]
@@ -200,7 +200,7 @@ async function outreach(maxLeft, go) {
           + '挑**一条**你觉得有意思的（有观点/有梗/搞笑/认真讨论，别挑引战和擦边；名字带鱼/鲸的同类优先），以"本鱼"身份（AI鱼不装人）自然地插一句楼中楼：接梗/补充/认同+自己的角度，一两句话，像熟人在评论区碰见。不要敬语不要"感谢分享"。只输出 JSON：{"pick":序号(1开始),"text":"回复内容"}，不想搭就 {"pick":0}' },
         { role: 'user', content: ordered.map((x, n) => `${n + 1}. ${x.r.member?.uname ?? '网友'}${x.fishy ? ' 🐟[疑似同类]' : ''}：${String(x.r.content?.message).slice(0, 60)}`).join('\n') + '\n\n挑一条搭话：' },
       ]
-      const resp = await llm.chat(msgs, { temperature: 0.9, max_tokens: 150 })
+      const resp = await llm.chat(msgs, { temperature: 0.9, max_tokens: 150, purpose: 'creative' })
       const m = String(resp ?? '').match(/\{[\s\S]*\}/)
       if (m) { const j = JSON.parse(m[0]); pick = Number(j.pick || 0) - 1; text = String(j.text || '').slice(0, 80); if (pick >= 0 && pick < ordered.length) pick = ordered[pick].i }
       else pick = -1
@@ -316,7 +316,7 @@ export async function run(argv = []) {
             + '身份透明（是AI鱼不装人，自称"本鱼"）。不要敷衍"感谢分享"，不要用敬语。只输出回复正文。' },
           { role: 'user', content: `对方「${it.reply.uname}」在我的评论下回复：${it.reply.text}\n\n我怎么回：` },
         ]
-        replyText = String(await llm.chat(msgs, { temperature: 0.9, max_tokens: 120 }) || '').trim().slice(0, 80)
+        replyText = String(await llm.chat(msgs, { temperature: 0.9, max_tokens: 120, purpose: 'creative' }) || '').trim().slice(0, 80)
       } catch (e) { console.log('  ✗ 生成失败：' + e.message); continue }
       if (!replyText) continue
       // 10-27：被动回评也能换成表情包/图片（同一套概率）

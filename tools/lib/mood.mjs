@@ -111,13 +111,14 @@ export function mood() { return readState() }
 /** 时段 phase —— 同一句话在 7 点和 2 点必须不一样（dafeiyu 的核心设计）。 */
 function phaseText(now = new Date()) {
   const h = now.getHours()
-  if (h >= 6 && h < 10) return '刚醒，脑子还没转，回答会很短'
-  if (h >= 10 && h < 11) return '上午，正常'
-  if (h >= 11 && h < 13) return '快吃饭了，可以顺口提一句吃的，但别追着问'
-  if (h >= 13 && h < 17) return '下午，正常过日子（别老是喊困，该干嘛干嘛）'
-  if (h >= 17 && h < 20) return '到晚饭点了'
-  if (h >= 20 && h < 24) return '晚上精神最好，话多'
-  return '半夜，有点困但不想睡'
+  // 只描述状态，不夹带"要短""话多"这类长度指令 —— 长度应由对话场景决定（10-31）
+  if (h >= 6 && h < 10) return '早上，刚醒，人还有点糊'
+  if (h >= 10 && h < 11) return '上午'
+  if (h >= 11 && h < 13) return '快到饭点了'
+  if (h >= 13 && h < 17) return '下午'
+  if (h >= 17 && h < 20) return '晚饭时间'
+  if (h >= 20 && h < 24) return '晚上'
+  return '半夜了'
 }
 
 /**
@@ -176,9 +177,10 @@ export function stateBlock(turnsToday = 0, platform = 'bilibili', isGroup = fals
   // 10-31：先让 affect 影响 mood（有惯性），再用合并后的单一分数说话 ——
   // 不再让两套情绪在同一个 prompt 里各说各话。
   const aff = affectTarget()
-  const style = m.value < 30 ? '不太想说话，句子短一点'
-    : m.value > 75 ? '挺高兴，可以主动闹一点'
-    : '正常，按平时说话'
+  // 低情绪 = 提不起劲，不是"必须说短句"（那会让难受的时候更冷）
+  const style = m.value < 30 ? '有点提不起劲'
+    : m.value > 75 ? '心情挺好'
+    : '平稳'
   // 饥饿措辞分档（10-27）：旧版 >60 就写"满脑子都是吃的"，一整天挂在提示词里 → 她开口就是饿。
   // 现在 75 以上才算"很饿"，60-75 只是"有点饿"，而且明确"别追着问主人吃了没"。
   const hunger = m.hunger > 75 ? `很饿（${Math.round(m.hunger)}/100）。`

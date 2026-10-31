@@ -188,7 +188,7 @@ async function roamLoop() {
           + (lastResults.length ? '\n- 上轮搜到的链接（读网页可选这些）：\n' + lastResults.slice(0, 4).map((r) => '  · ' + r.title.slice(0, 30) + ' ' + r.url).join('\n') : '')
           + '\n只输出 JSON：{"action":"搜索|读网页|写小说|学习|自我升级","query":"…","url":"…","text":"…","why":"一句话原因"}' },
       ]
-      const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 500 })
+      const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 500, purpose: 'creative' })
       const m = String(resp ?? '').match(/\{[\s\S]*\}/)
       if (!m) { console.log('（这轮没出计划，歇会儿）'); await sleep(60000); continue }
       let plan; try { plan = JSON.parse(m[0]) } catch { await sleep(60000); continue }
