@@ -63,4 +63,16 @@ assert.equal(inboundTokenOk(req({ ip: '127.0.0.1', auth: 'Bearer s3cret-extra-lo
   assert.equal(sent.length, 0)
 }
 
-console.log('✓ inbound-auth-test 全部通过（回环/token/定长比较/401）')
+// ── 6. OneBot 上报口的特殊语义（allowLoopback） ────────────────────────────
+// OneBot v11 的 HTTP 上报不支持自定义头，所以 /onebot 必须允许"回环免 token"，
+// 否则本机 QQ 网关会被安全策略直接断掉（安全改到不能用的典型）。
+{
+  const onebot = req({ ip: '127.0.0.1' })          // 不带 token
+  assert.equal(inboundTokenOk(onebot, cfg('s3cret')).ok, false, '默认：配了 token 就必须带')
+  assert.equal(inboundTokenOk(onebot, cfg('s3cret'), { allowLoopback: true }).ok, true, '/onebot 回环可以免 token')
+  assert.equal(inboundTokenOk(onebot, cfg('s3cret'), { allowLoopback: true }).reason, 'loopback(onebot)')
+  assert.equal(inboundTokenOk(req({ ip: '172.17.0.2' }), cfg('s3cret'), { allowLoopback: true }).ok, false, '跨机必须带 token')
+  assert.equal(inboundTokenOk(req({ ip: '127.0.0.1', auth: 'Bearer s3cret' }), cfg('s3cret'), { allowLoopback: true }).reason, 'token')
+}
+
+console.log('✓ inbound-auth-test 全部通过（回环/token/定长比较/401/OneBot 上报口）')

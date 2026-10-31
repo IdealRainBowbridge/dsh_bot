@@ -859,7 +859,12 @@ export async function run(argv = []) {
     // 其余入口统一过 inbound-auth：配了 qq.inboundToken 就强制校验 token，
     // 没配就只允许本机回环（跨容器/局域网一律 401）。
     if (req.url !== '/health') {
-      if (requireInboundToken(req, res, config())) return
+      // /onebot 是 OneBot v11 的上报口，它**不支持自定义请求头** ——
+      // 强制 token 会直接断掉本机 SnowLuma/NapCat（安全改到不能用）。
+      // 所以它只要求"本机回环"，其余入口（/inbound /outbound /task /event /sent）
+      // 配了 token 就严格校验。
+      const isOneBotIngress = req.method === 'POST' && req.url === '/onebot'
+      if (requireInboundToken(req, res, config(), { allowLoopback: isOneBotIngress })) return
     }
     if (req.method === 'POST' && req.url === '/onebot') {
       let body = ''

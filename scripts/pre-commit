@@ -1,0 +1,13 @@
+#!/bin/sh
+# pre-commit 门禁（v5）——只跑快检（语法 + 断链 + 注册表 + 双前缀），2 秒内出结果。
+#
+# 为什么需要：这一轮修的三个 P0 里，有两个是"代码能跑但语义错了"，
+# 但**语法坏 / import 断链**这类问题是一次都扛不住的（10-31 的 bili-watch 事故就是少一对引号）。
+# 每次 commit 跑一遍快检，成本 2 秒，能拦住最常见的一类"提交了但根本没跑"。
+#
+# 安装：git config core.hooksPath scripts   （或者把本文件拷到 .git/hooks/pre-commit）
+node "$(git rev-parse --show-toplevel)/scripts/check.mjs" --fast || {
+  echo ""
+  echo "✗ 门禁没过 —— 提交已中止。修完再提交（-n 可跳过，但别养成习惯）。"
+  exit 1
+}

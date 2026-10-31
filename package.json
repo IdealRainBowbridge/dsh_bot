@@ -36,8 +36,10 @@
   "scripts": {
     "test": "node tools/run-tests.mjs",
     "test:fast": "node test/client-smoke.mjs && node test/stickers-test.mjs && node test/memory-test.mjs",
+    "test:e2e": "node scripts/diagnose-smoke.mjs",
     "check": "node scripts/check.mjs",
-    "check:fast": "node scripts/check.mjs --fast"
+    "check:fast": "node scripts/check.mjs --fast",
+    "verify": "node scripts/check.mjs && node tools/run-tests.mjs && node scripts/diagnose-smoke.mjs"
   },
   "dsh": {
     "bundle": {
