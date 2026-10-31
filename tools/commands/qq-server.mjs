@@ -52,6 +52,7 @@ const LOG_FILE = dataPath('qq-server.log')
 // 微信/抖音私信后续也接进来（同一个 channel 实例）。
 import { channel as CHANNEL } from '../lib/channel.mjs'
 import * as CHANNEL_IO from '../lib/channel-io.mjs'
+import { gate as replyGate } from '../lib/reply-gate.mjs'
 
 /** 宿主是 stdio:'ignore' 起的进程，不打文件日志等于瞎 —— 出问题只能靠猜。 */
 function logLine(level, args) {
@@ -458,6 +459,9 @@ export async function run(argv = []) {
           }
         }
       } catch (e) { logErr('[qq] 记事实失败：' + (e?.message ?? e)) }
+
+      // 接话判断（10-31）：要不要回、隔多久回 —— 逻辑在 lib/reply-gate.mjs
+      if (!(await replyGate({ text: userText, merged: mergedN || 1, isGroup, atMe, extra, chatId, log }))) return
 
       // 生成回复（三段式 prompt + 走神注入）
       const turns = memory.recent(chatId).length
