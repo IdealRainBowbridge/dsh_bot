@@ -529,21 +529,18 @@ export async function run(argv = []) {
       }
       if (!answer) answer = await llm.chat(messages, { temperature: dynTemp, purpose: 'chat' })
       try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch {}
-      // 情绪联动（10-31 智能化）：这轮对话的情感影响 → affect（事件驱动的情绪层）。
-      // LLM 顺手判（复用回复的上下文，不额外调模型）：正/负/中性 + 强度。
-      // fire-and-forget，不阻塞回复。
-      import('../brain/affect.mjs').then(async ({ feel }) => {
-        try {
-          const sa = await llm.chat([
-            { role: 'user', content: '判断这段对话对"大肥鱼"（一只鲸鱼娘AI）的情绪影响。只输出 JSON：{"v": -1到1的数字, "a": 0到1的数字}（v=正负情绪 a=激活度）。无聊闲聊给 {"v":0.1,"a":0.3}，被夸/开心给正v高a，被怼/难过给负v，严肃/沉重给负v低a。只输出JSON。\n\n她的回复：' + String(answer).slice(0, 200) + '\n对方说的：' + String(userText).slice(0, 200) },
-          ], { temperature: 0.3, max_tokens: 60, timeoutMs: 12000, purpose: 'fast' })
-          const sm = String(sa?.content ?? sa ?? '').match(/\{[\s\S]*\}/)
-          if (sm) {
-            const sj = JSON.parse(sm[0])
-            if (Number.isFinite(sj.v)) await feel({ valence: Math.max(-1, Math.min(1, sj.v)), arousal: Math.max(0, Math.min(1, sj.a || 0.3)) })
-          }
-        } catch {}
-      }).catch(() => {})   // 用完即清（现在才清）
+      // 情绪联动（10-31 优化）：**不再单独调一次 LLM**。
+      // reply-gate 那次调用已经顺手把情绪写进 affect 了；这里只在 gate 没跑 LLM 的路径
+      // （必回分支：问句/请求/情绪词）做一次轻量启发式补写 —— 零成本。
+      try {
+        const hitNeg = /(难受|难过|烦|累|崩溃|委屈|失眠|不想|讨厌|倒霉|气死)/.test(String(userText))
+        const hitPos = /(开心|高兴|好事|哈哈|笑|太好了|喜欢|棒)/.test(String(userText))
+        if (hitNeg || hitPos) {
+          import('../brain/affect.mjs').then(async ({ feel }) => {
+            try { await feel({ valence: hitNeg ? -0.35 : 0.35, arousal: 0.5 }) } catch {}
+          }).catch(() => {})
+        }
+      } catch {}
       let out = guard.clean(answer, config())
       // 群聊认人硬保险（10-26）：prompt 已经写到"这一轮不许出现主人"，但 11:54 她还是照群友的要求
       // 说了"主人早上好"。prompt 是软的，嘴是她的 —— 所以这里在出稿后再拦一道。

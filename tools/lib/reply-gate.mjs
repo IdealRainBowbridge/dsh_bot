@@ -45,7 +45,24 @@ const isMustReply = (t) => MUST_REPLY_PATTERNS.some((re) => re.test(t))
  * @param {string} [p.chatId]
  * @returns {Promise<{reply:boolean, delayMs:number, why:string}>}
  */
-export async function decideReply({ text = '', merged = 1, isGroup = false, atMe = false, extra = '', chatId = '' }) {
+/**
+ * 对话节奏账（每个会话一份）：记录"最近谁说了几句"。
+ * 不落盘，进程内即可（重启归零不影响体验）。
+ */
+const RHYTHM = new Map()  // chatId -> { turns: [{who, at}], lastReplyAt }
+function rhythmOf(chatId) {
+  let r = RHYTHM.get(chatId)
+  if (!r) { r = { turns: [], lastReplyAt: 0 }; RHYTHM.set(chatId, r) }
+  return r
+}
+function pushTurn(chatId, who, at = Date.now()) {
+  const r = rhythmOf(chatId)
+  r.turns.push({ who, at })
+  if (r.turns.length > 24) r.turns = r.turns.slice(-24)
+  return r
+}
+
+async function _decideInner({ text = '', merged = 1, isGroup = false, atMe = false, extra = '', chatId = '' }) {
   const cfg = config()
   const g = cfg.qq?.replyGate ?? {}
   if (g.enabled === false) return { reply: true, delayMs: 0, why: 'gate-off' }
@@ -61,12 +78,33 @@ export async function decideReply({ text = '', merged = 1, isGroup = false, atMe
   // ① 明显不必回的短句
   if (!hasImage && isNoReply(t)) return { reply: false, delayMs: 0, why: '寒暄/收尾语' }
 
+  // ①.5 对话节奏（零成本启发式，不调 LLM）
+  //
+  // ⚠️ 这里踩过一个设计错误，记下来：
+  // 最初写的是"她连说 >=2 句就压一次"，但在一问一答的流程里
+  // **每次 decideReply 前面必有一条 them**，myStreak 永远是 0 —— 那段代码是死的。
+  // 真正会发生的场景是"连珠炮"：他一句，她回；他马上又一句短的，她马上又回 → 太黏。
+  //
+  // 现在只做一件事：**短时间内被连续追问时，放慢**（不是不回）。
+  // 不回会变成已读不回，比慢更糟。
+  const r = pushTurn(chatId, 'them')
+  const nowMs = Date.now()
+  const lastMe = [...r.turns].reverse().find((x) => x.who === 'me')
+  r.rapid = !!(lastMe && nowMs - lastMe.at < 20_000)   // 20 秒内她刚回过 = 连珠炮
+  if (r.rapid) {
+    // 连续追问：多停一会儿，像在打字/没顾上
+    r.extraDelay = rand(1500, 3000)
+  } else {
+    r.extraDelay = 0
+  }
+
   // ② 明显该回的（问句/请求/情绪）→ 秒回不合适，但也不用纠结
   const must = isMustReply(t)
   // ③ 图片：不主动评价，但**给个反应**（真人看到图会"哦"一声）。
   // 注意这一条必须放在 LLM 判断之前 —— 实测模型会判"图片不必接"，那是错的。
   if (hasImage) {
-    return { reply: true, delayMs: rand(g.imageDelayMin ?? 1200, g.imageDelayMax ?? 2600), why: '发图了，给个短反应（不评价）' }
+    const imgDelay = rand(g.imageDelayMin ?? 1200, g.imageDelayMax ?? 2600) + Number(r.extraDelay || 0)
+    return { reply: true, delayMs: Math.round(imgDelay), why: '发图了，给个短反应（不评价）' + (r.extraDelay ? '(连珠炮，放慢)' : '') }
   }
 
   const baseMin = Number(g.minDelayMs ?? 1200)
@@ -77,19 +115,36 @@ export async function decideReply({ text = '', merged = 1, isGroup = false, atMe
     try {
       const llm = await import('./llm.mjs')
       const recent = g.contextLines ?? 6
+      // 一次调用同时拿两件事：①这条要不要接 ②这句话的情绪影响
+      // （原来情绪判断是回复完再单独调一次 → 每轮 3 次往返变 2 次）
       const ask = [
-        { role: 'user', content: `判断下面这句话是否需要"接话"。只输出 JSON：{"reply":true|false,"delay":毫秒}\n\n判断标准（宁可信其需）：\n- 他在分享/吐槽/自言自语/发牢骚 → **要接**（true）\n- 他在陈述事实但明显是想让你知道 → **要接**\n- 只是"嗯/好的/晚安"这种收尾 → 不接（false）\n- 他在评论你刚说的话（比如"哈哈""确实"）→ 通常不用回，除非带问号\n- 发了一张图但没说话 → 接，但只用一句话或一个表情\n\n他这句：「${t.slice(0, 300)}」\n${merged > 1 ? `（他连着发了 ${merged} 条）` : ''}` },
+        { role: 'user', content: '你是聊天助理。对下面这句「对方的话」输出一个 JSON（不要别的）：\n{"reply":true|false,"delayTier":1|2|3,"v":-1到1,"a":0到1}\n\nreply = 是否需要回应：分享/吐槽/自言自语/发牢骚=true；陈述事实但明显想让你知道=true；"嗯/好的/晚安/哈哈/确实/睡了"这类收尾或附和=false；带问号的一律 true。\ndelayTier = 停顿档位：1=随口一说/寒暄，2=正常聊天，3=认真的、有情绪的事。\nv = 这句话的情绪正负（-1 很负，0 中性，1 很正）；a = 强度（0-1）。\n\n对方说：「' + t.slice(0, 300) + '」' + (merged > 1 ? '（连着发了 ' + merged + ' 条）' : '') },
       ]
-      const raw = await llm.chat(ask, { temperature: 0.2, max_tokens: 80, timeoutMs: 8000, purpose: 'fast' })
+      const raw = await llm.chat(ask, { temperature: 0.2, max_tokens: 90, timeoutMs: 8000, purpose: 'fast' })
       const m = String(raw || '').match(/\{[\s\S]*\}/)
       if (m) {
         const j = JSON.parse(m[0])
         const reply = j.reply !== false
-        const delay = Number(j.delay)
+        // LLM 只给档位，毫秒由这里算 —— 实测让模型直接给毫秒它会给得偏小
+        const tier = Number(j.delayTier) || 2
+        const delay = tier === 1 ? rand(900, 1600) : tier === 3 ? rand(2600, 5200) : rand(1400, 2800)
+        // 顺手把情绪写进 affect —— 省掉"回复完再单独调一次判情绪"那次往返
+        const v = Number(j.v), a = Number(j.a)
+        if (Number.isFinite(v)) {
+          try {
+            const aff = await import('../brain/affect.mjs')
+            if (aff && typeof aff.feel === 'function') {
+              // 压缩到 ±0.7：实测模型动辄给 ±0.9，情绪曲线会抖成锯齿
+              const vv = Math.max(-0.7, Math.min(0.7, v * 0.8))
+              await aff.feel({ valence: vv, arousal: Number.isFinite(a) ? Math.max(0.1, Math.min(0.9, a)) : 0.3 })
+            }
+          } catch (e) { swallow(e, 'reply-gate:affect') }
+        }
         return {
           reply,
-          delayMs: Number.isFinite(delay) ? clamp(delay, 600, 15000) : rand(baseMin, baseMax),
-          why: reply ? 'LLM:该接' : 'LLM:不必接',
+          delayMs: Math.round(clamp((Number.isFinite(delay) ? delay : rand(baseMin, baseMax)) + Number(r.extraDelay || 0), 600, 15000)),
+          why: (reply ? 'LLM:该接' : 'LLM:不必接') + (r.extraDelay ? '(连珠炮，放慢)' : ''),
+          affect: Number.isFinite(v) ? { v: Math.max(-0.7, Math.min(0.7, v * 0.8)), a } : null,
         }
       }
     } catch (e) { swallow(e, 'reply-gate:llm') }
@@ -100,11 +155,13 @@ export async function decideReply({ text = '', merged = 1, isGroup = false, atMe
   //    实测调参：呼叫语（在吗）必须**快**（1~1.6s，像立刻摸手机），
   //    短问题 ~1.5-2.5s，长吐槽/情绪 ~2.5-4.5s（像组织了一下话）。
   const isCall = /^(在吗|在不在|喂|人呢)/.test(t)
-  if (isCall) return { reply: true, delayMs: Math.round(rand(g.callDelayMin ?? 900, g.callDelayMax ?? 1600)), why: '呼叫语(快回)' }
+  if (isCall) return { reply: true, delayMs: Math.round(rand(g.callDelayMin ?? 900, g.callDelayMax ?? 1600) + Number(r.extraDelay || 0)), why: '呼叫语(快回)' + (r.extraDelay ? '(连珠炮，放慢)' : '') }
 
   const weight = Math.min(1, t.length / 90) + (must ? 0.3 : 0) + (merged > 1 ? 0.25 : 0)
-  const delay = rand(baseMin, baseMax) * (0.6 + weight * 0.8)
-  return { reply: true, delayMs: Math.round(clamp(delay, 900, 8000)), why: must ? '该接(问句/请求/情绪)' : '该接' }
+  const base = rand(baseMin, baseMax) * (0.6 + weight * 0.8)
+  const delay = base + Number(r.extraDelay || 0)      // 连珠炮时再慢一点
+  const why = (must ? '该接(问句/请求/情绪)' : '该接') + (r.extraDelay ? '(连珠炮，放慢)' : '')
+  return { reply: true, delayMs: Math.round(clamp(delay, 900, 9000)), why }
 }
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)))
@@ -115,6 +172,20 @@ export const stats = { considered: 0, skipped: 0, replied: 0 }
 export function noteDecision(d) {
   stats.considered++
   if (d.reply) stats.replied++; else stats.skipped++
+}
+
+/**
+ * 对外入口：判一次，并把"她回了/没回"记进节奏账。
+ * 为什么用包装而不是在内部每个 return 点记账：内部有 6 个 return，
+ * 漏一个就少记一次，节奏就不准了（实测踩过：myStreak 永远是 0）。
+ */
+export async function decideReply(args = {}) {
+  const d = await _decideInner(args)
+  try {
+    const cid = String(args.chatId || '')
+    if (cid && d && d.reply) pushTurn(cid, 'me')
+  } catch (e) { swallow(e, 'reply-gate:rhythm-commit') }
+  return d
 }
 
 /**
