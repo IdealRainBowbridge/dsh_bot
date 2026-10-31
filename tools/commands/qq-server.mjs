@@ -461,7 +461,7 @@ export async function run(argv = []) {
       } catch (e) { logErr('[qq] 记事实失败：' + (e?.message ?? e)) }
 
       // 接话判断（10-31）：要不要回、隔多久回 —— 逻辑在 lib/reply-gate.mjs
-      if (!(await replyGate({ text: userText, merged: mergedN || 1, isGroup, atMe, extra, chatId, log }))) return
+      if (!(await replyGate({ text: userText, merged: mergedN || 1, isGroup, atMe, extra, chatId, platform: EVT_PLATFORM, log }))) return
 
       // 生成回复（三段式 prompt + 走神注入）
       const turns = memory.recent(chatId).length

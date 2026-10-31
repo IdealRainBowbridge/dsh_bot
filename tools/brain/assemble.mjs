@@ -13,6 +13,7 @@ import {
   personaText, identityLine, ownerLine, clockBlock, capabilityBlock, groupFactBlock,
   ledgerBlock, dropOwnerMistakes, dropCardMistakes, PLATFORM_HINTS, RECENT_N,
 } from '../lib/persona.mjs'
+import { takeSkipped } from '../lib/skipped-messages.mjs'
 import { stickerPrompt } from '../lib/stickers.mjs'
 import { emotionTagPrompt } from '../lib/emotion.mjs'
 import * as working from './working.mjs'
@@ -91,6 +92,13 @@ function slotList(ctx) {
   add('stickers', stickerPrompt(platform), 50)
   if (cfg.qq?.voice_enabled !== false) add('emotion', emotionTagPrompt(platform), 51)
 
+  // 10-31：上次"看到了但没接"的话（只有他真开口这一轮才取，理由见 persona.mjs）
+  if (userText && !isGroup && (platform === 'qq' || platform === 'wechat' || platform === 'douyin-dm')) {
+    try {
+      const sk = takeSkipped(chatId)
+      if (sk) add('skipped', sk, 19)
+    } catch {}
+  }
   if (quote) add('quote', quote, 25)
   const hintKey = isGroup ? `${platform}-group` : platform
   const hint = PLATFORM_HINTS[hintKey] || PLATFORM_HINTS[platform] || ''

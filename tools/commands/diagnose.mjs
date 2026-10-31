@@ -61,10 +61,27 @@ function behaviorMismatches(cfg) {
   return out
 }
 
+/** 沉默是不是真的被记住了（10-31 第九轮）：只看"有内容却没接"的积压量。 */
+function skippedStats() {
+  try {
+    const f = dataPath('skipped-messages.json')
+    if (!fs.existsSync(f)) return warn('没接的话', '还没有记录（没人发过"不必回"的话，或还没跑过新的 reply-gate）')
+    const list = JSON.parse(fs.readFileSync(f, 'utf8'))
+    const now = Date.now()
+    const fresh = list.filter((x) => now - Number(x.at || 0) < 12 * 3600_000)
+    const pending = fresh.filter((x) => !x.used)
+    const oldest = pending.length ? Math.round((now - Math.min(...pending.map((x) => Number(x.at)))) / 3600_000) : 0
+    if (pending.length > 20) return bad('没接的话', pending.length + ' 条积压（最久 ' + oldest + ' 小时前）—— 说明他一直在说、她一直没接')
+    return ok('没接的话', fresh.length + ' 条 remembered / ' + pending.length + ' 条还没提' + (pending.length ? '（最久 ' + oldest + 'h）' : ''))
+  } catch (e) { return warn('没接的话', '读不了 skipped-messages.json：' + String(e?.message ?? e)) }
+}
+
 export async function run(argv = []) {
   const json = argv.includes('--json')
   const cfg = config()
-  const items = []
+  const items = [
+    skippedStats(),
+  ]
 
   // 1) 配置漂移
   const drift = configDrift()

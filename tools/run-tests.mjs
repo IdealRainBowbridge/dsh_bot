@@ -31,6 +31,7 @@ const TESTS = [
   'ledger-test.mjs',
   'comment-engage-test.mjs',
   'reply-style-test.mjs',
+  'skipped-messages-test.mjs',
   'memory-hygiene-test.mjs',
   'video-test.mjs',
   'produce-plan-test.mjs',

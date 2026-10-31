@@ -181,10 +181,17 @@ export function noteDecision(d) {
  */
 export async function decideReply(args = {}) {
   const d = await _decideInner(args)
+  const cid = String(args.chatId || '')
   try {
-    const cid = String(args.chatId || '')
     if (cid && d && d.reply) pushTurn(cid, 'me')
   } catch (e) { swallow(e, 'reply-gate:rhythm-commit') }
+  // 10-31：不回 ≠ 没看见。记下这条，下次聊天才能自然接上（她真的"看了没接"）
+  try {
+    if (cid && d && d.reply === false && args.text) {
+      const SK = await import('./skipped-messages.mjs')
+      SK.noteSkipped({ chatId: cid, platform: args.platform || 'qq', text: args.text, why: d.why })
+    }
+  } catch (e) { swallow(e, 'reply-gate:skip-note') }
   return d
 }
 
@@ -193,8 +200,9 @@ export async function decideReply(args = {}) {
  * 把这段留在 qq-server 里会撑爆它的行数，也测不了 —— 放这里。
  * @returns {Promise<boolean>} true=该回（且已停顿完），false=这条不接
  */
-export async function gate({ text, merged = 1, isGroup = false, atMe = false, extra = '', chatId = '', log = () => {} }) {
-  const d = await decideReply({ text, merged, isGroup, atMe, extra, chatId })
+export async function gate({ text, merged = 1, isGroup = false, atMe = false, extra = '', chatId = '', platform = 'qq', log = () => {} }) {
+  // platform 必须透下去：noteSkipped 按 platform 记，微信/抖音的"没接的话"混进 qq 会串台
+  const d = await decideReply({ text, merged, isGroup, atMe, extra, chatId, platform })
   noteDecision(d)
   if (!d.reply) {
     log('[qq] 🤐 这条不接（' + d.why + '）：' + String(text || '').slice(0, 30))

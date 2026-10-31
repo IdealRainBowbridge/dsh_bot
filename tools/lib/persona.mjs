@@ -14,6 +14,7 @@ import { config } from './config.mjs'
 import { homePath } from './paths.mjs'
 import * as mood from './mood.mjs'
 import * as memory from './memory.mjs'
+import { takeSkipped } from './skipped-messages.mjs'
 import { stickerPrompt } from './stickers.mjs'
 import { emotionTagPrompt } from './emotion.mjs'
 import * as qqMemory from './qq-memory.mjs'
@@ -399,6 +400,18 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   const hintKey = isGroup ? `${platform}-group` : platform
   const hint = PLATFORM_HINTS[hintKey] || PLATFORM_HINTS[platform] || ''
   parts.push(mood.stateBlock(turnsToday, platform, isGroup) + (hint ? '\n' + hint : ''))
+  // 10-31：上次"看到了但没接"的话 —— 让沉默也变成记忆，而不是丢了
+  // 只对私聊注入（群里"上次没接"提出来会很怪）。
+  // 注意 ①：buildMessages 是**同步**函数，所以只能静态 import + 同步调用（不能 await import）。
+  // 注意 ②：**只有他真开口这一轮才取**（userText 非空）。主动搭话/发说说/看番这些
+  //   空 userText 的装配如果也 take，就会把"没接的话"悄悄用掉 —— 等他真回话时已经没了。
+  //   实测踩过：主动搭话先把话吃了，真聊天时她一句都接不上。
+  if (userText && !isGroup && (platform === 'qq' || platform === 'wechat' || platform === 'douyin-dm')) {
+    try {
+      const sk = takeSkipped(chatId)
+      if (sk) parts.push(sk)
+    } catch (e) { swallow(e, 'tools/lib/persona.mjs:skipped') }
+  }
   // 10-31：接话姿态（不评价/不复述/不提图）—— 硬约束，权重高于平台提示
   if (platform === 'qq' || platform === 'wechat' || platform === 'douyin-dm') {
     parts.push(postureBlock(isGroup))
