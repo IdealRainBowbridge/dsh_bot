@@ -35,6 +35,11 @@ export function stripDefaults(cfg, base = DEFAULTS) {
     const b = base?.[k]
     if (v && typeof v === 'object' && !Array.isArray(v) && b && typeof b === 'object' && !Array.isArray(b)) {
       const sub = stripDefaults(v, b)
+      // platforms 是个特例：它按平台 id 存布尔，已下线平台（douyin）的 false
+      // 不在 DEFAULTS 里但也不该留 —— 会让人以为"还有这个平台"。
+      if (k === 'platforms') {
+        for (const x of Object.keys(sub)) if (!(x in b)) delete sub[x]
+      }
       if (Object.keys(sub).length) out[k] = sub
       continue
     }

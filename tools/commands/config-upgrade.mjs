@@ -61,7 +61,9 @@ export async function run(argv = []) {
 
   const added = []
   const before = JSON.stringify(user)
-  fill(DEFAULTS, user, '', added)
+  // 先只**计算**该补什么，不直接写进去 —— 见下面 stripDefaults 的说明。
+  const probe = JSON.parse(JSON.stringify(user))
+  fill(DEFAULTS, probe, '', added)
   const extra = diffKeys(DEFAULTS, user)
 
   // 历史残留：一律搬进 __legacy（不删除，留证据），并给个说明
@@ -78,14 +80,40 @@ export async function run(argv = []) {
     }
   }
 
+  // ⚠️ 关键设计（v5 自己踩过一次坑）：
+  // 一开始的实现是"把缺的 138 个默认值全部写进配置文件"，结果 diagnose 显示
+  // "配置完整"了 —— 但那是**假的完整**：这些默认值从此被永久刻进用户文件，
+  // 以后升级改了 DEFAULTS 对这台机器不再生效（配置僵化），漂移检查也永远清零。
+  //
+  // 正确做法：**缺的键本来就该从 DEFAULTS 回落，不需要落盘**。
+  // 所以这里只做两件真正需要写文件的事：
+  //   ① 清掉历史残留（搬进 __legacy，留证据）
+  //   ② 顺手把"值等于默认值"的冗余键剔掉（和面板保存用同一套 stripDefaults）
+  // "缺什么"只作为报告给你看，不写进文件。
+  let pruned = []
+  try {
+    const { stripDefaults } = await import('../lib/config-file.mjs')
+    const stripped = stripDefaults(user)
+    // 统计被剔掉的顶层键（只报数量，不逐条刷屏）
+    for (const k of Object.keys(user)) {
+      if (k === '__legacy') continue
+      if (!(k in stripped)) pruned.push(k)
+      else if (user[k] && typeof user[k] === 'object' && !Array.isArray(user[k]) && typeof stripped[k] === 'object') {
+        if (JSON.stringify(user[k]) !== JSON.stringify(stripped[k])) pruned.push(k + '.*')
+      }
+    }
+    user = stripped
+  } catch (e) { /* strip 失败就保持原样，不当错误 */ }
+
   const changed = JSON.stringify(user) !== before
 
   if (json) {
-    console.log(JSON.stringify({ file, go, added, movedToLegacy: legacy, changed, extra }, null, 2))
+    console.log(JSON.stringify({ file, go, missingInFile: added, movedToLegacy: legacy, pruned, changed, extra }, null, 2))
   } else {
     console.log('\n📝 配置对齐：' + file + '\n')
-    console.log('  补齐 ' + added.length + ' 项' + (added.length ? '：' + added.slice(0, 12).join(', ') + (added.length > 12 ? ' …' : '') : ''))
+    console.log('  缺失（走 DEFAULTS 回落，不写文件）' + added.length + ' 项' + (added.length ? '：' + added.slice(0, 10).join(', ') + (added.length > 10 ? ' …' : '') : ''))
     console.log('  搬进 __legacy ' + legacy.length + ' 项' + (legacy.length ? '：' + legacy.join(', ') : ''))
+    console.log('  剔除冗余默认值 ' + pruned.length + ' 项' + (pruned.length ? '：' + pruned.slice(0, 10).join(', ') + (pruned.length > 10 ? ' …' : '') : ''))
     console.log('  ' + (changed ? '需要写入' : '已经是最新形状，无需改动') + '\n')
   }
 

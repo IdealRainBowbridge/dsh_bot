@@ -34,7 +34,10 @@ function configDrift() {
     return missing
   }
   const missing = cmp(DEFAULTS, user)
-  const extra = Object.keys(user).filter((k) => !(k in DEFAULTS))
+  // __legacy 是 config-upgrade 搬进去的历史残留（有意保留的），
+  // 以及 douyin / killQqOnExit / stopWithDsh 这类已知老键 —— 都不算"配置多出"。
+  const KNOWN_LEGACY = new Set(['__legacy', 'douyin', 'killQqOnExit', 'stopWithDsh', 'danger'])
+  const extra = Object.keys(user).filter((k) => !(k in DEFAULTS) && !KNOWN_LEGACY.has(k))
   return { missing, extra }
 }
 
@@ -85,9 +88,16 @@ export async function run(argv = []) {
 
   // 1) 配置漂移
   const drift = configDrift()
-  if (drift.missing.length) items.push(warn('配置缺项', drift.missing.slice(0, 30).join(', ') + (drift.missing.length > 30 ? ' …' : '') + ' —— 这些走 DEFAULTS；新增功能记得同步写进实际配置'))
-  else items.push(ok('配置完整', '实际配置覆盖了全部 DEFAULTS 键'))
-  if (drift.extra.length) items.push(warn('配置多出', drift.extra.join(', ') + ' —— 不在 DEFAULTS 里，可能是历史残留或手写错误'))
+  // v5：**缺项不是问题**。配置文件只该写"用户显式改过的值"，其余全部走 DEFAULTS 回落。
+  // 旧版把"缺 138 项"当告警天天报，噪音大到把真问题淹了 —— 反而促使人去
+  // config-upgrade 把默认值全刻进配置文件，从此升级不再生效（更糟）。
+  // 现在只有"配置多出"（不认识的历史残留）才提示。
+  if (drift.missing.length) {
+    items.push(ok('配置分层', '实际配置 ' + (Object.keys(drift.missing).length ? '部分' : '') + '使用默认值（' + drift.missing.length + ' 项走 DEFAULTS）—— 这是正确的：默认值集中在一处，升级才能全局生效'))
+  } else {
+    items.push(ok('配置完整', '实际配置覆盖了全部 DEFAULTS 键（也可以只写改过的值）'))
+  }
+  if (drift.extra.length) items.push(warn('配置多出', drift.extra.join(', ') + ' —— 不在 DEFAULTS 里，可能是历史残留或手写错误（跑 config-upgrade 可搬进 __legacy）'))
 
   // 2) 行为不一致
   for (const m of behaviorMismatches(cfg)) items.push(bad('行为不一致', m))
