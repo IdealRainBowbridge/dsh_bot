@@ -185,3 +185,65 @@ cfg.guard.dryRun = false
 ---
 
 *2026-10-31 · 门禁 191/8 · 测试 40/40 · E2E 15/15*
+---
+
+# 附：深度排查（同日 19:20，第二轮）
+
+第一轮修的是"已知问题"。这一轮专门找"只有特定条件才暴露"的缺陷 —— 全部实测复现。
+
+## A. 并发写状态文件丢 28.8%（本轮最重要）
+
+10+ 个进程写同一批状态文件，全部「读→改→写」无锁。
+**实测：20 进程 × 50 次自增 → 丢 288/1000。**
+后果：额度账本漏记 → 超额发评论/点赞 → **平台风控**；情绪值丢 → 行为漂移；lore 丢 → 设定消失。
+
+新增 `tools/lib/atomic.mjs`。**锁写了三版**：
+
+| 版本 | 做法 | 结果 |
+|---|---|---|
+| v1 | `openSync('wx')` | 丢 28.8% |
+| v2 | `openSync('wx')` + `writeSync(pid)` | 仍丢 ~5% |
+| **v3** | 先写唯一临时文件 → **`link()` 原子创建** | **零丢失** |
+
+v2 为什么失败：overlayfs 上"建文件"和"写内容"之间有窗口，别人读到 0 字节 →
+误判死锁 → 拆活锁 → 两把锁同时生效。**实测 200/200 次都有 0 字节窗口。**
+v3 用 `link()`（POSIX 原子：存在即 EEXIST，成功则内容已完整）。
+
+## B. 畸形请求打崩主进程
+
+面板 10 处 `JSON.parse(await readBody(req))` 无 try →
+`curl -d '{bad'` → unhandledRejection → `fatal uncaught exception` 退出。
+新增 `safeBody()`，10 处全替换。
+
+## C. 无超时调用永久挂死
+
+4 处 fetch + 6 处 ffmpeg `execFileSync` 无 timeout。
+`execFileSync` 无超时 = **整个 Node 进程被钉死**。
+refclean 补 30s~300s + SIGKILL；fetch 补 AbortSignal。
+
+## D. 门禁自身的 bug（最危险）
+
+1. `stripComments` 用正则去 `//`，把 `replace(/\//g,...)` 字符串里的 `//` 当注释 →
+   **整行后半段被抹成空格** → 既误报又可能漏报。已改成逐字符扫描。
+2. 判定窗口按行数硬切 → 跨行 spawn 被截断 → 满屏误报。改成"该行 + 后 12 行"。
+
+## E. 门禁 9 → 12 条
+
+fetch 无超时 / 同步子进程无超时 / 裸 JSON.parse / 多进程状态文件裸写。
+每条都用「故意注入 bug」验证：写回会报错，还原即通过。
+
+## F. 其他
+
+- diagnose `toISOString().slice(0,7)` 东八区月初会读上个月
+- `jsonChat` 裸 parse → 兜底返回 null
+- `promises.add()` 传对象变 "[object Object]" → 兼容层
+- sticker-render 字体补 Arch 路径（`/usr/share/fonts/noto-cjk/`）+ fc-match
+- `selfStickerAvailable()` 与渲染路径同源
+- `lib/index.js` 1194 行 → 抽 `proc.mjs`（1145 行）
+
+## 教训
+
+**"代码看着对"和"真的对"之间，隔着一个"在真实环境跑一遍"。**
+4 个缺陷静态审查全都看不出来：28.8% 丢数据要真并发压测；0 字节锁窗口要实测 stat；
+崩进程要真发坏请求；门禁吃代码要读它自己的实现。
+而且容器（overlayfs）与宿主机（ext4）行为不同，只在一边跑会漏。
