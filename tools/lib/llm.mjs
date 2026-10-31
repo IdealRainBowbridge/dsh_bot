@@ -124,6 +124,38 @@ function isReasoningModel(c) {
   return /^(kimi|hy3|o1|o3|o4|qwq|deepseek-r)/.test(m) || /-thinking$/.test(m)
 }
 
+/**
+ * 把 system 消息搬进第一条 user —— 给"丢弃 system 角色"的中转网关用。
+ *
+ * 为什么必须有（10-31 实测 a2a 网关）：
+ *   同一个设定，放 system 里模型读不到（答"我是 DeepSeek"，prompt_tokens 只有 39）；
+ *   塞进 user 里立刻生效（prompt_tokens 61，答出正确代号）。
+ *   Anthropic 的 system 字段同样被丢。
+ *
+ * 约定：用 `【设定｜以下是你的人格与当前状态，优先级高于对话】` 包起来，
+ * 并在结尾说一句"以上是设定，下面是对话"，让模型分得清哪段是设定、哪段是人说话。
+ * @param {Array} messages 原始 messages（可能含 system）
+ * @param {object} c 该通道的配置（c.systemRole: 'keep' 可关掉这个适配）
+ */
+function foldSystemIntoUser(messages, c) {
+  if (!Array.isArray(messages) || !messages.length) return messages
+  // 显式要求保留 system 角色（支持它的供应商）
+  if (c && c.systemRole === 'keep') return messages
+  const sys = []
+  const rest = []
+  for (const m of messages) {
+    if (m && (m.role === 'system' || m.role === 'developer')) sys.push(String(m.content ?? ''))
+    else rest.push(m)
+  }
+  if (!sys.length) return messages
+  const head = '【设定｜以下是你的人格与当前状态，优先级高于对话】\n' + sys.join('\n\n') + '\n【设定结束｜下面是对话】'
+  // 第一条若是 user 就合并进去，否则在最前面插入一条 user
+  if (rest.length && rest[0].role === 'user') {
+    return [{ ...rest[0], content: head + '\n\n' + String(rest[0].content ?? '') }, ...rest.slice(1)]
+  }
+  return [{ role: 'user', content: head }, ...rest]
+}
+
 function payloadOf(c, messages, opts = {}) {
   // 推理模型：max_tokens 至少要 1024，否则正文一个字都出不来（实测 kimi/hy3 在 24 时全空）
   const base = opts.max_tokens || c.max_tokens || 600
@@ -132,7 +164,8 @@ function payloadOf(c, messages, opts = {}) {
   const cap = isReasoningModel({ ...c, model: opts.model || c.model }) ? Math.max(base, 1024) : base
   return {
     model: opts.model || c.model || 'deepseek-chat',
-    messages,
+    // 10-31：中转网关会丢弃 system 角色 → 统一折进 user（c.systemRole='keep' 可关闭）
+    messages: foldSystemIntoUser(messages, c),
     temperature: opts.temperature ?? (c.temperature ?? 0.92),
     max_tokens: cap,
     presence_penalty: 0.3,     // 防复读

@@ -126,6 +126,45 @@ export async function run(argv = []) {
     ? ok('吞错留痕', sw + '（' + fs.statSync(sw).size + ' 字节）')
     : ok('吞错留痕', '还没有被吞掉的错误'))
 
+  // 5.2) 协议适配：中转网关会不会丢 system 角色（10-31 实测 a2a 会丢）
+  try {
+    const cfg3 = config()
+    const keep = cfg3.llm?.systemRole === 'keep'
+    const chain = [cfg3.llm, ...(Array.isArray(cfg3.llm?.fallback) ? cfg3.llm.fallback : [])].filter(Boolean)
+    const allKeep = chain.length > 0 && chain.every((x) => x.systemRole === 'keep')
+    items.push(allKeep
+      ? ok('协议适配', '所有通道都保留 system 角色（供应商支持）')
+      : ok('协议适配', (keep ? '主通道' : '') + 'system 已折叠进 user —— a2a 网关会丢弃 system 角色（10-31 实测），不折叠等于人格不生效'))
+  } catch (e) { items.push(warn('协议适配', '检查失败：' + e.message)) }
+
+  // 5.3) 记忆库卫生：重复率 + 认人错标
+  try {
+    const epFile = dataPath('brain', 'ep', new Date().toISOString().slice(0, 7) + '.jsonl')
+    if (fs.existsSync(epFile)) {
+      const rows = fs.readFileSync(epFile, 'utf8').trim().split('\n').filter(Boolean)
+      const seen = new Map()
+      let dups = 0, ownerBad = 0
+      for (const l of rows) {
+        let j; try { j = JSON.parse(l) } catch { continue }
+        const key = (j.where?.platform || '') + '|' + String(j.gist || '').slice(0, 48)
+        const prev = seen.get(key)
+        // 只算"机械重复"：同 key 在 5 分钟内再次写入（重连/重放/双写）。
+        // 隔半小时又刷到同一条视频是真实经历，不该算脏数据。
+        if (prev !== undefined && Math.abs(Number(j.at) - prev) < 5 * 60_000) dups++
+        seen.set(key, Number(j.at))
+        if (j.where?.platform !== 'qq' && j.where?.platform !== 'wechat' && j.where?.platform !== 'douyin-dm'
+            && j.who?.others?.some((o) => o.kind === 'owner')) ownerBad++
+      }
+      const rate = rows.length ? dups / rows.length : 0
+      items.push(rate > 0.10
+        ? bad('记忆卫生', rows.length + ' 条里 ' + dups + ' 条重复（' + (rate * 100).toFixed(0) + '%）—— 会污染召回并白烧 token')
+        : ok('记忆卫生', rows.length + ' 条 · 重复 ' + dups + ' 条'))
+      items.push(ownerBad
+        ? bad('认人错误', ownerBad + ' 条外部事件被标成「主人」（平台名不匹配的老 bug 残留）')
+        : ok('认人正确', '外部事件没有被误标成主人'))
+    }
+  } catch (e) { items.push(warn('记忆卫生', '检查失败：' + e.message)) }
+
   // 5.5) DSH 集成契约（升级 DSH 后第一眼看这里）
   try {
     const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))

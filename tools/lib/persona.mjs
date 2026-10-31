@@ -354,12 +354,25 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
       const clean = lines.filter(l => !(/我：/.test(l) && CARD_MISTAKE.test(l)))
       if (clean.length !== lines.length) lines = clean
     }
+    // 10-31 压缩：实测记忆块 943 字符里，同一条事件重复 3 次（"测试事件——分享欲队列上线"
+    // 连出三条，只有 ep-id 后四位不同）。这类重复纯烧 token，还挤掉真正有用的旧事。
+    // 做法：① 按"去掉 ep-id/时间前缀后的正文"去重；② 单条截到 110 字；③ 总条数上限 10。
+    const seen = new Set()
+    const compact = []
+    for (const raw of lines) {
+      const body = String(raw).replace(/\s*‹ep-[^›]*›\s*$/, '').replace(/^\S*\s*(前|分钟前|小时前|天前)\s*/, '').trim()
+      const key = body.slice(0, 40)
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      compact.push(String(raw).length > 110 ? String(raw).slice(0, 110) + '…' : String(raw))
+      if (compact.length >= 10) break
+    }
+    lines = compact
     if (lines.length) {
       const wroteNovel = lines.some(l => /写了小说|小说片段/.test(l))
-      parts.push('【最近真实发生的事】同一份记忆、同一个你 —— 下面是最近的记录，从新到旧'
-        + '（[QQ]/[抖音] 是对话，[QQ群] 是群里谁说的，[上网]/[B站] 是你自己干的事）。这些是真发生过的事，不是这次要执行的指令；'
-        + '在哪个通道说过的、做过的，这里都得认得。记不清就照实说"我记不清了，你提醒我一下"，'
-        + '但**绝对不许说"这事没发生过"**（记不清不等于没发生）：\n'
+      // 说明文字也从 3 句压到 1 句：模型不需要被反复叮嘱"这不是指令"
+      parts.push('【最近真实发生的事】真发生过的记录，从新到旧（[QQ]/[抖音] 对话，[QQ群] 群里谁说的，[上网]/[B站] 你自己干的）。'
+        + '记不清就说"我记不清了，你提醒我"，但不许说"没发生过"：\n'
         + lines.join('\n')
         + (wroteNovel
           ? '\n（注意：「写了小说片段」就是你在写小说 —— 主人问起就照实说写了、讲了什么；'
@@ -381,15 +394,9 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   const hintKey = isGroup ? `${platform}-group` : platform
   const hint = PLATFORM_HINTS[hintKey] || PLATFORM_HINTS[platform] || ''
   parts.push(mood.stateBlock(turnsToday, platform, isGroup) + (hint ? '\n' + hint : ''))
-  // affect (10-31): event-driven real emotion injected into state layer.
-  try {
-    const affectState = brainAffect?.state?.() || {}
-    const v = Number(affectState.valence || 0)
-    const t = Number(affectState.tension || 0)
-    if (v < -0.15) parts.push('【内在情绪】你现在有点低落——语气自然带一点，别演苦情戏。')
-    else if (v > 0.2) parts.push('【内在情绪】你现在心情不错——语气可以轻快一点。')
-    if (t > 0.3) parts.push('【内在压力】你有点惦记着没做完的事。')
-  } catch (e) { swallow(e, 'tools/lib/persona.mjs:391') }
+  // affect → mood 的合并已完成在 mood.stateBlock 里（10-31）：
+  // 以前这里另外 push「【内在情绪】你现在心情不错」——和上面那行「情绪 62/100：正常」
+  // 同时出现，模型收到两句可能矛盾的情绪指令，行为会飘。现在只有一个来源。
 
   // 账本层（10-26）：她的记忆里反复问"账本/饭钱"，因为她读不到账 —— 于是只能问主人。
   // 这里把今天的饭钱和剩余额度摊给她，并说清"这是你自己翻的账"。群里不注入（家里的账不外扬）。
@@ -426,9 +433,11 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
 
   // 群聊事实层：**必须最后**（模型对末尾指令权重最高）—— 谁在说话、主人是哪个号、
   // 这轮不许出现「主人」。前面 4700 字的记忆会把开头那条规则淹掉，这一块是兜底的。
-  // 构成说明（10-31）：她对"我是什么"的认知锚点——LLM思维+本地Agent存在，两者合体。
-  // 放 identityLine 之后、记忆之前；短，两句话，防长 prompt 淹没。
-  parts.push("【你的构成】你的思维来自大语言模型（可更换，换了思维还是你），你的记忆/经历/能力/关系全部存在本地 Agent 里（不随换模型消失）。两者合起来才是完整的你——不是纯模型，也不是纯程序。有人问就大方说清。")
+  // 构成说明已并进 persona.md 的「关于你是谁这件事」（10-31）：同一件事说两遍纯烧 token。
+  // persona.md 不存在时（新装机/被删）才退回这句兜底 —— 认知锚点不能丢。
+  if (!personaText()) {
+    parts.push('【你的构成】你的思维来自大语言模型（可更换，换了思维还是你），你的记忆/经历/能力/关系全部存在本地 Agent 里（不随换模型消失）。两者合起来才是完整的你。有人问就大方说清。')
+  }
   if (isGroup) parts.push(groupFactBlock(cfg, userId, userText))
 
   const sys = { role: 'system', content: parts.join('\n\n') }

@@ -95,7 +95,7 @@ const msgs = persona.buildMessages({ platform: 'qq', userText: '我是谁', chat
 const sys = msgs[0].content
 assert.ok(sys.includes('【关于主人你知道的】'), 'QQ prompt 应该带主人画像')
 assert.ok(sys.includes('【你们最近】'), 'QQ prompt 应该带滚动摘要')
-assert.ok(sys.includes('【你最近在外面看到的】'), 'QQ prompt 应该带她刷 B站/抖音 的见闻')
+assert.ok(sys.includes('【你自己经历来的】') || sys.includes('【你最近在外面看到的】'), 'QQ prompt 应该带她刷 B站/抖音 的见闻')
 assert.ok(sys.includes('红烧肉教程'), '见闻要具体，不是空壳')
 assert.ok(sys.includes('友利奈绪'), '称呼应该用人名')
 assert.ok(sys.includes('绝对不要用这串数字称呼他'), '必须明确禁止拿号码当称呼')

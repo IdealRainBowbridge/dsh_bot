@@ -47,7 +47,9 @@ export function normalize(input = {}) {
   let whoKind
   if (role === 'assistant' || role === 'self') whoKind = 'self'
   else if (isGroup) whoKind = 'group_member'
-  else if (platform === 'bili' || platform === 'web') whoKind = 'external'
+  // 10-31 修：这里原来只认 'bili'，而调用方全写 'bilibili' ——
+  // 导致 B站 UP 主/评论者全被归成 owner（"主人"），记忆里主人泛滥。
+  else if (platform === 'bili' || platform === 'bilibili' || platform === 'web' || platform === 'douyin') whoKind = 'external'
   else if (owners.length) whoKind = owners.includes(uid) ? 'owner' : 'stranger'
   else whoKind = 'owner'          // 私聊默认就是主人（qq/抖音私信本来只陪他一个人）
   if (input.isOwner === true) whoKind = 'owner'
@@ -63,7 +65,7 @@ export function normalize(input = {}) {
 
   const scope = SCOPES.includes(input.scope) ? input.scope
     : isGroup ? 'group'
-      : (platform === 'bili' || platform === 'web') ? 'public' : 'private'
+      : (platform === 'bili' || platform === 'bilibili' || platform === 'web' || platform === 'douyin') ? 'public' : 'private'
 
   const at = Number(input.at) || Date.now()
   const event = {
@@ -74,7 +76,13 @@ export function normalize(input = {}) {
     where: { platform, chat: String(input.chatId ?? ''), group: isGroup ? String(input.groupId ?? input.chatId ?? '') : null },
     who: {
       kind: whoKind, id: uid,
-      name: String(input.name || (whoKind === 'self' ? '我' : whoKind === 'owner' ? '主人' : uid || '某人')).slice(0, 24),
+      name: String(input.name || (
+        whoKind === 'self' ? '我'
+          : whoKind === 'owner' ? '主人'
+            : whoKind === 'external' ? (uid || '网友')
+              : whoKind === 'group_member' ? (uid || '群友')
+                : (uid || '某人')
+      )).slice(0, 24),
     },
     act, text: text.slice(0, 2000),
     quote: input.quote ? String(input.quote).slice(0, 500) : '',

@@ -253,9 +253,18 @@ export function ingest({ limit = 500, now = Date.now() } = {}) {
     if (!ev || !ev.ev) { skipped++; continue }
     if (seen.has(ev.ev)) { skipped++; continue }
     // 同一条消息重复上报（重连/重放）：srcEv 之外再用 msgId+文本兜一道
+    // 10-31 修：原来只在有 msgId 时才查重 —— B站/上网事件没有 msgId，
+    // 结果同一条视频被记 26 次（实测 232 条里 128 条重复，直接污染召回）。
+    // 现在没有 msgId 时用「文本指纹 + 同平台 + 10 分钟窗口」兜底。
+    const FP_WINDOW = 10 * 60_000
+    const fpOf = (r) => String(r.gist || r.quote || '').slice(0, 48)
+    const evFp = fpOf({ gist: gistOf(ev), quote: ev.text })
     const dup = ev.src?.msgId
       ? rows.slice(-60).some((r) => r.srcEv === ev.ev || (r.meta?.msgId && String(r.meta.msgId) === String(ev.src.msgId)))
-      : false
+      : rows.slice(-40).some((r) =>
+        r.where?.platform === ev.where?.platform &&
+        Math.abs(Number(r.at) - Number(ev.at)) < FP_WINDOW &&
+        fpOf(r) === evFp)
     if (dup) { seen.add(ev.ev); skipped++; continue }
     const ep = makeEpisode(ev, { recentGists, knownNames: known })
     if (!appendJsonl(epFile(new Date(ep.at)), ep)) { skipped++; continue }

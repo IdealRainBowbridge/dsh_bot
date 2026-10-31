@@ -67,19 +67,34 @@ function diaryTail(lines = 3) {
  * 【你最近在外面看到的】—— QQ 人格跟她刷 B站/抖音的经历绑在一起。
  * 不额外调 LLM，纯本地拼装，每条消息都在。
  */
+/** 把一条 lore 压成"标尺"而不是"故事"：取第一句，砍掉叙事细节。 */
+function asRule(text, max = 42) {
+  let t = String(text || '').replace(/\s+/g, ' ').trim()
+  // 取第一个句号/分号前的部分（那条通常就是结论），没有就整体截断
+  const cut = t.search(/[。；;]/)
+  if (cut > 8) t = t.slice(0, cut)
+  return t.length > max ? t.slice(0, max) + '…' : t
+}
+
 export function worldBlock() {
   const parts = []
-  // lore 分层注入：价值观（标尺/教训）常驻，兴趣随机抽几条 —— 口味是流动的，观念是长住的
-  const values = memory.loreValues(6)
-  if (values.length) parts.push('你长期记住的观念/标尺：\n' + values.map(x => `· ${String(x).slice(0, 80)}`).join('\n'))
-  const interests = memory.loreInterests(3)
-  if (interests.length) parts.push('你最近的兴趣：\n' + interests.map(x => `· ${String(x).slice(0, 80)}`).join('\n'))
-  const outer = recentOuter(4)
-  if (outer.length) parts.push('你这两天在外面看到的（B站/抖音）：\n' + outer.join('\n'))
-  const diary = diaryTail(2)
-  if (diary.length) parts.push('你夜里写下的：\n' + diary.join('\n'))
+  // 10-31 压缩：这一块实测 944 字符，是全 prompt 里除记忆外最贵的。
+  // 但"观念/标尺"本质是短句启发式，原来每条 80 字里大半是叙事细节
+  // （"东方喜洋洋那条我按热评先给了17…"），聊天时用不上，还挤掉真正该说的。
+  // 改：每条压到 42 字的第一句、条数 6→4、兴趣 3→2，整块封顶 520 字。
+  const values = memory.loreValues(4)
+  if (values.length) parts.push('你长期记住的标尺：\n' + values.map((x) => '· ' + asRule(x)).join('\n'))
+  const interests = memory.loreInterests(2)
+  if (interests.length) parts.push('你最近的兴趣：\n' + interests.map((x) => '· ' + asRule(x)).join('\n'))
+  const outer = recentOuter(3)
+  if (outer.length) parts.push('你这两天刷到的：\n' + outer.map((x) => String(x).slice(0, 60)).join('\n'))
+  const diary = diaryTail(1)
+  if (diary.length) parts.push('你夜里写下的：\n' + diary.map((x) => String(x).slice(0, 90)).join('\n'))
   if (!parts.length) return ''
-  return '【你最近在外面看到的】这些是你自己经历来的，聊天时可以自然带出来（别生硬背）：\n' + parts.join('\n')
+  const head = '【你自己经历来的】聊天时可以自然带出来（别生硬背）：\n'
+  let body = parts.join('\n')
+  if (body.length > 520) body = body.slice(0, 520) + '…'
+  return head + body
 }
 
 /** 这个会话的滚动摘要（没有就是空串）。 */

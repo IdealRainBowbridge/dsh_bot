@@ -11,6 +11,7 @@
 //   现在：① 饭点也封顶（hungerCap）② 非饭点按次衰减（默认 -6）③ 吃到饭直接归零
 //   ④ 心情不再随饥饿每 tick 掉，改成**跨天软回归**（回到 moodBase）。
 import fs from 'node:fs'
+import path from 'node:path'
 import { dataPath } from './paths.mjs'
 import { config } from './config.mjs'
 
@@ -82,6 +83,8 @@ export function tickMood(random = Math.random) {
   if (random() < 0.06) st.value += [-9, -4, 5, 8][Math.floor(random() * 4)]
   st.value = Math.max(0, Math.min(100, st.value))
   st.updatedAt = new Date().toISOString()
+  // 10-31：把事件驱动的 affect 折算进长期心情（每次最多动 6 分，保留惯性）
+  try { reconcileAffect() } catch (e) { swallow(e, 'tools/lib/mood.mjs:tick-reconcile') }
   writeState(st)
   return st
 }
@@ -128,9 +131,51 @@ const PLATFORM_STATE = {
   douyin: '抖音评论区（一句话接住梗就够）',
 }
 
+/**
+ * 把事件驱动的 affect（valence/arousal/tension）折算成 mood.value 的目标值。
+ * 为什么：两套情绪以前各存各的、各说各话（mood 说"正常"，affect 说"心情不错"），
+ * 模型同时看到两句矛盾指令，行为不稳定。现在只让 affect 做**输入**，mood 做**输出**。
+ * @returns {{target:number, tension:number}|null}
+ */
+function affectTarget() {
+  try {
+    const f = dataPath('brain', 'affect', 'mood.json')
+    const a = JSON.parse(fs.readFileSync(f, 'utf8'))
+    const v = Number(a?.valence)
+    if (!Number.isFinite(v)) return null
+    return {
+      target: Math.max(0, Math.min(100, 50 + v * 50)),
+      tension: Number(a?.tension) || 0,
+    }
+  } catch { return null }
+}
+
+/** mood.value 向 affect 的目标缓慢靠拢（每次最多 6 分，保留惯性）。 */
+export function reconcileAffect() {
+  const t = affectTarget()
+  if (!t) return null
+  const m = readState()
+  const cur = Number(m.value) || 62
+  const diff = t.target - cur
+  if (Math.abs(diff) < 0.5) return { from: cur, to: cur, moved: 0 }
+  const step = Math.max(-6, Math.min(6, diff))
+  const next = Math.round((cur + step) * 10) / 10
+  try {
+    const all = readState()
+    all.value = next
+    all.updatedAt = new Date().toISOString()
+    fs.mkdirSync(path.dirname(MOOD_FILE), { recursive: true })
+    fs.writeFileSync(MOOD_FILE, JSON.stringify(all, null, 2) + '\n')
+  } catch { /* 写不进去不影响本轮说话 */ }
+  return { from: cur, to: next, moved: Math.round(step * 10) / 10 }
+}
+
 export function stateBlock(turnsToday = 0, platform = 'bilibili', isGroup = false) {
   const now = new Date()
   const m = readState()
+  // 10-31：先让 affect 影响 mood（有惯性），再用合并后的单一分数说话 ——
+  // 不再让两套情绪在同一个 prompt 里各说各话。
+  const aff = affectTarget()
   const style = m.value < 30 ? '不太想说话，句子短一点'
     : m.value > 75 ? '挺高兴，可以主动闹一点'
     : '正常，按平时说话'
@@ -147,7 +192,7 @@ export function stateBlock(turnsToday = 0, platform = 'bilibili', isGroup = fals
     : `今天已经聊了 ${turnsToday} 轮。${turnsToday > 40 ? '有点累了，敷衍一点。' : ''}`
   const lines = [
     `现在是 ${now.toLocaleString('sv-SE', { hour12: false })}（${phaseText(now)}）。`,
-    `情绪 ${Math.round(m.value)}/100：${style}`,
+    `情绪 ${Math.round(m.value)}/100：${style}` + (aff && aff.tension > 0.3 ? '（心里还惦记着没做完的事）' : ''),
     hunger,
     turnLine,
     `当前平台：${platformText}。`,
