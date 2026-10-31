@@ -259,7 +259,12 @@ await ok('qq-server 真的把 quoteLine 送进提示词，并且写进记忆', (
   const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'commands', 'qq-server.mjs'), 'utf8')
   assert.ok(/resolveQuote\(parsed\.replyId/.test(src), '入口要拿 replyId 去解析')
   assert.ok(/quote: quoteLine/.test(src), 'buildMessages 要收到 quote')
-  assert.ok(/memory\.remember\('qq', chatId, userId, 'user', memText/.test(src), '记忆里要带引用上下文')
+  // 10-31 统一通道后平台跟随事件（QQ 仍是默认），两种写法都算对
+  assert.ok(
+    /memory\.remember\('qq', chatId, userId, 'user', memText/.test(src) ||
+    /memory\.remember\(EVT_PLATFORM, chatId, userId, 'user', memText/.test(src),
+    '记忆里要带引用上下文'
+  )
   assert.ok(/warmQuoteIndex/.test(src), '老消息要靠预热历史才取得到原文')
 })
 

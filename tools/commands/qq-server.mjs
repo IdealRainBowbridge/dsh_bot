@@ -48,6 +48,11 @@ const execFileAsync = promisify(execFile)
 
 const LOG_FILE = dataPath('qq-server.log')
 
+// 统一通道（10-31）：QQ 消息先进这里排队 → 同会话合并、跨会话并行、先来先答。
+// 微信/抖音私信后续也接进来（同一个 channel 实例）。
+import { channel as CHANNEL } from '../lib/channel.mjs'
+import * as CHANNEL_IO from '../lib/channel-io.mjs'
+
 /** 宿主是 stdio:'ignore' 起的进程，不打文件日志等于瞎 —— 出问题只能靠猜。 */
 function logLine(level, args) {
   const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')
@@ -162,8 +167,24 @@ export async function run(argv = []) {
       return false
     } catch { return false }
   }
+  // 10-31：当前正在处理的平台（handle 里设置）。'qq' 走 OneBot，其它走 outbox。
+  let CUR_PLATFORM = 'qq'
+  let CUR_CHAT = ''
+
   const send = async (action, payload) => {
     const currentChat = payload?.user_id ? 'qq:' + payload.user_id : payload?.group_id ? 'qq:group:' + payload.group_id : ''
+
+    // ── 非 QQ 平台：不调 OneBot，落到出站队列，由该平台自己的进程来取 ──────────
+    if (CUR_PLATFORM !== 'qq' && String(action).startsWith('send_')) {
+      const txt = Array.isArray(payload?.message)
+        ? payload.message.map((s2) => (s2?.type === 'text' ? s2.data?.text ?? '' : s2?.type === 'image' ? '【图片】' : '')).join('')
+        : String(payload?.message ?? '')
+      const imgs = Array.isArray(payload?.message) ? payload.message.filter((s2) => s2?.type === 'image').map((s2) => s2.data?.file || s2.data?.url || '') : []
+      CHANNEL_IO.pushOutbox({ platform: CUR_PLATFORM, chatId: CUR_CHAT, text: txt, images: imgs })
+      log('[channel] ' + CUR_PLATFORM + ' 回复已入出站队列（' + CUR_CHAT + '）：' + txt.slice(0, 40))
+      return true
+    }
+
     if (String(action).startsWith("send_") && isDup(payload, currentChat)) return true
     if (String(action).startsWith("send_")) await showTyping(payload)
     const j = await callApi(action, payload)
@@ -291,9 +312,14 @@ export async function run(argv = []) {
       await ownerSpoke()
       const QQ = live.qq ?? {}
       const selfId = String(evt.self_id ?? '')
+      // 10-31 统一通道：平台从事件里读（QQ 是默认，微信/抖音从 /inbound 带 __platform）
+      const EVT_PLATFORM = String(evt.__platform || 'qq')
       const isGroup = evt.message_type === 'group'
       const groupId = isGroup ? String(evt.group_id ?? '') : ''
       const userId = String(evt.user_id ?? '')
+      // 声明顺序：isGroup 必须先于 CUR_CHAT（10-31 踩过 TDZ：Cannot access 'isGroup' before initialization）
+      CUR_PLATFORM = EVT_PLATFORM
+      CUR_CHAT = isGroup ? EVT_PLATFORM + ':' + groupId : EVT_PLATFORM + ':' + userId
       const allow = QQ.allow_groups ?? []
       if (isGroup && allow.length && !allow.includes(groupId)) return
 
@@ -321,7 +347,13 @@ export async function run(argv = []) {
       }
       if (!text && !images.length && !extra) return
       if (isGroup && QQ.at_only !== false && !atMe) return   // 群里只被 @ 才回
-      const chatId = isGroup ? `qq:${groupId}` : `qq:${userId}`
+      const chatId = isGroup ? `${EVT_PLATFORM}:${groupId}` : `${EVT_PLATFORM}:${userId}`
+      // 10-31 统一通道：一次合并了多条连发 → 告诉她"这是他连着说的话"，别当几件事分开答
+      const mergedN = Number(evt.__merged || 0)
+      if (mergedN > 1) {
+        extra = ('【他连着发了 ' + mergedN + ' 条，这是一口气说完的】' + (extra ? ' ' + extra : '')).trim()
+        log('[qq] 📚 本轮是合并消息（' + mergedN + ' 条）')
+      }
       // 群聊插话引擎的在场信号：有群消息就刷新该群的时间戳（她"看到"群里在聊天）
       if (isGroup) groupLastMsgAt[groupId] = Date.now()
       // 主动搭话的安静计时：主人（私聊）每说一句话就刷新
@@ -378,7 +410,7 @@ export async function run(argv = []) {
               if (sent2) {
                 covered = true
                 await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: `🎵 给你唱《${song.title}》——用我自己的声音哦${song.cache === 'hit' ? '' : '（刚学会的）'}～` } }] })
-                memory.remember('qq', chatId, userId, 'assistant', `（翻唱了《${song.title}》，用她自己的音色）`, { isGroup })
+                memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', `（翻唱了《${song.title}》，用她自己的音色）`, { isGroup })
                 log(`[qq] 🎤 翻唱已发：《${song.title}》`)
               }
             }
@@ -388,7 +420,7 @@ export async function run(argv = []) {
           const sent2 = await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'record', data: { file: song.file } }] })
           if (sent2) {
             await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: `🎵《${song.title}》 ${song.bpm}bpm —— ${song.lyrics.join(' / ')}` } }] })
-            memory.remember('qq', chatId, userId, 'assistant', `（唱了《${song.title}》：${song.lyrics.join('/')}）`, { isGroup })
+            memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', `（唱了《${song.title}》：${song.lyrics.join('/')}）`, { isGroup })
             log(`[qq] 🎵 已唱《${song.title}》(${song.bpm}bpm, ${song.lyrics.length}句)`)
             return
           }
@@ -398,7 +430,7 @@ export async function run(argv = []) {
         }
       }
 
-      memory.remember('qq', chatId, userId, 'user', memText, { isGroup })
+      memory.remember(EVT_PLATFORM, chatId, userId, 'user', memText, { isGroup })
 
       // 事件进脑（v3 S1 影子层）：旧路径照旧写 episodes.jsonl，这边另存一份结构化事件。
       // 关键差别：谁说的（who.kind）、能不能外说（scope）、哪条消息（msgId）在写入时就定死，
@@ -608,7 +640,7 @@ export async function run(argv = []) {
       // 干跑：只打印不真发（dafeiyu 铁律：第一周先观察）
       if (config().guard?.dryRun) {
         log(`[qq][干跑] ${isGroup ? '群' + groupId : '私聊' + userId} → ${plain}${stickerFile ? ' [表情图]' : ''}${aiWanted ? ` +AI表情「${tag || caption}」` : ''}`)
-        memory.remember('qq', chatId, userId, 'assistant', plain || out, { isGroup })
+        memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', plain || out, { isGroup })
 
       // 长期记忆：跟主人私聊时，每 6 条回复把这段对话压成摘要 + 更新主人画像（不阻塞回复）
       try {
@@ -685,7 +717,7 @@ export async function run(argv = []) {
       }
       // AI 表情包：生成入库 + 补发（异步，不占回复主线；干跑分支已在上面 return，走不到这）
       if (aiWanted) void aiStickerFollowup({ tag, caption, isGroup, groupId, userId })
-      memory.remember('qq', chatId, userId, 'assistant', plain || out, { isGroup })
+      memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', plain || out, { isGroup })
       // 交付证据（v3 §11）：真发出去才记；干跑在上面已经 return，走不到这里。
       try {
         brain.onSent({ chat: chatId, platform: 'qq', text: plain || out, msgId: '', at: Date.now() })
@@ -711,6 +743,15 @@ export async function run(argv = []) {
       logErr('[qq] 处理失败：', e.message)
     }
   }
+
+  // ── 统一通道接线（10-31）：批次合并的逻辑在 channel-io.synthBatch ─────────────
+  CHANNEL.setLogger((m) => log(m))
+  CHANNEL.onHandle(async (batch) => {
+    const synth = CHANNEL_IO.synthBatch(batch, { ttlMs: 10 * 60_000 })
+    if (!synth) return
+    if (synth.__merged > 1) log('[qq] 📚 合并 ' + synth.__merged + ' 条连发消息成一次回复：' + String(synth.__text || '').slice(0, 60))
+    await handle(synth)
+  })
 
   // ── OneBot 看门狗（SnowLuma/NapCat 通用）：它才是 QQ 的消息网关。网关不通 = 服务在跑但永远不回复 ──
   const LAUNCHER = QQ.napcat_launcher || 'D:/NapCat/launcher-user.bat'
@@ -768,7 +809,7 @@ export async function run(argv = []) {
         res.end('{"status":"ok"}')
         try {
           const evt = JSON.parse(body)
-          if (evt.post_type === 'message') await handle(evt)
+          if (evt.post_type === 'message') CHANNEL_IO.enqueueOneBot(evt, CHANNEL, parseMessage)
         } catch (e) { logErr('[qq] 事件解析失败：', e.message) }
       })
       return
@@ -780,6 +821,7 @@ export async function run(argv = []) {
         dryRun: !!config().guard?.dryRun,
         napcat: { ok: napcatOk, url: NAPCAT, checkedAt: napcatCheckedAt, downSince: napcatDownSince || null },
         brain: brainHealth(),
+        channel: (() => { try { return CHANNEL.snapshot() } catch (e) { return { error: String(e?.message ?? e) } } })(),
         ...memory.stats(),
       }))
       return
@@ -787,6 +829,9 @@ export async function run(argv = []) {
     // ── 脑的两条通用入口（v3 §6 S0）─────────────────────────────────
     // 别的通道（抖音私信/推送/未来的 B站）不必自己实现记忆层：POST 过来就行。
     // body: {proc,platform,chatId,userId,role,text,isGroup,scope,msgId}
+    // ── 统一通道的入站/出站（10-31）全部在 tools/lib/channel-io.mjs ─────────
+    if (CHANNEL_IO.handleChannelRoutes(req, res, CHANNEL, log)) return
+
     if (req.method === 'POST' && (req.url === '/event' || req.url === '/sent')) {
       let body = ''
       req.on('data', (c) => { body += c; if (body.length > 512 * 1024) req.destroy() })
