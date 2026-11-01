@@ -327,8 +327,32 @@ export async function decide(o = {}) {
   const cur = { action, since: now, until, why, spanMin: span, lean }
 
   // ⑤ 埋一个想法：她换了事做，本身就是"心里转着的事"之一
+  //
+  // ⚠️ 2026-11-02 修正 —— 这里原来每次决策都无条件埋一条 `'现在想' + label`，
+  //    结果是**欲望通胀**：
+  //
+  //      inner.think 的去重是「前 12 字有一半字重叠就算同一件事」，
+  //      而 "现在想回话" 和 "现在想看番/刷视频" 前 12 字重合度超过一半
+  //      → 被判定成同一件事 → weight 每次 +0.8，上限 6。
+  //      每 30 秒一次心跳 → **三分半就把欲望顶到满格**。
+  //
+  //    实测（2026-11-02 06:1x）：inner 池里两条都是 weight=5.87，
+  //    而真正"想通的一件事"刚进来只有 weight=1。于是她的 innerBlock 里
+  //    永远只显示这两条"想要"，挤掉所有真念头 —— 她变成了只剩欲望没有想法的人。
+  //
+  //    更根本的问题在语义上：**"决定去做 X"不等于"心里惦记着 X"**。
+  //    人不会因为刚决定去看番，就在心里反复念"我想看番"念到魔怔。
+  //    决定是决定（self-state.json 里的 current），念头是念头（inner 池）。
+  //    一个动作只该在**第一次**被选中的时候留下一个念头痕迹，之后是常态就不该再响。
+  //
+  //    修法：只在行为**变了**的时候记，且用 kind:'act'（不是 meta），
+  //    这样换台才有涟漪，原地重复没有。并且同一 action 不重复累加。
   try {
-    if (action !== 'rest') inner.think('现在想' + spec.label, { kind: 'meta', about: 'self', now })
+    const lastAct = (st.history || []).slice(-2, -1)[0]?.action
+    const changed = lastAct !== action
+    if (action !== 'rest' && changed) {
+      inner.think('刚决定去' + spec.label, { kind: 'act', about: 'self', now })
+    }
   } catch { }
 
   st.current = cur

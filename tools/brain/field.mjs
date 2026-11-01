@@ -77,6 +77,31 @@ export const DIMS = {
 /**
  * 耦合：这张表就是"她是一个整体"的代码形状。
  *
+ * ══════════════════════════════════════════════════════════════════════
+ * ⚠️ 2026-11-02 修正：光有 k 不够，还要区分「推一下」和「把基线挪走」
+ * ══════════════════════════════════════════════════════════════════════
+ * 原来每一条都是"推一下"：每步把 to 往某个方向推 delta，而 to 自己同时在
+ * 朝 set 弛豫。当 to 的 tau 远小于 from 的 tau 时，推的量会被弛豫当场吃掉，
+ * 稳态偏移 ≈ 0 —— **这条耦合等于不存在**。
+ *
+ * 实测（脚本 shape_test2）：cortisol 拉到 0.9（相当于连压一周），valence
+ * 只掉到 -0.155 就开始回弹，8h 后已回到 -0.115。也就是说：
+ * **长期压力完全拖不动她的心情。** 这不是方向错，是量级错。
+ *
+ * 为什么是形状错而不是参数错：真实生理里，慢性皮质醇改变的是**基线**
+ * （HPA 那条已经学到过："慢性压力抬高设定点，不是挂 fbSensitivity"）。
+ * 心情不是"被推下去又弹回来"，是"这段时间整个人的底色就低"。
+ *
+ * 所以给耦合加一个 mode：
+ *   · 'push'（默认）—— 推一下。适合**同量级 tau** 的两个维度之间
+ *                      （例如 da→ne：都是分钟到小时级，推一下合理）
+ *   · 'set'          —— 拖动目标的**静息点**。适合**慢变量 → 快变量**
+ *                      （cortisol tau 10h 拖 valence tau 1.5h；
+ *                        sleepDebt tau 36h 拖 fatigue tau 5h）
+ * 'set' 模式下，一旦慢变量回落，静息点也跟着回来 —— 不是永久改写，
+ * 而是"这段时间的基线"。这就是可逆的耐受/情绪底色，而不是一次性的伤害。
+ *
+ * ── 以下是原来那张表的说明，仍然成立 ────────────────────────────────
  * 三个刻意的不对称，每一个都有生理依据：
  *   ① 睡眠债 → 血清素（减）  没睡够就没耐心。反过来不成立：你今天脾气差，
  *                              不会让你欠睡眠。**方向必须单向**，双向就是错的形状。
@@ -88,12 +113,15 @@ export const DIMS = {
  * k 是"每单位偏差、每秒"的传导系数；实际每次按 dt 缩放。
  */
 export const COUPLING = [
-  { from: 'sleepDebt', to: 'sero',     k: -0.30, why: '没睡够就没耐心' },
-  { from: 'fatigue',   to: 'ne',       k: -0.26, why: '累到一定程度兴奋不起来' },
-  { from: 'cortisol',  to: 'valence',  k: -0.34, why: '长期压力把人往下拖' },
-  { from: 'tension',   to: 'cortisol', k:  0.09, why: '压着的事会慢慢变成背景压力' },
-  { from: 'da',        to: 'ne',       k:  0.16, why: '兴奋提神' },
-  { from: 'sleepDebt', to: 'fatigue',  k:  0.20, why: '欠的觉会直接变成身上的沉' },
+  // 慢 → 快：用 set（拖动基线），否则会被快变量的弛豫吃掉
+  { from: 'sleepDebt', to: 'sero',     k: -0.30, mode: 'set',  why: '没睡够就没耐心' },
+  { from: 'sleepDebt', to: 'fatigue',  k:  0.20, mode: 'set',  why: '欠的觉会直接变成身上的沉' },
+  { from: 'cortisol',  to: 'valence',  k: -0.34, mode: 'set',  why: '长期压力把人往下拖' },
+  // 慢 → 慢：本来就在同一量级，推一下即可（cortisol tau 10h，tension tau 6h）
+  { from: 'tension',   to: 'cortisol', k:  0.09, mode: 'push', why: '压着的事会慢慢变成背景压力' },
+  // 快 → 快：同上
+  { from: 'fatigue',   to: 'ne',       k: -0.26, mode: 'push', why: '累到一定程度兴奋不起来' },
+  { from: 'da',        to: 'ne',       k:  0.16, mode: 'push', why: '兴奋提神' },
 ]
 
 /* ── 读写 ─────────────────────────────────────────────────────────── */
@@ -140,7 +168,27 @@ function relax(v, target, dtMs, tauMs) {
  */
 export function evolve(now = Date.now()) {
   const st = hydrate(readJson(fieldPath(), null))
-  const last = st.at || now
+  // ⚠️ 这里原来写 `const last = st.at || now` —— 那是本文件最严重的一个 bug。
+  //
+  //     empty().at = 0，而 0 是假值 → last 被当成 now → dt = 0 → 下面 `dt <= 0` 直接 return。
+  //     而 return 之前**不会 persist** → at 永远是 0 → 下一次还是 dt = 0。
+  //
+  //     后果：这个"状态场"建好之后**一次都没演化过**。field.json 的 at 一直是 0，
+  //     dims 里全是测试脚本用 poke/setDim 塞进去的值，不是时间算出来的。
+  //     而 cognitiveDepth / sleepiness / self.decide / think.introspect 全建在它上面 ——
+  //     整具身体的稳态是假的：她不会因为熬夜变铝，也不会因为休息恢复。
+  //
+  //     形状上的错误才是关键：**at = 0 的语义是"从没演化过"，不是"现在"**。
+  //     把它当成 now，等于假设"她三分钟前刚初始化"——于是时间永远追不上。
+  //
+  //     修法与 hpa.mjs:120 一致：at 为 0 = 首次运行 → 初始化它并落盘，下一次才真正开始演化。
+  //     （同一个坑在 hpa.mjs 踩过并修好了，field.mjs 漏了。全仓再扫过一遍，只剩这一处。）
+  if (!st.at) {
+    st.at = now       // 首次：把 at 落盘，本轮不演化（没有"上一次"可比）
+    persist(st)
+    return st
+  }
+  const last = st.at
   let dt = now - last
   if (dt <= 0) return st            // 时间没往前走 → 什么都不做（幂等）
   // 上限：机器睡了三天，回来不该一次性补三天的情绪演化（那会算出没意义的值）。
@@ -154,12 +202,43 @@ export function evolve(now = Date.now()) {
   }
 
   // ② 耦合按 dt 比例传导（比例用"相对该维时间常数"的那个量，才有正确量纲）
+  //
+  //    'push' 和 'set' 的区别见 COUPLING 上方那段注释。
+  //    'set' 有个额外的关键约束：**drift 必须随慢变量一起回落**，
+  //    否则一次熬夜就把她的疲劳基线永久抬高 —— 那是伤害，不是状态。
+  //    所以这里每步都从「静息点 + 当前慢变量偏差 × k」重新算，
+  //    而不是往 drift 里累加。慢变量回到静息点时，drift 自动归零。
   for (const c of COUPLING) {
     const from = st.dims[c.from], to = st.dims[c.to]
     const dTo = DIMS[c.to]
-    const dev = from - Number(st.drift[c.from] ?? DIMS[c.from].set)   // 偏离自己静息点多少
-    const step = dev * c.k * (dt / (dTo.tau + dt))                    // 该维自己的惯性
-    st.dims[c.to] = clamp(to + step, dTo.lo, dTo.hi)
+    const dFrom = DIMS[c.from]
+    const dev = from - Number(st.drift[c.from] ?? dFrom.set)   // 偏离自己静息点多少
+
+    if (c.mode === 'set') {
+      // 拖动目标的静息点：不是推一下，是把"这段时间的基线"挪过去。
+      //
+      // ⚠️ 第一版直接写 `baseline = dTo.set + dev * c.k`，每步都从当前值重算，
+      //    结果形成了负反馈回环：sero 被压 → 它的 dev 变负 → 把 sleepDebt 那条
+      //    （sleepDebt→sero）的输入带歪 → 基线再次被非线性地推走。
+      //    实测 2h 就把 sero 从 0.60 砸到 0.18（连熬两夜才该有的程度），
+      //    这是**过冲**，不是"没睡够就没耐心"。
+      //
+      //    真实的慢性调节是**慢**的：皮质醇持续偏高期间，情绪底色一点点往下走，
+      //    而不是一小时掉到底。所以这里加两件事：
+      //      ① 基线本身也按自己的 tau 弛豫过去（不瞬移）
+      //      ② k 乘一个 0.55 的衰减 —— 让"慢变量把基线挪走"这件事
+      //         弱于"快变量自己的恢复"，否则一个慢变量就能把整个系统按死
+      const target = dTo.set + dev * c.k
+      const cur = Number(st.drift[c.to] ?? 0)
+      // drift 存的是"相对静息点的偏移"，按目标自己的 tau 缓慢趋近目标
+      const nextDrift = cur + (target - dTo.set - cur) * (dt / (dTo.tau * 2 + dt))
+      st.drift[c.to] = Number(nextDrift.toFixed(4))
+      const baseline = dTo.set + nextDrift
+      st.dims[c.to] = clamp(relax(to, baseline, dt, dTo.tau), dTo.lo, dTo.hi)
+    } else {
+      const step = dev * c.k * (dt / (dTo.tau + dt))           // 该维自己的惯性
+      st.dims[c.to] = clamp(to + step, dTo.lo, dTo.hi)
+    }
   }
 
   st.at = now
@@ -342,7 +421,26 @@ export function sense(s = null) {
   if (d.valence > 0.3) bits.push('心情是往上的')
   else if (d.valence < -0.3) bits.push('心情低')
   if (d.ne > 0.72) bits.push('人在亢奋，话会冲一点')
-  if (!bits.length) bits.push('状态平稳')
+
+  // ⚠️ 2026-11-02 补：正面信号不能缺。
+  //
+  //    原来只有"没有坏消息"时给一句「状态平稳」—— 那是**空缺**，不是正面。
+  //    这个坑在 self.mjs 的 leanOf 里踩过一次并写了注释：
+  //      "输入没有正面信号，它只能往负面填；连精神好那次也全说脑子有点乱"。
+  //    同一类错误不该在两个地方各犯一次。
+  //
+  //    而且"状态平稳"读起来像体检报告，不像身体感觉。
+  //    真人精神好的时候是会知道的：身上轻、脑子转得动、有点想说话。
+  if (!bits.length) {
+    if (d.sleepDebt < 0.15 && d.fatigue < 0.2 && d.sero > 0.6) {
+      bits.push('身上是轻的，脑子也转得动')
+      if (d.valence > 0.15) bits.push('心里挺舒展')
+    } else if (d.sleepDebt < 0.3 && d.fatigue < 0.35) {
+      bits.push('身上没什么乏的，还算清爽')
+    } else {
+      bits.push('状态平稳')
+    }
+  }
   return '你此刻的身体：' + bits.join('；') + '。'
 }
 

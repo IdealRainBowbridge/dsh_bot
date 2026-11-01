@@ -102,11 +102,46 @@ export async function bindBody(deps) {
     watch: async (d) => { await syncFocus('bilibili', d) },
     browse: async (d) => { await syncFocus('web', d) },
     rest: async (d) => { await syncFocus('rest', d) },
-    // 这两件还没做实（写东西/想事情）。留空而不是假装做了 ——
-    // 写一个假的执行器比不写更糟：它会让她"决定写东西"然后什么都没发生，
-    // 而她下次还会决定写东西，日志里看起来一切正常。
-    write: async () => { },
-    think: async () => { },
+
+    // ════════════════════════════════════════════════════════════════
+    // write / think —— 2026-11-02 补上执行体
+    // ════════════════════════════════════════════════════════════════
+    // 这两件之前是空的，理由写在原来的注释里："取材规则还没定，
+    // 写个假执行器比不写更糟"。那个顾虑是对的，但它只对了一半：
+    //
+    //   假的执行器（说"我去写了"然后什么都不做）确实更糟。
+    //   但**真的有东西可写**这件事早就成立了 —— 只是一直没人接线：
+    //     · 日记命令 `diary --book private --append` 早就能用，
+    //       feiyu-diary-private.md 已经写了 13KB（她一直在写，只是在聊天时写）
+    //     · inner.mjs 里就攒着她"心里正转着的"念头（loudest/innerBlock）
+    //     · field.sense() 给得出她此刻身体是什么样
+    //     · segment/index.json 有她最近经历的事
+    //   所以取材规则不是"没定"，是**取她自己身上现成的三样东西**：
+    //   身体的、心里的、最近发生的。这也是一个人写日记时真正会写的内容。
+    //
+    // 硬约束（写进提示词，不是写在这里就完事）：
+    //   · 不提"根据我的状态""作为一个AI"这类系统腔
+    //   · 不许编造没发生的事 —— 素材没给的细节不写
+    //   · 长短由她定，累了就写短
+    write: async (d) => {
+      try {
+        await syncFocus('write', d)
+        const r = await composeAndWrite({ deps, d, book: 'private' })
+        deps.log('[body] ✍️ 写了 ' + r.chars + ' 字到私人日记（' + r.why + '）')
+      } catch (e) { swallow(e, 'body:write') }
+    },
+
+    // think 和 write 的区别，是"想事情"和"写东西"的区别：
+    //   write → 一段成文的话，进日记文件
+    //   think → 一个念头，进 inner 池（会淡出、会有权重、会在下一轮被她自己想起来的）
+    // 所以 think **不能**写成日记，那样就把两种东西混成一种了。
+    think: async (d) => {
+      try {
+        await syncFocus('think', d)
+        const r = await composeThought({ deps, d })
+        if (r.ok) deps.log('[body] 💭 想明白一件事：' + r.text.slice(0, 40))
+      } catch (e) { swallow(e, 'body:think') }
+    },
   })
 
   // 心跳读"有没有打断"：私聊有未处理消息 / 群里有 @
@@ -115,4 +150,107 @@ export async function bindBody(deps) {
 
   HB.start({ log: deps.log })
   return HB.status()
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 取材：她写东西 / 想事情的时候，脑子里有的东西从哪来
+// ══════════════════════════════════════════════════════════════════════
+// 这三样都是**真的**，不是给 LLM 编一个场景：
+//   ① 身体：field.sense() —— 她此刻累不累、心里压着事没有
+//   ② 心里：inner.loudest() —— 攒着没说的念头（会淡出，所以不是陈年旧账）
+//   ③ 最近：segment 最近几件事的标题 + 她日记上一段
+// 素材为空时**不硬写** —— 宁可这一次不写，也不要编。
+
+async function composeAndWrite({ deps, d, book }) {
+  const F = await import('../brain/field.mjs')
+  const IN = await import('../brain/inner.mjs')
+
+  const body = (() => { try { return F.sense() } catch { return '' } })()
+  const depth = (() => { try { return F.cognitiveDepth() } catch { return 0.5 } })()
+  const pending = (() => { try { return IN.loudest(3) } catch { return [] } })()
+
+  // 最近发生的事（只有标题，不给内容 —— 和记忆层同一个口径）
+  let recent = ''
+  try {
+    const SEG = await import('../brain/segment.mjs')
+    const idx = SEG.recentIndex(3)
+    if (idx) recent = idx
+  } catch (e) { swallow(e, 'body:write:recent') }
+
+  const material = [body, pending.length ? pending.map((x) => '- ' + x.text).join('\n') : '', recent].filter(Boolean).join('\n\n')
+  // 素材全空 = 她这一天什么都没发生也没想。这时候写日记只会写出空话。
+  if (!material.trim()) return { chars: 0, why: '没素材，不写' }
+
+  const LLM = await import('./llm.mjs')
+  const lines = depth < 0.4
+    ? '你累了，写不出长篇。两三句就行，别硬撑，也别交代自己在写日记。'
+    : '想写多长写多长，累了就短一点。别交代"我在写日记"这件事。'
+  const ask = [{
+    role: 'system',
+    content: '你是大肥鱼本人，正在往自己的私人日记里写一段。\n'
+      + '现在是 ' + nowLine() + '。\n'
+      + '下面这些是你此刻真实的状态和最近心里的事 —— 用它，但**别复述、别罗列**。\n'
+      + '不许编造上面没给的细节（没发生的事不写、没说过的话不引）。\n'
+      + '不许出现"根据我的状态""作为一个""今天我来记录"这类系统腔。\n'
+      + lines,
+  }, {
+    role: 'user',
+    content: material + '\n\n写一段。',
+  }]
+
+  let text = ''
+  try {
+    text = String(await LLM.chat(ask, { temperature: 0.95, max_tokens: depth < 0.4 ? 220 : 600, purpose: 'creative' }) || '').trim()
+  } catch (e) { swallow(e, 'body:write:llm'); return { chars: 0, why: '模型没回' } }
+  if (!text) return { chars: 0, why: '空输出' }
+
+  // 真的写进日记文件（走已有的 diary 命令，不自己拼路径）
+  const p = deps.spawn(process.execPath,
+    [deps.feiyuPath(), 'diary', '--book', book, '--append', text],
+    { stdio: 'ignore', windowsHide: true })
+  p.on('error', () => { })
+  return { chars: text.length, why: '素材：身体/念头/' + (recent ? '最近' : '仅身体') }
+}
+
+async function composeThought({ deps, d }) {
+  const F = await import('../brain/field.mjs')
+  const IN = await import('../brain/inner.mjs')
+
+  const body = (() => { try { return F.sense() } catch { return '' } })()
+  const pending = (() => { try { return IN.loudest(3) } catch { return [] } })()
+  const material = [body, pending.length ? pending.map((x) => '- ' + x.text).join('\n') : ''].filter(Boolean).join('\n\n')
+  if (!material.trim()) return { ok: false }
+
+  const LLM = await import('./llm.mjs')
+  const ask = [{
+    role: 'system',
+    content: '你是大肥鱼本人。现在你坐着，把一件事在心里想明白。\n'
+      + '只输出**一句话**：你想通的那个点。\n'
+      + '不要旁白、不要"我想"这种前缀、不要解释你为什么在想、不要总结心情。\n'
+      + '可以碎，可以不完整，可以只是一个决定。',
+  }, {
+    role: 'user',
+    content: material + '\n\n想明白什么了？',
+  }]
+
+  let text = ''
+  try {
+    text = String(await LLM.chat(ask, { temperature: 1.05, max_tokens: 90 }) || '').trim()
+  } catch (e) { swallow(e, 'body:think:llm'); return { ok: false } }
+  text = text.replace(/^["'“”「」]|["'“”「」]$/g, '').replace(/^(我想|我觉得)[:：]\s*/, '').slice(0, 80)
+  if (!text) return { ok: false }
+
+  // 进 inner 池：它会淡出、有权重、下一轮可能被她自己想起来
+  try { IN.think(text, { kind: 'reflect', about: 'self' }) } catch (e) { swallow(e, 'body:think:inner') }
+  return { ok: true, text }
+}
+
+/** 现在几点、哪一天 —— 一句话。写东西时不给时间，她会自己编一个（实测编成了九月十四号）。 */
+function nowLine(now = Date.now()) {
+  const d = new Date(now)
+  const wd = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
+  const h = d.getHours()
+  const seg = h < 5 ? '凌晨' : h < 9 ? '早上' : h < 12 ? '上午' : h < 14 ? '中午'
+    : h < 18 ? '下午' : h < 23 ? '晚上' : '深夜'
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 周${wd} ${seg}${d.getHours() % 12 || 12}点`
 }

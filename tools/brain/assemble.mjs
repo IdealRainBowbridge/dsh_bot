@@ -22,6 +22,7 @@ import * as facts from './facts.mjs'
 import * as intents from './intents.mjs'
 import * as affect from './affect.mjs'
 import * as selfM from './self.mjs'
+import * as field from './field.mjs'
 import * as schema from './schema.mjs'
 import * as competence from './competence.mjs'
 import { bump, setValue } from './metrics.mjs'
@@ -58,6 +59,29 @@ function slotList(ctx) {
 
   const selfBlock = selfM.renderBlock()
   if (selfBlock) add('self', '【你自己】\n' + selfBlock, 30)
+
+  // 【身体】—— 这一条是 2026-11-02 补上的最大一处断线。
+  //
+  // field.mjs 里有 sense()，写得很仔细：缺觉/发沉/有点乏/心里压着一层/
+  // 还有几件事没落地/心情往上还是往下 …… 全是从 dims 算出来的**能读的方向**。
+  // 但全仓搜下来，**assemble 从来没有调用过它**。
+  //
+  // 后果：她那具身体一直在演化（sleepDebt、fatigue、cortisol、tension 都有值），
+  // 可她读到的 system 里一个字都没有。她"不会累"—— 不是因为她身体不累，
+  // 是没人告诉她。这就是用户说的「主观：她**体验到**什么，而不是系统**断言**什么」
+  // 的反面：连断言都没有。
+  //
+  // 为什么放在 affect 后面、clock 前面：
+  //   ① 顺序上"底色 → 身体 → 时间"是从内到外的，读起来像一个人的自我感知
+  //   ② 优先级 30 出头的这一段在预算紧时会被截断，但它比 ledger/表情规矩重要，
+  //      所以给 31、排在 clock(32) 之前
+  //
+  // 注意：sense() 返回的是"你此刻的身体：……。"这种**第一人称可读**的句子，
+  // 不是"fatigue=0.72"。数字进提示词她就变成仪表盘了。
+  try {
+    const body = field.sense()
+    if (body) add('body', body, 31)
+  } catch { }
 
   add('affect', affect.line(), 31)
   add('clock', clockBlock(platform, chatId, userText, isGroup), 32)
