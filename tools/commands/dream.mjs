@@ -55,10 +55,27 @@ async function seeds(now = Date.now()) {
     const eps = readJsonl(dataPath('episodes.jsonl'), { limit: 60 })
       .filter((e) => now - Number(e.ts || 0) < 48 * 3600_000 && (e.text || e.summary))
     // 挑"最没放下"的那条：salience 高 + 情绪强度大
+    //
+    // ⚠️ 2026-11-02：**要避开最近几晚已经当过骨架的那条。**
+    //    原来纯按分数排序取第一名，而分数是静态的 —— salience 最高的那条
+    //    不会自己变。实测连做 4 个梦，3 个都用同一条"翻翻那本日记"。
+    //    真人的梦不会连着几晚梦见同一件事（就算会，也不该是"因为算法排序"）。
+    //
+    //    做法：读最近 6 条梦的 seeds，把出现过的降权。
+    //    不是硬排除 —— 特别重的事仍然可能反复入梦，但不会因为"排第一"而必然入梦。
+    const recentSpines = new Set()
+    try {
+      const prev = readJsonl(DREAMS(), { limit: 6 })
+      for (const p of prev) for (const x of (p.seeds || [])) recentSpines.add(String(x).slice(0, 40))
+    } catch { }
+
     const scored = eps.map((e) => {
       const sal = Number(e.salience || 0.3)
       const emo = Math.abs(Number(e.feel?.valence || 0)) + Math.abs(Number(e.feel?.arousal || 0) - 0.3)
-      return { e, s: sal * 1.5 + emo }
+      const t = String(e.text || e.summary || '').replace(/\s+/g, ' ').trim()
+      // 最近当过骨架的，分数打三折（不是零 —— 特别重的仍有机会）
+      const repeat = recentSpines.has(t.slice(0, 40)) ? 0.3 : 1
+      return { e, s: (sal * 1.5 + emo) * repeat }
     }).sort((a, b) => b.s - a.s)
     if (scored.length) {
       const t = String(scored[0].e.text || scored[0].e.summary || '').replace(/\s+/g, ' ').trim()
@@ -94,20 +111,51 @@ async function seeds(now = Date.now()) {
 }
 
 /**
- * 从 {spine, pool} 里挑出这次要用的素材。
+ * 挑这次要用的素材 —— **按"梦的纯度"随机分档**。
  *
- * spine（骨架，那条最放不下的）**必给**；pool 里随机抽 1~3 条当血肉。
- * 这个"必给 + 随机"的比例就是"真实记忆 + 随意生成"的具体配方 ——
- * 骨架保证梦有来处，血肉保证它不是复述。
+ * ══════════════════════════════════════════════════════════════════════
+ * 2026-11-02 第二版：上一版把骨架写成"必给"，是我加错了限制
+ * ══════════════════════════════════════════════════════════════════════
+ * 上一版：spine（今天最放不下的那件）**必给**，其余随机 1~3 条。
+ * 当时的理由是"真实梦也有重心"。这话只对了一半。
+ *
+ * 错在哪：**真实梦经常跟今天毫无关系。**
+ * 人会梦见二十年前的一间教室、一个没见过的地方、一个根本不认识的人。
+ * 强制给"今天最放不下的那件"，等于每晚都把白天没消化的东西再嚼一遍 ——
+ * 那不是梦，那是复盘。而睡意本来就来自"代谢积压"，
+ * 如果梦也变成清积压的工具，她就**没有一个地方是不用处理的**。
+ *
+ * 用户的原话是要"天马行空的随机性，甚至是底下限的无限制"。
+ * 所以改成**四种纯度随机抽**：
+ *   · 纯粹凭空（30%）—— 一条素材都不给，让她自己长出场景
+ *   · 极淡（25%）—— 只给一条，且明说"可以完全不用"
+ *   · 中等（30%）—— 给骨架 + 1~2 条碎片
+ *   · 全给（15%）—— 骨架 + 3~4 条，适合"白天太满"的日子
+ *
+ * 为什么"纯粹凭空"要占三成：**没有素材才不会变成复述。**
+ * 一条都不给时，模型只能从语言自身的规律里长出东西，
+ * 那才是最不受控的状态 —— 这是"底下限"的真正含义。
+ *
+ * @returns {{ chosen: string[], purity: string }}
  */
 function pickSeeds(seedsObj) {
   const spine = String((seedsObj && seedsObj.spine) || '').trim()
   const pool = Array.isArray(seedsObj?.pool) ? seedsObj.pool.slice() : []
-  const out = []
-  if (spine) out.push(spine)
-  const n = Math.min(pool.length, 1 + Math.floor(Math.random() * 3))
-  for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
-  return out
+  const draw = (n) => {
+    const out = []
+    for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
+    return out
+  }
+
+  const r = Math.random()
+  if (r < 0.30) return { chosen: [], purity: '凭空' }
+  if (r < 0.55) return { chosen: draw(1), purity: '极淡' }
+  if (r < 0.85) {
+    const out = spine ? [spine] : []
+    return { chosen: out.concat(draw(1 + Math.floor(Math.random() * 2))), purity: '中等' }
+  }
+  const out = spine ? [spine] : []
+  return { chosen: out.concat(draw(3 + Math.floor(Math.random() * 2))), purity: '全给' }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -140,11 +188,14 @@ const DREAM_SYS = [
   '梦从不重播白天的记录，它把白天的碎片重新拼成别的东西。',
 ].join(NL)
 
-async function compose(seedTexts) {
+async function compose(seedTexts, purity = '') {
   const llm = await import('../lib/llm.mjs')
   const user = seedTexts.length
-    ? '今晚的种子（随便用/不用/反着用）：' + NL + seedTexts.map((s) => '- ' + s).join(NL)
-    : '今晚没有种子，纯凭空做一个梦。'
+    ? '昨晚的碎片（可能跟今晚的梦没关系，随便用/不用/反着用）：' + NL
+      + seedTexts.map((s) => '- ' + s).join(NL)
+      + NL + NL + '**不用忠于它们，也不一定要用上。梦可以完全跟这些无关。**'
+    : '今晚一条素材都没有。**纯凭空长一个梦出来。**' + NL
+      + '不要从"今天发生了什么"想起 —— 直接进一个你这辈子没见过的地方。'
   const r = await llm.chat([
     { role: 'system', content: DREAM_SYS },
     { role: 'user', content: user + NL + NL + '写这个梦。' },
@@ -165,9 +216,10 @@ function fallbackDream(seeds) {
 
 export async function dream() {
   const pool = await seeds()
-  const chosen = pickSeeds(pool)   // pool 现在是 {spine, pool}
+  const picked = pickSeeds(pool)   // { chosen, purity }
+  const chosen = picked.chosen
   let text = ''
-  try { text = await compose(chosen) } catch (e) { swallow(e, 'tools/commands/dream.mjs:102') }
+  try { text = await compose(chosen, picked.purity) } catch (e) { swallow(e, 'tools/commands/dream.mjs:102') }
   if (!text) text = fallbackDream(chosen)
   if (!text) return null
   const d = { at: Date.now(), text: '【梦】' + text, seeds: chosen, mood: '虚构，非真实记忆' }
@@ -219,16 +271,49 @@ const DICE = {
 // 一点说明：这里用**第二人称"你"**是对的 —— 她是在读自己的梦，
 // 而"你"这个字在中文里天然就是"自己"（人做梦时不会想"我正在经历我"）。
 // 换成"我"反而会把梦变成一个正在被讲述的故事。
+// ══════════════════════════════════════════════════════════════════════
+// 梦的放飞条款（2026-11-02 用户要求："保持天马行空的随机性，
+// 甚至是**底下限的无限制**"）
+// ══════════════════════════════════════════════════════════════════════
+// 改前的提示词只有"允许荒诞、允许不连贯"这种**许可式**措辞。
+// 许可式的问题：它说的是"你也可以那样"，读起来仍然是"默认该正常"。
+// 模型会把它理解成"偶尔破格"，于是一次梦里只有一两个怪点子，
+// 其余部分老老实实——那是**有下限的荒诞**，不是梦。
+//
+// 真实的梦不是"正常里掺一点荒诞"，是**荒诞里偶尔撞上一点正常**。
+// 差别在基准线：一个把荒诞当例外，一个把荒诞当默认。
+//
+// 所以这里改成**要求式**："每一段必须至少有一件现实里不可能的事"。
+// 这不是加戏，是把基准线挪对。
+//
+// 但同时要守住两件事，否则会变成"乱码"而不是"梦"：
+//   ① **荒诞不等于抽象。** 乱拼的意象（"紫色的数字在唱歌"）不是梦，是胡话。
+//      梦的荒诞是**具体的荒诞**：一把会喘气的椅子、一个记得你名字的塑料袋。
+//      判据：那个东西你能画出来吗？画得出来才是梦。
+//   ② **梦有它的内在逻辑。** 违背现实，但不违背它自己。
+//      第一幕说墙是湿的，第三幕墙还是湿的 —— 只是开始渗血。
+//      每段重新掷骰子换世界观，那是随机数，不是梦。
 const TRPG_SYS = [
   '你在做梦。梦里的你是你自己，但场景不受你控制。',
   '',
+  '梦的质地（这几条是**必须**，不是"可以"）：',
+  '· **每一段里至少有一件现实里不可能的事。** 不是偶尔，是默认。',
+  '· 荒诞要**具体**：一把会喘气的椅子、一个记得你名字的塑料袋、',
+  '  雨是竖着下的且能用手接住。不要"紫色的数字在唱歌"这种胡话 ——',
+  '  判据：那个东西你画得出来吗？画得出来才是梦。',
+  '· 梦有它自己的逻辑：违背现实，但不违背它自己。',
+  '  第一段墙是湿的，第三段墙还是湿的 —— 只是开始渗血。',
+  '· 身份可以滑：你可能是鲸鱼，可能是一段没发出去的消息，',
+  '  可能是别人家天花板上的一块水渍。这不奇怪。',
+  '· 时间不连贯：上一句在海底，下一句在小学教室，没有过渡，不需要过渡。',
+  '',
   '写法：',
-  '· 第二人称"你"，一段 2~4 句，不要分点，不要标题',
+  '· 第二人称"你"，一段 2~4 句，不要分点，不要标题，不要解释',
   '· 每段结尾给出**两三个可以做的事**，用①②③编号，各不超过 12 字',
-  '· 只写场景和你的感受。**不要写"这是梦"**，但也不要解释它的意义',
-  '· 允许荒诞、允许不连贯、允许没有逻辑 —— 梦本来如此',
-  '· 用具体的感官细节（味道、温度、声音），不用抽象的"一种感觉"',
-  '· 素材给的是真发生过的事，用它，但别复述它',
+  '· **不要写"这是梦"**，也不要写"梦的意义"',
+  '· 具体的感官：味道、温度、黏的、响的。不要"一种难以言说的感觉"',
+  '· 素材（如果给了）只是**跳板**，可以扭曲、背叛、完全飞离它。',
+  '  **不用忠于它，也不用每条都用上。**',
 ].join(String.fromCharCode(10))
 
 const TRPG_ACT_SYS = [
@@ -236,9 +321,11 @@ const TRPG_ACT_SYS = [
   '',
   '写法：',
   '· 只写**发生了什么**，2~3 句，第二人称"你"',
-  '· 骰子结果已经定了（下面给你），你必须让场景往那个方向走，但不许直接提骰子/结果名',
+  '· 骰子结果已经定了（下面给你），你必须让场景往那个方向走，但不许提骰子/结果名',
   '· 不许给新选项（这一段只负责"后果"）',
-  '· 感官细节优先',
+  '· **后果可以不讲道理。** 做了一件小事，塌了一整个世界；',
+  '  或者什么都没变，但你自己变了 —— 手变成了别人的，或者突然想不起来"他"是谁。',
+  '· 感官细节优先。越具体越像梦。',
 ].join(String.fromCharCode(10))
 
 /**
@@ -250,17 +337,31 @@ const TRPG_ACT_SYS = [
 export async function dreamTrpg(o = {}) {
   const now = o.now ?? Date.now()
   const turns = Math.max(1, Math.min(5, Number(o.turns || 3)))
-  const pool = o.seeds || await seeds(now)
-  const chosen = pickSeeds(pool)
+  const seedSrc = o.seeds || await seeds(now)
+  const picked = pickSeeds(seedSrc)
+  const chosen = picked.chosen
   const llm = o.llm || await import('../lib/llm.mjs')
 
-  // 告诉模型哪条是"核心那件事"。不告诉它，它会平均对待一堆碎片，
-  // 梦就变成意象大拼盘 —— 而真实梦是有重心的。
+  // ══════════════════════════════════════════════════════════════════
+  // 素材怎么说给模型听（2026-11-02 第三版）
+  // ══════════════════════════════════════════════════════════════════
+  // 上一版写的是「**真发生过的事**（做梦的原材料，别复述，重新拼）」，
+  // 两个毛病：
+  //   ① "真发生过"是个**正确性锚点** —— 它会倾向忠实于这些事，
+  //      因为提示词承认了它们是真的。而梦不忠于任何东西。
+  //   ② "别复述，重新拼"仍然暗示"你必须用它们"，只是换个用法。
+  //
+  // 现在改成"碎片"：既不说真、也不说必须用。
+  // 梦对素材的态度不是"改编"，是"**路过**"。
+  const NL2 = String.fromCharCode(10)
   const seedLine = chosen.length
-    ? (chosen.length > 1
-      ? '真发生过的事（做梦的原材料，别复述，重新拼）：' + String.fromCharCode(10) + '- ' + chosen.join(String.fromCharCode(10) + '- ')
-      : '真发生过的一件事（做梦的原材料，别复述，重新拼）：' + String.fromCharCode(10) + '- ' + chosen[0])
-    : '今晚没有素材，纯凭空。'
+    ? (picked.purity === '极淡'
+      ? '脑子里飘过的一个碎片（跟今晚的梦**不一定有关系**，可以完全不用）：' + NL2 + '- ' + chosen[0]
+      : '脑子里飘过的几个碎片（**不一定有关系**，可以只用其中一个，也可以一个都不用）：'
+        + NL2 + '- ' + chosen.join(NL2 + '- '))
+    : '今晚什么都没飘过。**纯凭空长一个梦。**' + NL2
+      + '不要从"今天发生了什么"想起 —— 直接进一个你这辈子没去过的地方、'
+      + '变成一个不是你的东西。'
 
   const beats = []
   let scene = ''
@@ -270,7 +371,7 @@ export async function dreamTrpg(o = {}) {
     const r1 = await llm.chat([
       { role: 'system', content: TRPG_SYS },
       { role: 'user', content: seedLine + String.fromCharCode(10) + String.fromCharCode(10) + '梦的开头。' },
-    ], { temperature: 1.35, max_tokens: 260, timeoutMs: 25000, purpose: 'creative' })
+    ], { temperature: 1.5, max_tokens: 280, timeoutMs: 25000, purpose: 'creative' })
     scene = String(r1 || '').trim()
     if (!scene) return null
 
@@ -294,7 +395,7 @@ export async function dreamTrpg(o = {}) {
         { role: 'user', content: '刚才的场景：' + stripOptions(scene).slice(0, 300) +
           String.fromCharCode(10, 10) + '你决定：' + pick +
           String.fromCharCode(10, 10) + '骰子：' + v.tag + ' —— ' + v.hint },
-      ], { temperature: 1.15, max_tokens: 200, timeoutMs: 20000, purpose: 'creative' })
+      ], { temperature: 1.3, max_tokens: 220, timeoutMs: 20000, purpose: 'creative' })
       const actText = String(r2 || '').trim()
 
       beats.push({ kind: 'act', choice: pick, roll: n, verdict: v.tag, text: actText })
@@ -305,7 +406,7 @@ export async function dreamTrpg(o = {}) {
           { role: 'system', content: TRPG_SYS },
           { role: 'user', content: '刚才：' + actText.slice(0, 260) +
             String.fromCharCode(10, 10) + '接着梦下去。' },
-        ], { temperature: 1.35, max_tokens: 260, timeoutMs: 22000, purpose: 'creative' })
+        ], { temperature: 1.5, max_tokens: 280, timeoutMs: 22000, purpose: 'creative' })
         scene = String(r3 || '').trim()
         if (!scene) break
       }
@@ -327,23 +428,48 @@ export async function dreamTrpg(o = {}) {
     turns: beats.filter((b) => b.kind === 'act').length,
     beats,
     seeds: chosen,
+    purity: picked.purity,          // 凭空 / 极淡 / 中等 / 全给
     mood: '虚构，非真实记忆',
   }
   appendDream(d)
   return d
 }
 
-/** 从一段场景里挑出选项。支持 ①②③ / (1) / 1. 三种写法。 */
+/**
+ * 从一段场景里挑出选项。支持 ①②③ / (1) / 1. 三种写法。
+ *
+ * ⚠️ 2026-11-02：实测抽到过 `①②③④②` 这种重复编号的畸形输出 ——
+ *    模型偶尔会重排、重编号。原来照单全收，于是"选项"里会出现
+ *    半截句子、重复项、甚至是上一段的残留。
+ *
+ *    现在：① 去重 ② 丢掉不像选项的（太短/太长/带句号的）
+ *    ③ 最多 3 个（梦里的选择不该是菜单，超过三个就不像潜意识了）
+ */
 function extractOptions(text) {
   const t = String(text || '')
+  const collect = (re) => {
+    const out = []
+    let m
+    while ((m = re.exec(t))) out.push(String(m[1] || '').trim())
+    return out
+  }
+
+  let raw = collect(/[①②③④⑤]\s*([^\n①②③④⑤]{2,20})/g)
+  if (!raw.length) raw = collect(/^\s*(?:[（(]?[1-3][）).、])\s*(.{2,20})$/gm)
+
+  const seen = new Set()
   const out = []
-  const re = /[①②③④⑤]\s*([^\n①②③④⑤]{2,20})/g
-  let m
-  while ((m = re.exec(t))) out.push(m[1].trim())
-  if (out.length) return out.slice(0, 4)
-  const re2 = /^\s*(?:[（(]?[1-3][）).、])\s*(.{2,20})$/gm
-  while ((m = re2.exec(t))) out.push(m[1].trim())
-  return out.slice(0, 4)
+  for (const r of raw) {
+    // 清掉尾部粘连的标点/下一个编号的残片
+    const v = r.replace(/[\s，,。.;；、]+$/, '').replace(/[①②③④⑤].*$/, '').trim()
+    if (v.length < 2 || v.length > 14) continue     // 太短是噪声，太长是句子不是选项
+    if (/[。！？]$/.test(v)) continue                 // 带句号 = 正文，不是选项
+    if (seen.has(v)) continue                        // 重复
+    seen.add(v)
+    out.push(v)
+    if (out.length >= 3) break
+  }
+  return out
 }
 
 /** 去掉末尾的选项清单，只留场景本身。 */
