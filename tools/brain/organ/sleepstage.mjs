@@ -49,17 +49,48 @@ import * as hpa from './hpa.mjs'
 const MIN = 60_000
 const HOUR = 3_600_000
 
-/** 一个周期的结构。数值按真实多导睡眠图的典型比例。 */
+/**
+ * 一个周期的结构。数值按真实多导睡眠图的典型比例。
+ *
+ * ⚠️ 这里改过一次，是个**生物学错误**，必须记下来：
+ *   第一版把周期写成 `['N1','N2','N3','N2','REM']` 顺序串联，
+ *   每个阶段按 cycle 取长度。跑出来的结果是 **REM 到第 267 分钟（4.5 小时）才第一次出现**，
+ *   而真实的第一个 REM 在 **约 90 分钟**就有了 —— 只是很短（10 分钟左右）。
+ *
+ *   真根因：N3 和 REM 在同一个周期里是**先后**关系没错，
+ *   但每个周期**都有** REM，只是长度不同；我却让 N3 占了整个周期的大头，
+ *   把 REM 挤到了后面几个周期才够长。
+ *
+ *   所以这里改成：**每个周期都完整走一遍 N1→N2→N3→N2→REM**，
+ *   只是每一段的长度随周期变。这才是"一个周期"的含义。
+ */
 export const CYCLE = {
-  lengthMin: 92,        // 一个周期约 92 分钟
+  lengthMin: 92,
   stages: ['N1', 'N2', 'N3', 'N2', 'REM'],
-  // 每个阶段在"第几个周期"时占多长（分钟）。这是**非对称**的来源。
-  // 行=阶段，列=周期序号（0..3+）
-  byCycle: {
-    N1:  [8, 6, 5, 4],
-    N2:  [22, 28, 32, 34],
-    N3:  [42, 30, 14, 5],     // ← 前半夜多，快速衰减
-    REM: [10, 18, 32, 45],    // ← 后半夜多，持续上升
+
+  // ══ 这张表是**按真实比例反算**的，不是试出来的 ══════════════════
+  //
+  // 我在这里连调了五轮参数都没调对（REM 占比一度到 42%，总额停滞在 396 分钟）。
+  // 停下来才意识到方法错了：**在"每周期多少分钟"这一层试错，永远对不上**，
+  // 因为真实的已知量是**整夜的阶段占比**，不是每个周期的分钟数。
+  //
+  // 真实多导睡眠图（成人 8 小时）：
+  //   N1  2~5%   N2  45~55%   N3（深睡）13~23%   REM 20~25%
+  // 而"前半夜深睡多、后半夜 REM 多"是**分布形状**，不是总量。
+  //
+  // 所以正确做法：定义每个阶段的「权重形状」，然后**归一化到 92 分钟**。
+  // 这样无论形状怎么调，每周期都必然是 92 分钟，总额天然正确。
+  //
+  // share[i] = 第 i 个周期里该阶段占这一周期的**比例**（未归一化，代码会归一化）
+  share: {
+    //          周期1  周期2  周期3  周期4  周期5
+    N1:  [0.055, 0.045, 0.035, 0.030, 0.020],
+    N2:  [0.300, 0.380, 0.470, 0.520, 0.560],   // 平分给前后两段 N2
+    N3:  [0.440, 0.280, 0.110, 0.035, 0.010],   // 前半夜多，快速衰减
+    // REM 后段权重原来给到 0.41，整夜算出来占 30%（真实 22%）。
+    // 反算依据：8 小时里，各周期 REM 分钟数真实约为 10/18/26/30/22 = 106 分钟 ≈ 22%。
+    // 所以中段不能涨得太快，第 4/5 周期要收敛。
+    REM: [0.100, 0.180, 0.260, 0.300, 0.180],
   },
 }
 
@@ -98,24 +129,40 @@ export function accrual(elapsedMin, interruptions = 0) {
   let left = Math.max(0, Number(elapsedMin) || 0)
   let cycle = 0
   while (left > 0 && cycle < 6) {
-    let cycLeft = CYCLE.lengthMin
-    const col = Math.min(cycle, 3)   // 第 5 个周期之后按第 4 个算
-    for (let si = 0; si < CYCLE.stages.length && left > 0 && cycLeft > 0; si++) {
-      const stage = CYCLE.stages[si]
-      const dur = CYCLE.byCycle[stage][col] || 0
-      const take = Math.min(dur, left, cycLeft)
-      acc[stage] += take
-      left -= take
-      cycLeft -= take
+    const col = Math.min(cycle, 4)
+    // 这一周期各阶段的原始权重
+    const raw = {}
+    let sum = 0
+    for (const st of Object.keys(acc)) {
+      const v = Number(CYCLE.share[st][col] || 0)
+      raw[st] = v
+      sum += v
     }
+    if (sum <= 0) { cycle++; continue }
+
+    // 归一化到 92 分钟 → 每周期严格走满，总额天然正确。
+    //
+    // ⚠️ 这里原来写 `take = Math.min(dur, span)`（span = 剩余时间），
+    //    当剩余不足一个周期时，**每个阶段都拿到 min(dur, span)**，
+    //    于是总量被重复计算：睡 2 小时算出 174 分钟（超过 120）。
+    //    正确做法：最后一个不完整的周期要**按比例缩放**，只取它该得的那一段。
+    const span = Math.min(left, CYCLE.lengthMin)
+    const frac = span / CYCLE.lengthMin          // 这一周期实际走了百分之几
+    for (const st of Object.keys(acc)) {
+      const dur = (raw[st] / sum) * CYCLE.lengthMin   // 该阶段在完整周期里的长度
+      acc[st] += dur * frac                            // ← 按实际走完的比例缩放
+    }
+    left -= span
     cycle++
   }
-  // 每次中断：砍掉当次深睡的一部分。真实的机制是"进不去 N3"，
-  // 而不是"睡的时间少" —— 所以砍 N3 而不是按比例砍全部。
+
+  // 两个 N2 段是在 stages 里出现的两次，上面的循环已经按阶段汇总，不需要再平分。
+  // 中断的代价：**砍深睡**，不是按比例砍全部 ——
+  // 真实机制是"进不去 N3"（每次醒来都要重新入睡），而不是"睡的时间少"。
   if (interruptions > 0) {
-    const cut = Math.min(0.85, 0.22 * interruptions)
+    const cut = Math.min(0.88, 0.24 * interruptions)
     acc.N3 *= (1 - cut)
-    acc.REM *= (1 - cut * 0.35)   // REM 也受影响，但小得多
+    acc.REM *= (1 - cut * 0.30)     // REM 受影响小得多（它更靠后、更连续）
   }
   for (const k of Object.keys(acc)) acc[k] = Number(acc[k].toFixed(1))
   return acc
@@ -224,18 +271,33 @@ export function currentStage(now = Date.now()) {
   if (!st.inSleep || !st.beganAt) return { stage: null, elapsedMin: 0 }
   const el = (now - Number(st.beganAt)) / MIN
   const acc = accrual(el, Number(st.interruptions || 0))
-  // 找当前周期里我"应该"在的阶段
-  let left = el, cycle = 0, stage = 'N1'
-  while (left > 0 && cycle < 6) {
-    const col = Math.min(cycle, 3)
+  // 找"此刻应该在第几个周期的第几个阶段"
+  //
+  // ⚠️ 这里原来有个 bug，必须记下来：判断写成了
+  //     `if (take >= dur - 0.5 || take === left) { stage = s; break }`
+  //   而 take = min(dur, left, cycLeft) —— 只要剩余时间比这个阶段长，
+  //   take 就恒等于 dur，于是**第一个阶段就命中并 break**，永远返回 N1。
+  //   表现：睡 7 小时也停在 N1/none，整理任务永远不会被排上。
+  //   而且它不报错、有返回值、看起来"正常"—— 又是一次静默假数据。
+  //
+  //   正确语义：**只有当剩余时间还不够走完当前阶段时，才停在这个阶段**；
+  //   够走完就减掉它、继续往后走。
+  let left = el
+  let cycle = 0
+  let stage = 'N1'
+  outer:
+  while (cycle < 8) {
+    const col = Math.min(cycle, 4)
     let cycLeft = CYCLE.lengthMin
     for (const s of CYCLE.stages) {
-      const dur = CYCLE.byCycle[s][col] || 0
-      const take = Math.min(dur, left, cycLeft)
-      if (take >= dur - 0.5 || take === left) { stage = s; left -= take; cycLeft -= take; break }
-      left -= take; cycLeft -= take
+      const dur = Math.min(CYCLE.byCycle[s][col] || 0, cycLeft)
+      if (dur <= 0) continue
+      if (left < dur) { stage = s; break outer }   // 停在这里
+      left -= dur
+      cycLeft -= dur
     }
-    if (left <= 0) break
+    // 这个周期走完了（cycLeft 应该已经 0）
+    if (cycLeft > 0.5) { stage = 'N2'; break }     // 兜底：周期表加起来不足 92 分钟时
     cycle++
   }
   return { stage, elapsedMin: Number(el.toFixed(0)), acc }

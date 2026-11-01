@@ -79,3 +79,4 @@ export const sleepPath = () => path.join(metaDir(), 'sleep.json')
 
 /* ── 2026-11-02：记忆层（段 / 锚）─────────────────────────────────── */
 export const anchorPath = () => path.join(metaDir(), 'anchor.json')
+export const nightWorkPath = () => path.join(metaDir(), 'night-work.json')
