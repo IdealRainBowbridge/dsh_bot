@@ -30,8 +30,11 @@ import * as inner from './inner.mjs'
 import * as hpa from './organ/hpa.mjs'
 import * as thalamus from './organ/thalamus.mjs'
 import * as sleepstage from './organ/sleepstage.mjs'
+// 2026-11-02：记忆层 —— 段（一件事）+ 锚（她自己的原话）
+import * as segment from './segment.mjs'
+import * as anchor from './anchor.mjs'
 
-export { event, episode, working, attention, intents, facts, affect, delivery, claim, assembleMod as assemble, consolidate, doctor, metrics, recall, selfM, schema, competence, taskqueue, backfill, field, rhythm, inner, hpa, thalamus, sleepstage }
+export { event, episode, working, attention, intents, facts, affect, delivery, claim, assembleMod as assemble, consolidate, doctor, metrics, recall, selfM, schema, competence, taskqueue, backfill, field, rhythm, inner, hpa, thalamus, sleepstage, segment, anchor }
 
 const OWNER_KEY_MAP = { food: 'food.eat', doing: 'activity.do', plan: 'plan.go', mood: 'mood.state', media: 'media.like' }
 
@@ -137,6 +140,17 @@ export function onEvent(input = {}) {
 
       // 每若干事件把 HPA 的产物灌回全身（器官间连接）
       hpa.perfuse(ev.at)
+    } catch { }
+
+    // ③.5 记忆：把这条消息并进「段」
+    //     记忆单位是**一件事**不是一句话 —— 靠 segment 按
+    //     隔2h / 结束语 / 换话题 / 段太长 四个信号自动切。
+    //     摘要只做索引，原文一字不删（在 stream.jsonl）。
+    try {
+      segment.ingest({
+        text: ev.text || '', role: ev.who.kind, at: ev.at,
+        chat: ev.where?.chat || '', platform: ev.where?.platform || '',
+      })
     } catch { }
 
     // ④ 内心：她注意到什么、想说什么。这是"她有自己的想法"的落点。

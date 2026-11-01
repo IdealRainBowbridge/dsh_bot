@@ -269,6 +269,26 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   if (persona) parts.push(persona)
   const idLine = identityLine(cfg, isGroup)
   if (idLine) parts.push(idLine)
+
+  // ── 锚（2026-11-02）──────────────────────────────────────────────────
+  // 从**她自己真说过的话**里挑 4 句原样放进来，冻结不变。
+  //
+  // 为什么 persona 不够：persona 是"她应该是谁"（应然）。每轮读一遍应然，
+  // 模型会越来越朝着那个应然演 —— 这就是"越聊越像在演设定"的来源。
+  // 锚是"证据"（她真这么说过），让人想起来的比被告知的有效。
+  //
+  // 为什么必须冻结：每轮重挑会让 system 区每轮都变 → 口吻跟着飘；
+  // 而且模型会盯着"最新那 4 句"调整（recency bias），等于用最近的话污染人格。
+  // 这里只读文件，不触发采样 —— 换锚是低频动作，不该发生在对话路径上。
+  try {
+    const aj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'meta', 'anchor.json'), 'utf8'))
+    const items = Array.isArray(aj?.items) ? aj.items.filter((x) => x && x.text).slice(0, 4) : []
+    if (items.length >= 2) {
+      parts.push('【你自己说过的话】\n' + items.map((x) => '· ' + x.text).join('\n') +
+        '\n\n上面这些是你真的说过的话，原样留着。不是让你模仿，是提醒你本来是什么语气。' +
+        '\n不用刻意照它们的说法讲，也别刻意避开。')
+    }
+  } catch (e) { swallow(e, 'persona:anchor') }
   // 统一自主规划（10-31）：告诉她"你自己决定此刻在做的事"。
   // 目的：她说"我刚在看番"不是编的 —— 那是真计划，还能说出理由。
   // 这里同步读文件而不是 import mind.mjs：buildMessages 是同步的，且避免循环依赖。
@@ -630,7 +650,36 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 相同的 user 行不再重复带（只去尾部，历史里更早的相同发言是真实对话，保留）。
   while (userText && recent.length && recent[recent.length - 1].role === 'user'
     && recent[recent.length - 1].content === userText) recent.pop()
-  return [sys, ...recent, { role: 'user', content: userText }]
+  // ── 线索（2026-11-02）──────────────────────────────────────────────
+  // 每轮**只给 3 行**，只有编号/日期/回合数/标题 —— **不给内容**。
+  //
+  // 为什么只给编号：给内容就是摘要吃证据（86% 表情死在最后 20% 的根因）。
+  // 为什么只给 3 行：给多了她会试图总结一切，结果上下文被"回忆"挤满，
+  //   本轮真正该说的话反而没地方了。人的工作记忆也就那么大。
+  // 要细节怎么办：她可以自己往下问（"上次那事后来怎么着了"），
+  //   那才是"细节要了才给"的真实形态 —— 想不起来的部分就该模糊。
+  let cueBlock = ''
+  try {
+    const sj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'seg', 'index.json'), 'utf8'))
+    const all = [...(Array.isArray(sj?.segments) ? sj.segments : [])]
+    if (sj?.open) all.push(sj.open)
+    const rows = all
+      .filter((x) => Number(x.turns || 0) >= 2)      // 单回合的碎片不值得占一行
+      .slice(-3).reverse()
+      .map((x) => {
+        const d = x.at ? new Date(x.at) : null
+        const day = d ? (String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : ''
+        const title = String(x.title || x.firstText || '').replace(/\s+/g, ' ').slice(0, 18)
+        return `#${String(x.seq || 0).padStart(2, '0')} ${day} · ${x.turns || 0} 回合${title ? ' · ' + title : ''}`
+      })
+    if (rows.length) {
+      cueBlock = '\n\n【你们之前聊过的】\n' + rows.join('\n') +
+        '\n（这只是索引，不是内容。真正要提起来的事，你按标题自己回想；' +
+        '想不起来的细节就别编，可以说"我记不太清了"。）'
+    }
+  } catch (e) { swallow(e, 'persona:cue') }
+
+  return [sys, ...recent, { role: 'user', content: cueBlock ? userText + cueBlock : userText }]
 }
 
 /**

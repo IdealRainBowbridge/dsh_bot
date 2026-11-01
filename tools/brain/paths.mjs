@@ -76,3 +76,6 @@ export const segmentDir = () => path.join(BRAIN(), 'seg')
 export const hpaPath = () => path.join(metaDir(), 'hpa.json')
 export const thalamusPath = () => path.join(metaDir(), 'thalamus.json')
 export const sleepPath = () => path.join(metaDir(), 'sleep.json')
+
+/* ── 2026-11-02：记忆层（段 / 锚）─────────────────────────────────── */
+export const anchorPath = () => path.join(metaDir(), 'anchor.json')
