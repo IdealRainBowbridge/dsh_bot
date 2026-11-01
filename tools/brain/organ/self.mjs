@@ -275,11 +275,34 @@ export async function decide(o = {}) {
   const st = hydrate(readJson(selfPath(), null))
 
   // ① 先看有没有"正在做的事"，没到点就不重新挑 —— 这是"专心"
-  if (st.current && Number(st.current.until || 0) > now) {
-    // 但**急事可以打断**：他叫得够急，或者该睡了
+  //
+  // ⚠️ 2026-11-02：**"专心"不能压过"撑不住了"。**
+  //
+  //    原来的条件只看两件事：他叫得急不急（urge）、当前是不是在睡。
+  //    实测（debt=0.95，night 已经给出 shouldSleep:true）：
+  //      decide() 仍然返回 current 里的 rest（"想做：歇着，意愿 0.54"），
+  //      因为 rest 的 until 还没到期 → kept=true → **该睡也睡不了**。
+  //
+  //    现实里对一个困到睁不开眼的人说"你刚决定歇着，先专心歇完 40 分钟"，
+  //    是荒谬的。专注（focus）是**低优先级状态的续期**，而困到极点是硬状态。
+  //    三层否决式的第一层本来就是"硬状态压过一切"——这条没被贯彻到这里。
+  //
+  //    修法：算出困倦度，超过"撑不住"线时，不再续期当前计划，
+  //    让它往下走到层一（该睡就睡）。
+  //    注意不能只判 action!=='sleep'（那是"已经在睡"），
+  //    真正要的是"**该不该现在改主意去睡**"。
+  const prev = st.current
+  if (prev && Number(prev.until || 0) > now) {
     const urge = Number(o.interruptUrgency || 0)
-    if (urge < 1.4 && st.current.action !== 'sleep') {
-      return { ...st.current, kept: true }
+    let hardSleepy = false
+    try {
+      const sp = await night.assess(now)
+      // 0.92 与 night.mjs 的硬底一致：那个点上是"生物关机"，不是"有点困"
+      hardSleepy = !!sp.shouldSleep && Number(sp?.detail?.debt || 0) >= 0.92
+    } catch { /* 取不到就当作不困 */ }
+
+    if (!hardSleepy && urge < 1.4 && prev.action !== 'sleep') {
+      return { ...prev, kept: true }
     }
   }
 

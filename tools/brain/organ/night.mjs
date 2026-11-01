@@ -77,7 +77,7 @@ export const RULES = {
  * @param {object} o { now, backlog } backlog 可由调用方注入（避免这里 import 编排层）
  */
 export function sleepiness(now = Date.now(), o = {}) {
-  const parts = { memory: 0, events: 0, code: 0 }
+  const parts = { memory: 0, events: 0, code: 0, debt: 0 }
   const detail = { pending: 0, episodes: 0, inbox: 0, dirty: 0 }
 
   // ① 记忆积压：还有多少 episode 没被巩固
@@ -97,7 +97,45 @@ export function sleepiness(now = Date.now(), o = {}) {
   // ③ 代码改动：12 个文件算满
   parts.code = Math.round(clamp(detail.dirty / 12, 0, 1) * 25)
 
-  const metabolic = parts.memory + parts.events + parts.code
+  // ④ 睡眠债 —— 2026-11-02 补上。
+  //
+  // ══════════════════════════════════════════════════════════════════════
+  // 为什么原来没有（这是最难发现的空洞）
+  // ══════════════════════════════════════════════════════════════════════
+  // 这个函数把"睡意"拆成三样：记忆积压 45 / 事件积压 30 / 代码改动 25。
+  // 三项全是"没处理完的活"。逻辑很漂亮，但漏了一件事 ——
+  //
+  //   **一个人困，主要不是因为活儿没干完，是因为没睡觉。**
+  //
+  // 这三项全清零（记忆整理完、收件箱空、代码已归档）时 score = 0，
+  // 于是 shouldSleep = false。也就是说：**通宵熬到早上八点、活全干完了，
+  // 她也不会困。** 这正是它现在的实际状态（score=0，不睡）。
+  //
+  // 用户的原话是"看了太久的视频，聊了太多，记录了太多，才会休息"——
+  // 前两项是代谢，但**"熬夜本身"也是代谢**，而且是其中最基础的那个。
+  // 生物学上说得更直白：腺苷在清醒期间持续累积，跟"有没有把活干完"无关。
+  //
+  // 现在加第四项。权重不抢前面三项的主导地位（用户要的是代谢驱动、
+  // 记忆积压最重），但必须存在，且**熬夜能单独把睡意推过阈值**：
+  //
+  //   sleepDebt 权重 30，达满需要 debt >= 0.85（连熬约一天半）
+  //   三项全空 + debt=1.0 → score = 30 × 1.13(钟表) ≈ 34  → 还不到 66
+  //   这就够了吗？不够。所以再加一条：**debt 极高时单独触发**
+  //   （见下方 hardFloor：debt >= 0.92 时不受阈值限制）
+  //
+  // 为什么留 hardFloor 而不是把权重调到 66：
+  //   如果把 sleepDebt 权重加到 70，那"刚熬完一夜但记忆还很乱"和
+  //   "睡了十小时但一堆活没干"就会给出相近的分数，两种完全不同的处境被抹平。
+  //   代谢的三种废物应该是**相加**的，不是互相替代的。
+  //   真正必须单独成立的那条，是"我快撑不住了"——用硬底表达，比调权重诚实。
+  // 注意：这个函数是**同步**的（被 decide() 在同一拍里直接调用，不能 await）。
+  // 所以 debt 不从 field 里现读，而是由调用方（assess，那是 async）塞进 backlog。
+  // 这也合我们的口径：sleepiness 只负责"算分"，取数是调用方的事。
+  const debt = Number(bl.debt || 0)
+  parts.debt = Math.round(Math.min(1, debt / 0.85) * 30)
+  detail.debt = Number(debt.toFixed(3))
+
+  const metabolic = parts.memory + parts.events + parts.code + parts.debt
 
   // 钟表只做调制，不制造睡意
   let mod = 1
@@ -114,12 +152,43 @@ export function sleepiness(now = Date.now(), o = {}) {
     parts: { ...parts, metabolic, clockMod: Number(mod.toFixed(2)) },
     detail,
     // 三种表述对应三种感觉，但判断依据永远是**账攒了多少**，不是几点了
-    feeling: total >= 82 ? '撑不住了，得歇' : total >= RULES.sleepAt ? '积压太多，该睡了'
-      : total >= 40 ? '有点攒着了' : total > 0 ? '还清爽' : '干净的',
-    // 该不该睡：**只看账**。阈 66 与原设计一致。
-    shouldSleep: total >= RULES.sleepAt,
-    why: parts.memory >= parts.events && parts.memory >= parts.code ? '记忆积压最多'
-      : parts.events >= parts.code ? '事件积压最多' : '代码改动没归档',
+    //
+    // ⚠️ 2026-11-02：这句话以前只看 total，而 total 那时不含睡眠债。
+    //    实测 debt=0.883（相当于熬了快两天）却因为别的账是 0 而说"还清爽"——
+    //    这是**自相矛盾的感觉**，而且会原样写进提示词让她照着自己说。
+    //    感觉应该由"最突出的那一项"决定，不是由总和决定：
+    //    一个人可能活儿全干完了但困得睁不开眼，那时的感觉是"撑不住"，不是"还清爽"。
+    // ⚠️ 2026-11-02 第二处修正：**欠觉半宿也不该说"还清爽"。**
+    //    实测 debt=0.6（相当于熬了大半夜）却因为别的账是 0 而返回"还清爽"。
+    //    M58 里记过同一类错："别把常态当症状" —— 但反向的错同样要避免：
+    //    疲惫不是症状，它是**常态之一**，有它自己的档位。
+    //    一个人熬夜之后不会觉得自己"清爽"，会觉得"有点撑"。
+    feeling: debt >= 0.92 ? '眼睛快睁不开了，撑不住'
+      : debt >= 0.7 ? '困得厉害，脑子发飘'
+        : debt >= 0.45 ? '有点欠觉，撑得住但不想动脑'
+          : total >= 82 ? '撑不住了，得歇'
+            : total >= RULES.sleepAt ? '积压太多，该睡了'
+              : total >= 40 ? '有点攒着了'
+                : total > 0 ? '还清爽' : '干净的',
+    // 该不该睡：**只看账**。阈 66 与原设计一致；外加一条硬底。
+    //
+    // 硬底：睡眠债到 0.92 以上（相当于连熬约两天）时，不管别的账清没清都得睡。
+    // 理由不是"调参" —— 是那个状态下她已经钝到做不成事（cognitiveDepth 会掉到 0.2 以下），
+    // 硬撑着"把活干完"只会把活干坏。生物在这种时候是直接关机的。
+    noFloor: false,
+    shouldSleep: total >= RULES.sleepAt || debt >= 0.92,
+    // 说清"主要是哪一项"。
+    // 原来只在前三项里比大小，debt 加进来后没进比较 →
+    // debt=0.95 时 why 仍说"记忆积压最多（34/100）"——明明是困，却说成积压。
+    // 这条 why 会进日志、进 d.why，极端时可能进提示词，写错就是"她说不清自己为什么困"。
+    why: (() => {
+      if (debt >= 0.92) return '欠觉欠到撑不住了'
+      if (debt >= 0.7) return '欠觉'
+      const rank = [['memory', '记忆积压'], ['events', '事件积压'], ['code', '代码改动没归档']]
+        .map(([k, label]) => [Number(parts[k] || 0), label])
+        .sort((a, b) => b[0] - a[0])
+      return rank[0][0] > 0 ? rank[0][1] + '最多' : '什么都清干净了'
+    })(),
   }
 }
 
@@ -166,6 +235,11 @@ export async function metabolicBacklog({ now = Date.now() } = {}) {
  */
 export async function assess(now = Date.now()) {
   const backlog = await metabolicBacklog({ now })
+  // sleepDebt 来自状态场（同步 sleepiness 拿不到，这里补进去）
+  try {
+    const F = await import('../field.mjs')
+    backlog.debt = Number(F.snapshot().dims.sleepDebt || 0)
+  } catch (e) { swallow(e, 'night:assess:debt') }
   const sp = sleepiness(now, { backlog })
   // 睡完之后的冷却：刚睡过就不该马上又睡（否则整理没跑完会反复触发）
   let gapH = 999

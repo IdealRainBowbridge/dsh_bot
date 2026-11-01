@@ -64,7 +64,10 @@ export const DIMS = {
   fatigue:   { v: 0.10, set: 0.10, tau: 5 * 3600_000,   lo: 0, hi: 1,  scale: 1.0 },
   // 睡眠债：**只增不减**，除非真的睡。这是"越熬越钝"的全部机制。
   // set 是 0：它不是"会回到某个正常值"，它是欠账，只能还。
-  sleepDebt: { v: 0.20, set: 0.00, tau: 36 * 3600_000,  lo: 0, hi: 1,  scale: 1.0 },
+  //
+  // accrualOnly: true —— 见 evolve() 里那段注释。
+  // 这个字段就是"注释说的事"落到代码上的形状：不写它，注释只是一句愿望。
+  sleepDebt: { v: 0.20, set: 0.00, tau: Infinity, lo: 0, hi: 1, scale: 1.0, accrualOnly: true },
 
   // ── 主观层 ─────────────────────────────────────────────────────
   // 效价：好事把它推上去，但它受皮质醇拖、受睡眠债拖。
@@ -196,7 +199,22 @@ export function evolve(now = Date.now()) {
   if (dt > 24 * 3600_000) dt = 24 * 3600_000
 
   // ① 每一维朝自己的静息点弛豫（静息点受 drift 影响：耐受/敏感化）
+  //
+  // ⚠️ 2026-11-02：**sleepDebt 不能被时间弛豫掉。**
+  //
+  //    它的定义就在 DIMS 的注释里："只增不减，除非真的睡 —— 这是'越熬越钝'的全部机制"。
+  //    但那一行写的是 `tau: 36 * 3600_000`，于是这个循环每拍都在把它往 set=0 拉。
+  //
+  //    实测（改前）：sleepDebt 被 poke 到 0.9 之后，48 小时自己掉回 0.264，
+  //    这期间**一次都没睡**。也就是说"熬夜的债"会自己蒸发。
+  //    而 night.assess 又不用 sleepDebt 算睡意（见那边的注释），
+  //    两头一夹，结果就是：**"越熬越困"这条最基本的规律，在这个模型里根本不存在。**
+  //
+  //    一个"账"的性质是：不清就一直欠着。所以这里跳过它 —— 只由
+  //    repaySleep() 在真睡时按实际小时数扣，别的一律不动。
+  //    （这也是 M58 那条"睡意是账不是衰减量"的直接落地。）
   for (const [k, d] of Object.entries(DIMS)) {
+    if (d.accrualOnly) continue            // 只增不减的账：时间不会替你还
     const set = Number(st.drift[k] ?? d.set)
     st.dims[k] = clamp(relax(st.dims[k], set, dt, d.tau), d.lo, d.hi)
   }

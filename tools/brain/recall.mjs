@@ -34,12 +34,40 @@ export function weights(over = {}) {
   return w
 }
 
+/**
+ * 查询线索。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * ⚠️ 2026-11-02：原来把最近 3 条对话**不加区分**拼进查询词，检索被近因绑架
+ * ══════════════════════════════════════════════════════════════════════
+ * 原实现：
+ *     const parts = [text]
+ *     for (const t of recentTexts.slice(-3)) parts.push(t)
+ *     return parts.join(' ')
+ *
+ * 后果（实测，同一份数据）：
+ *     问「图片发不出去」
+ *     → cues = "图片发不出去 嘿，刚才还喊累… 主人：今天好累啊… 刚还说心情好呢…"
+ *     → 索引按 bigram 打分，**最近那 3 句的 lex 得分天然最高**（它们占了查询词的绝大多数字）
+ *     → 返回的前 6 条里，真正讲图片的那条 lex 只有 0.17，靠排在 4~5 位
+ *
+ * 五句完全不同的问话（「在吗」「加班」「累死了」「图片发不出去」「你今天干什么了」）
+ * 召回结果几乎一模一样 —— 因为**真正被检索的其实一直是那 3 句最近对话**，
+ * 用户这句话只是掺进去的一小部分。
+ *
+ * 这是典型的"上下文淹没当前意图"。
+ *
+ * 修法：分主次，而不是平铺。
+ *   · 当前这句话是**主查询**，权重最高
+ *   · 最近对话只做**话题延续**用的弱线索（且截短，不让它占满字符预算）
+ *   · 实体和情绪另算
+ *
+ * 返回 { main, context } 而不是一个大字符串 —— 让 search() 能分别加权。
+ */
 export function cuesFrom({ text = '', recentTexts = [], entities = [], extra = '' } = {}) {
-  const parts = [String(text || '')]
-  for (const t of recentTexts.slice(-3)) parts.push(String(t || ''))
-  if (entities.length) parts.push(entities.join(' '))
-  if (extra) parts.push(String(extra))
-  return parts.join(' ').slice(0, 600)
+  const main = [String(text || ''), entities.join(' ')].filter(Boolean).join(' ').slice(0, 400)
+  const context = recentTexts.slice(-2).map((t) => String(t || '').slice(0, 40)).join(' ').slice(0, 160)
+  return { main, context, extra: String(extra || '').slice(0, 60) }
 }
 
 /** audience 决定"能说什么"，不决定"存什么"（I3）。 */
@@ -61,8 +89,34 @@ function recencyScore(at, now) {
  */
 export function search({ cues, audience = 'private', now = Date.now(), limit = 6, chat = '', weightsOverride = {} } = {}) {
   const w = weights(weightsOverride)
-  const lexHits = indexSearch(String(cues || ''), { limit: 240 })
-  const lexMax = Math.max(0.0001, ...lexHits.values())
+
+  // cues 可以是 {main, context, extra}（新）或纯字符串（兼容旧调用）
+  const isObj = cues && typeof cues === 'object'
+  const mainCues = isObj ? String(cues.main || '') : String(cues || '')
+  const ctxCues = isObj ? String(cues.context || '') : ''
+  const extraCues = isObj ? String(cues.extra || '') : ''
+
+  // 主查询单独检索 —— 这是"他现在问的是这个"，不该被上下文稀释
+  const mainHits = mainCues ? indexSearch(mainCues, { limit: 240 }) : new Map()
+  // 上下文只做话题延续：命中的条目降权计入，不参与 lexMax 归一化
+  const ctxHits = ctxCues ? indexSearch(ctxCues, { limit: 120 }) : new Map()
+  // 情绪线索（"难过 累 烦"）也是弱线索
+  const extraHits = extraCues ? indexSearch(extraCues, { limit: 80 }) : new Map()
+
+  // lexMax 只按主查询算 —— 否则上下文里的高频词会把主查询的分数压扁
+  const joined = new Map(mainHits)
+  for (const [id, v] of ctxHits) {
+    if (!joined.has(id)) joined.set(id, v * 0.35)          // 上下文命中 = 三成权重
+    else joined.set(id, joined.get(id) + v * 0.15)
+  }
+  for (const [id, v] of extraHits) {
+    if (!joined.has(id)) joined.set(id, v * 0.25)
+    else joined.set(id, joined.get(id) + v * 0.1)
+  }
+  const lexHits = joined
+  // 归一化基准取**主查询**的最大值，保证"他问的那件事"能拿满分；
+  // 上下文/情绪的命中因此永远到不了 1.0（它们本来就只是线索，不是问题）
+  const lexMax = Math.max(0.0001, ...(mainHits.size ? mainHits.values() : joined.values()))
   const str = strengths()
   const cur = affect.state()
   const rows = allEpisodes()
@@ -77,8 +131,16 @@ export function search({ cues, audience = 'private', now = Date.now(), limit = 6
 
   for (const [id, s] of lexHits) addCandidate(byId.get(id) || null, s / lexMax)
   // 时间近邻（26h）：不靠关键词也能想起"刚刚才发生的事"
+  //
+  // ⚠️ 2026-11-02：这一路是必要的（"刚才说的事"确实该想起来），
+  //    但它原来把 26h 内的**所有**条目无差别塞进候选，而那 39 条当时全在 26h 内
+  //    → 候选池 = 全部条目 → 排序完全由 recency/salience 决定 → 召回失去意义。
+  //    现在只在**主查询没有命中**时才放宽时间近邻；
+  //    主查询有命中时，近邻只补最近 6 条（够接住"刚说完那句话"）。
+  const mainHasHits = mainHits.size > 0
+  const nearWin = mainHasHits ? 6 * 3600_000 : 26 * 3600_000
   for (const ep of rows) {
-    if (Number(ep.at) >= now - 26 * 3600_000) addCandidate(ep, 0)
+    if (Number(ep.at) >= now - nearWin) addCandidate(ep, 0)
   }
   // 同 chat 的近 40 条（保证"这一轮之前刚说的话"一定在候选里）
   if (chat) {

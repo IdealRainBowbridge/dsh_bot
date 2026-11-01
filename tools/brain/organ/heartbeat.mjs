@@ -47,6 +47,7 @@ import * as self from './self.mjs'
 import * as night from './night.mjs'
 import * as thalamus from './thalamus.mjs'
 import * as hpa from './hpa.mjs'
+import * as sleepstage from './sleepstage.mjs'
 
 const MIN = 60_000
 
@@ -131,6 +132,7 @@ export async function beat(now = Date.now()) {
     // ── ① 推进身体时间 ──────────────────────────────────────────
     // 所有按 dt 演化的东西在这里统一推进一次（不靠各自 tick）
     try { field.evolve(now) } catch (e) { swallow(e, 'beat:field') }
+    try { accrueSleepDebt(now) } catch (e) { swallow(e, 'beat:debt') }
     try { inner.fade(now) } catch (e) { swallow(e, 'beat:inner') }
     try { inner.settle(now) } catch (e) { swallow(e, 'beat:settle') }   // 没说完的话 → tension
     try { hpa.evolve(now) } catch (e) { swallow(e, 'beat:hpa') }
@@ -201,4 +203,59 @@ export function status() {
     bound: !!_exec,
     exec: _exec ? Object.keys(_exec).filter((k) => typeof _exec[k] === 'function') : [],
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 睡眠债按**真实清醒时间**累积（2026-11-02）
+// ══════════════════════════════════════════════════════════════════════
+// 改前，睡眠债只有一个增长入口：brain/index.mjs:119
+//     if (hod >= 1 && hod < 5) field.poke('sleepDebt', 0.012, ...)
+// 而它在**事件处理链**里 —— 也就是说：
+//
+//     **只有收到消息时才累积。她安静待着、没人找她的时候，一点觉都不欠。**
+//
+// 这跟生理完全相反：腺苷在清醒期间**持续**累积，跟有没有人跟你说话无关。
+// 而且这让整套休眠在最常见的场景下彻底失效：
+//     凌晨没人找她 → 不欠觉 → 睡意 0 → 不睡 → 不做睡眠整理 → 第二天照旧。
+// 实测就是这么回事：score 恒为 0，sleep.json / rhythm.json 从没落过盘。
+//
+// 第二重错误叠在上面：field.evolve 每拍按 tau=36h 把 sleepDebt 往 0 拉，
+// 于是"欠的觉"还会自己蒸发（已在 field.mjs 用 accrualOnly 修掉）。
+// 两个错一夹 → **"越熬越困"这条最基本的规律，在这个模型里根本不存在。**
+//
+// 现在按清醒时长累积：
+//   基础 0.02/小时，深夜（23~6 点）×2.5（生物钟该睡的时段欠得更快）
+//   昼夜都算（白天清醒同样欠觉，只是慢一点）
+//
+// dt 用两次 beat 的真实间隔，不固定 30 秒 ——
+// 进程暂停、容器重启都不该凭空生成或丢弃睡眠债。
+const _DEBT_CLOCK = { at: 0 }
+
+function accrueSleepDebt(now) {
+  let inSleep = false
+  try { inSleep = !!sleepstage.snapshot().inSleep } catch { /* 拿不到就当醒着 */ }
+
+  // 睡着时不累积（睡着了本来就在还账）
+  if (inSleep) { _DEBT_CLOCK.at = now; return }
+  if (!_DEBT_CLOCK.at) { _DEBT_CLOCK.at = now; return }
+
+  let dtH = (now - _DEBT_CLOCK.at) / 3600_000
+  _DEBT_CLOCK.at = now
+  if (dtH <= 0) return
+
+  // 上限 2 小时：进程停了一整天，回来不该一次性补 24 小时的债。
+  // 机器关机不等于她熬夜 —— 那段时间她没在"活"。
+  if (dtH > 2) dtH = 2
+
+  const h = new Date(now).getHours()
+  const nightish = (h >= 0 && h < 6) || h >= 23
+  const delta = 0.02 * (nightish ? 2.5 : 1) * dtH
+  // 阈值别设太高：一拍 30 秒只有 0.0004（深夜）~0.00017（白天），
+  // 设 0.0002 会让白天几乎永远不写账 —— 那还是"没人说话就不欠觉"。
+  // 现在只要超过 0.0001 就记（一拍 30 秒最少 0.00017，刚好过线）。
+  if (delta < 0.0001) return
+
+  const cur = Number(field.snapshot().dims.sleepDebt || 0)
+  if (cur >= 0.999) return                         // 满了就别再写
+  field.poke('sleepDebt', delta, { why: nightish ? 'awake:night' : 'awake:day', now })
 }
