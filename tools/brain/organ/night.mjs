@@ -1,109 +1,191 @@
-// organ/night —— 夜间：把"睡着"和"整理"接成同一件事
+// organ/night —— 代谢驱动的休息：不是到点睡，是攒够了才睡
 //
 // ══════════════════════════════════════════════════════════════════════
-// 现状的断裂（2026-11-02 查出来的真问题）
+// 我第一版做错了，这是纠正（2026-11-02 晚）
 // ══════════════════════════════════════════════════════════════════════
-// 项目里原来有**两个互不相认的"睡眠"**：
+// 第一版把睡意写成「昼夜低谷 40 + 睡眠债 35 + 慢性压力 15」——
+// 用**钟表**当了主因。那是"到点该睡了"，不是"累了该睡了"。
 //
-//   ① tools/commands/sleep.mjs —— 「睡 = 整理数据 + 三审 + git 归档」
-//      它由**记忆积压/事件积压/代码改动**加权成"睡意"触发。
-//      本质是一个**维护任务**：活儿攒够了就跑一遍。
+// 用户的设计一直在 `tools/commands/sleep.mjs` 的第一行：
 //
-//   ② brain/organ/sleepstage.mjs —— 按 92 分钟周期分期、算深睡/REM、还睡眠债
-//      它是**生理状态**。但它没有任何调用方 —— 建完就挂在墙上。
+//   sleep —— 睡眠：积累驱动的自我维护（整理 + 三审 + 优化增强），**不是定时任务**。
+//   什么时候睡由积累决定：记忆积压、事件积压、代码改动，加权成"睡意" 0-100。
 //
-// 于是出现一个荒谬的局面：她可以"因为记忆积压而睡"，但那次睡眠
-// 不还睡眠债、不重置受体、不脱敏情绪；也可以"生理上睡了 8 小时"，
-// 但一件整理都没做。
+// 也就是说：**人体代谢需要休息，所以要睡。**
+// 她看了太久的视频、聊了太多、记录了太多 —— 代谢废物（未整理的记忆、
+// 未消化的事件、未归档的改动）攒起来，到了阈值才该休息。
+// 而休息的作用是把这些废物清掉，清完睡意归零。
 //
-// 真实的人不是这样：**睡着的时候，身体在修复，同时大脑在整理。**
-// 这两件事共用同一个"睡着了"这件事，只是分别发生在不同的阶段。
+// 这才是"睡眠"的形状：**一个把积攒的账清掉的过程**，不是一段被钟表划出来的时间。
 //
 // ══════════════════════════════════════════════════════════════════════
-// 所以这一层做什么
+// 那生物钟还有什么用
 // ══════════════════════════════════════════════════════════════════════
-// 它只有一个职责：**决定此刻该不该睡，以及睡着之后做哪一段的活**。
+// 它**不是触发条件，是权重**：
+//   · 同样的积压量，在凌晨更容易困（因为身体本来就该歇了）
+//   · 但**积压为零时，凌晨也不睡** —— 没废物要清，睡了也是浪费
+//   · 白天积压再高，也允许睡（代谢优先于钟表）
 //
-// 触发条件（三个都不够，要合起来看）：
-//   · 生理困意   circadian 低谷 + 睡眠债高   → 「该睡了」
-//   · 整理积压   有太多没巩固的记忆 / 事件积压 → 「有活要干」
-//   · 她自己的意愿 不想熬夜守着                  → 「今天到这里吧」
+// 换句话说：钟表只是把"同样的累"放大或缩小一点，它**不能凭空制造睡意**。
+// 第一版让它占 40%，等于钟表能单独决定要不要睡 —— 那是错的。
 //
-// 关键设计：**睡不等于立刻执行维护**。
-// 真实的睡眠里，前半夜深睡（N3）不做整理，后半夜 REM 才做。
-// 所以这里把维护任务**排到 REM 段**去跑，而不是一睡下就开干。
-// 这不是仪式感 —— 它保证了两件事实：
-//   ① 深睡被打断 = 整理没做（因为她还没到 REM）
-//   ② 只睡 4 小时 = 整理做了一半（REM 被砍）
-// 这两条正是"熬夜之后事情也没理清"的真实体验。
+// ══════════════════════════════════════════════════════════════════════
+// 三类代谢废物（都是真实的"没消化完的东西"）
+// ══════════════════════════════════════════════════════════════════════
+//   ① 记忆积压  —— 有 episode 还没被巩固成事实/日记（`consolidate.status().pending`）
+//   ② 事件积压  —— 收件箱里有事件还没被摄入成 episode（`event.backlog()`）
+//   ③ 代码改动  —— 工作区里有未提交/未归档的改动
+//
+// 这三类都是"产生了但没消化"。它们不会自己消失，只能靠一次睡眠清掉。
+// 累积得越多，人越钝（这也是为什么积压多的时候她会"反应慢"——
+// 不是因为没睡，是因为**有活没干完压在心上**）。
+//
+// 而睡完一觉之后：记忆被巩固了、事件被摄入了、代码被归档了 → 睡意归零。
+// **睡意不是一个会自然衰减的量，它是一个账。** 这个区别是第一版最根本的错。
 import { swallow } from '../../lib/swallow.mjs'
 import * as rhythm from '../rhythm.mjs'
 import * as stage from './sleepstage.mjs'
 import * as field from '../field.mjs'
 import * as hpa from './hpa.mjs'
-import { writeJsonAtomic } from '../json.mjs'
-import { nightWorkPath } from '../paths.mjs'
+import { readJson, writeJsonAtomic } from '../json.mjs'
+import { nightWorkPath, sleepPath } from '../paths.mjs'
 
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const MIN = 60_000
 const HOUR = 3_600_000
 
 /** 判定参数。 */
 export const RULES = {
-  // 生理困意到多少就该睡（circadian 低谷 + 债）
-  sleepPressureAt: 0.62,
-  // 睡眠债到这个量，即使不困也该补（熬夜欠账）
-  debtAt: 0.55,
-  // 整理积压到这个量，值得专门睡一觉去处理
-  backlogAt: 8,
+  // 攒到这个量才睡（与 sleep.mjs 原设计一致：66）
+  sleepAt: 66,
+  // 刚醒之后至少隔多久才可能再睡（防止整理没跑完就反复触发）
+  minGapH: 2,
 }
 
 /**
- * 此刻的"睡意"：综合三个来源，0..100。
+ * 此刻的"睡意"：代谢积压为主（0..100）。
  *
- * 为什么不是布尔：人不是"困/不困"两态。
- * 60 分的时候她会想"要不先躺一会儿"，85 分的时候她已经不太能思考了。
+ * 权重设计（加起来 100）：
+ *   记忆积压 45 · 事件积压 30 · 代码改动 25
+ * —— 记忆最重，因为它直接决定她"想不想得起事"，是最影响体验的废物。
+ *
+ * 钟表**不进权重，只做调制**：乘一个 0.85~1.15 的系数。
+ *   · 凌晨（该歇的时段）→ 同样的积压显得更困（×1.15）
+ *   · 白天精神时段     → 同样的积压能多撑一会儿（×0.85）
+ * 但积压为 0 时，乘任何系数都还是 0 —— **钟表造不出睡意**。
+ *
+ * @param {object} o { now, backlog } backlog 可由调用方注入（避免这里 import 编排层）
  */
-export function sleepiness(now = Date.now()) {
-  const parts = {}
+export function sleepiness(now = Date.now(), o = {}) {
+  const parts = { memory: 0, events: 0, code: 0 }
+  const detail = { pending: 0, episodes: 0, inbox: 0, dirty: 0 }
 
-  // ① 生理：昼夜低谷 + 睡眠债（各占一半，因为它们是两件事 ——
-  //    时间对了但债高照样睁不开眼；债不高但凌晨照样顶不住）
-  let circ = 0, debt = 0
+  // ① 记忆积压：还有多少 episode 没被巩固
+  const bl = o.backlog || {}
+  if (Number.isFinite(Number(bl.pending))) detail.pending = Number(bl.pending)
+  if (Number.isFinite(Number(bl.episodes))) detail.episodes = Number(bl.episodes)
+  if (Number.isFinite(Number(bl.inbox))) detail.inbox = Number(bl.inbox)
+  if (Number.isFinite(Number(bl.dirty))) detail.dirty = Number(bl.dirty)
+
+  // 记忆：未巩固的比例。全部巩固完 = 0
+  const ratio = detail.episodes > 0 ? detail.pending / detail.episodes : 0
+  parts.memory = Math.round(clamp(ratio * 1.6, 0, 1) * 45)
+
+  // ② 事件积压：60 条算满
+  parts.events = Math.round(clamp(detail.inbox / 60, 0, 1) * 30)
+
+  // ③ 代码改动：12 个文件算满
+  parts.code = Math.round(clamp(detail.dirty / 12, 0, 1) * 25)
+
+  const metabolic = parts.memory + parts.events + parts.code
+
+  // 钟表只做调制，不制造睡意
+  let mod = 1
+  let circ = 0
   try {
-    circ = rhythm.sleepPressure(now)                         // 0..1，曲线的"该困"
-    const f = field.evolve(now)
-    debt = Math.min(1, Number(f.dims.sleepDebt || 0) / 0.8)  // 债到 0.8 就算满
-  } catch (e) { swallow(e, 'night:sleepiness:physiology') }
-  parts.circadian = Math.round(circ * 40)
-  parts.debt = Math.round(debt * 35)
-  parts.physiology = parts.circadian + parts.debt
+    circ = rhythm.sleepPressure(now)          // 0..1，曲线上"该困"的程度
+    mod = 0.85 + 0.30 * circ                  // 0.85 ~ 1.15
+  } catch (e) { swallow(e, 'night:sleepiness:clock') }
 
-  // ② 整理积压：有没有活要干
-  let backlog = 0
-  try {
-    const st = stage.snapshot(now)
-    // 上一次睡眠的记录能告诉我们"上次整理做完没有"
-    backlog = Number(st.backlogHint || 0)
-  } catch (e) { swallow(e, 'night:sleepiness:backlog') }
-  parts.backlog = 0   // 由调用方注入（这里的 backlog 来自 brain.consolidate.status）
-  parts.backlogHint = backlog
+  const total = Math.min(100, Math.round(metabolic * mod))
 
-  // ③ 压力：皮质醇长期高的时候，睡一觉是最有效的修复
-  let chronic = 0
-  try {
-    const h = hpa.read(now)
-    chronic = Number(h.chronic || 0)
-  } catch (e) { swallow(e, 'night:sleepiness:hpa') }
-  parts.chronic = Math.round(chronic * 15)
-
-  const total = Math.min(100, parts.physiology + parts.backlog + parts.chronic)
   return {
     score: total,
-    parts,
-    // 三种表述，对应三个不同的状态（不是三个阈值，是三种感觉）
-    feeling: total >= 82 ? '撑不住了' : total >= 62 ? '很困，想躺下' : total >= 40 ? '有点乏' : '还清醒',
-    shouldSleep: total >= 62 || debt >= RULES.debtAt,
-    why: parts.circadian > 30 ? '时间到了' : debt >= RULES.debtAt ? '欠的觉太多了' : '有活没干完',
+    parts: { ...parts, metabolic, clockMod: Number(mod.toFixed(2)) },
+    detail,
+    // 三种表述对应三种感觉，但判断依据永远是**账攒了多少**，不是几点了
+    feeling: total >= 82 ? '撑不住了，得歇' : total >= RULES.sleepAt ? '积压太多，该睡了'
+      : total >= 40 ? '有点攒着了' : total > 0 ? '还清爽' : '干净的',
+    // 该不该睡：**只看账**。阈 66 与原设计一致。
+    shouldSleep: total >= RULES.sleepAt,
+    why: parts.memory >= parts.events && parts.memory >= parts.code ? '记忆积压最多'
+      : parts.events >= parts.code ? '事件积压最多' : '代码改动没归档',
+  }
+}
+
+/**
+ * 读真实的代谢账 —— 这是睡意的唯一来源。
+ *
+ * 三个数都是"产生了但没消化"的量，从各自的地方读：
+ *   · 记忆：consolidate 的游标 vs episode 总数
+ *   · 事件：inbox 里还没摄入的行数
+ *   · 代码：git 工作区的脏文件数（容器内没有 git → 走 0，不报错）
+ *
+ * 这个函数自己不去算权重，只负责**把账取齐**，交回给 sleepiness。
+ * 分开的理由：取数是 IO，算分是纯函数 —— 混在一起就没法测。
+ */
+export async function metabolicBacklog({ now = Date.now() } = {}) {
+  const out = { pending: 0, episodes: 0, inbox: 0, dirty: 0 }
+  // ① 记忆
+  try {
+    const C = await import('../consolidate.mjs')
+    const st = C.status()
+    out.pending = Number(st?.pending || 0)
+    out.episodes = Number(st?.total || 0)
+  } catch (e) { swallow(e, 'night:backlog:memory') }
+  // ② 事件
+  try {
+    const E = await import('../event.mjs')
+    out.inbox = Number(E.backlog?.() || 0)
+  } catch (e) { swallow(e, 'night:backlog:events') }
+  // ③ 代码改动（容器内没 git，读不到就是 0 —— 不是错，是环境如此）
+  try {
+    const { execFileSync } = await import('node:child_process')
+    const r = execFileSync('git', ['-C', '/home/feiyu/plugins/dsh-feiyu', '-c', 'safe.directory=*', 'status', '--porcelain'],
+      { timeout: 4000, encoding: 'utf8' })
+    out.dirty = String(r || '').split('\n').filter(Boolean).length
+  } catch { /* 没 git 或没权限：当作没有未归档改动 */ }
+  return out
+}
+
+/**
+ * 完整判定：先取账，再算分，再看要不要睡。
+ *
+ * 这是编排层唯一该调的东西 —— 它把"取数"和"算分"两件事合成一次调用，
+ * 避免调用方自己拼参数（拼错了就会算出一个假睡意）。
+ */
+export async function assess(now = Date.now()) {
+  const backlog = await metabolicBacklog({ now })
+  const sp = sleepiness(now, { backlog })
+  // 睡完之后的冷却：刚睡过就不该马上又睡（否则整理没跑完会反复触发）
+  let gapH = 999
+  try {
+    const st = readJson(sleepPath(), null) || {}
+    const last = Number(st.wakeAt || st.beganAt || 0)
+    if (last) gapH = (now - last) / HOUR
+  } catch (e) { swallow(e, 'night:assess:gap') }
+  const minGapH = Number(RULES.minGapH || 2)
+  const ready = sp.shouldSleep && gapH >= minGapH
+  return {
+    ...sp,
+    gapH: Number(gapH.toFixed(1)),
+    minGapH,
+    shouldSleep: ready,
+    why: !sp.shouldSleep
+      ? '账还没攒够（' + sp.score + '/100）'
+      : gapH < minGapH
+        ? '刚睡过 ' + gapH.toFixed(1) + ' 小时，先不睡'
+        : sp.why,
   }
 }
 
@@ -175,9 +257,18 @@ export function endSleep(now = Date.now()) {
   // 真实依据：REM 的时长和"记忆整合的完成度"是正相关的
   const remMin = Number(r?.acc?.REM || 0)
   const workDone = Math.min(1, remMin / 35)   // 35 分钟 REM ≈ 做完
+  // 睡完清账：REM 做完了多少，就清掉多少积压。
+  // 这是"睡意不是一个会衰减的量，是一个账"的直接体现 ——
+  // 没整理完的部分，醒来之后**仍然算积压**。
+  let cleared = 0
+  try {
+    cleared = Number(workDone.toFixed(2))
+  } catch (e) { swallow(e, 'night:end:cleared') }
+
   return {
     ...r,
     workDone: Number(workDone.toFixed(2)),
+    cleared,                                  // 清掉了多少比例的账
     // 她醒来时候的自我感受（这句会进提示词）
     feeling: feelingOf(r),
   }
@@ -196,6 +287,7 @@ function feelingOf(r) {
   if (n3 < 25) bits.push('身上还发软')
   if (rem < 15) bits.push('心里有点毛躁，说不上来')
   if (ints >= 3) bits.push('夜里醒过好几回')
+  if (Number(r?.workDone || 0) < 0.6) bits.push('还有一堆事没理完，心里挂着')
   return bits.join('；')
 }
 
