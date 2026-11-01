@@ -26,8 +26,12 @@ import * as backfill from './backfill.mjs'
 import * as field from './field.mjs'
 import * as rhythm from './rhythm.mjs'
 import * as inner from './inner.mjs'
+// 2026-11-02：器官层 —— 细胞组成器官，器官组成身体
+import * as hpa from './organ/hpa.mjs'
+import * as thalamus from './organ/thalamus.mjs'
+import * as sleepstage from './organ/sleepstage.mjs'
 
-export { event, episode, working, attention, intents, facts, affect, delivery, claim, assembleMod as assemble, consolidate, doctor, metrics, recall, selfM, schema, competence, taskqueue, backfill, field, rhythm, inner }
+export { event, episode, working, attention, intents, facts, affect, delivery, claim, assembleMod as assemble, consolidate, doctor, metrics, recall, selfM, schema, competence, taskqueue, backfill, field, rhythm, inner, hpa, thalamus, sleepstage }
 
 const OWNER_KEY_MAP = { food: 'food.eat', doing: 'activity.do', plan: 'plan.go', mood: 'mood.state', media: 'media.like' }
 
@@ -111,7 +115,31 @@ export function onEvent(input = {}) {
       if (hod >= 1 && hod < 5) field.poke('sleepDebt', 0.012, { why: 'awake-at-night', now: ev.at })
     } catch { }
 
-    // ③ 内心：她注意到什么、想说什么。这是"她有自己的想法"的落点。
+    // ③ 器官：事件 → HPA 轴（压力是走级联的，不是直接标一个数）
+    //    这一步的意义：一句话造成的不是"压力值 +0.3"，而是
+    //    CRH 冲一下 → 22 分钟后 ACTH 到位 → 皮质醇 40 分钟才回落。
+    //    所以"他刚说了句重话"和"他十分钟前说了句重话"在她身上是不同的状态。
+    try {
+      const tx = String(ev.text || '')
+      const who = ev.who?.kind
+      let stressLevel = 0
+      if (who === 'owner') {
+        // 明着被顶/被否定/被指责 → 强应激
+        if (/(凶|骂|烦死|闭嘴|别说了|不想理|你怎么这样|失望|生气)/.test(tx)) stressLevel = 1.1
+        else if (/(你错了|不对|不行|不满意|重做|再来)/.test(tx)) stressLevel = 0.7
+        else if (/(难受|想哭|撑不住|崩溃|痛|疼)/.test(tx)) stressLevel = 0.6   // 他难受 = 她的应激
+        // 缓和：他示好、道歉、说软话 → 卸压
+        else if (/(谢谢|辛苦|乖|厉害|喜欢你|想你|对不起|抱歉|抱抱)/.test(tx)) {
+          hpa.relieve('comfort', { now: ev.at })
+        }
+      }
+      if (stressLevel > 0) hpa.stress(stressLevel, { why: 'event:' + ev.act, now: ev.at })
+
+      // 每若干事件把 HPA 的产物灌回全身（器官间连接）
+      hpa.perfuse(ev.at)
+    } catch { }
+
+    // ④ 内心：她注意到什么、想说什么。这是"她有自己的想法"的落点。
     try {
       const tx = String(ev.text || '')
       if (ev.who.kind === 'owner' && tx) {
