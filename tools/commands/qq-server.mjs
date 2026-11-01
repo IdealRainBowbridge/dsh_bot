@@ -948,7 +948,7 @@ export async function run(argv = []) {
     return napcatOk
   }
   checkNapcat()
-  setInterval(checkNapcat, 30_000)
+  // [beat] setInterval(checkNapcat, 30_000) -> heartbeat vitals.napcat
 
   const server = http.createServer((req, res) => {
     // ── v5 统一鉴权闸 ────────────────────────────────────────────────────────
@@ -1073,7 +1073,7 @@ export async function run(argv = []) {
         if (li?.data?.user_id) selfIdCached = String(li.data.user_id)
         if (config().qq?.quote?.enabled !== false) {
           await warmQuoteIndex(50)
-          setInterval(() => { void warmQuoteIndex(40) }, 10 * 60_000)
+          // [beat] warmQuoteIndex interval -> heartbeat vitals.quotes
         }
       } catch (e) { logErr('[qq] 引用索引预热失败：' + (e?.message ?? e)) }
     })()
@@ -1487,67 +1487,32 @@ export async function run(argv = []) {
       log(`[qq] 🐟 主动搭话（${usedType}）：${out.slice(0, 50)}`)
     } catch (e) { logErr('[qq] 主动搭话失败：' + e.message) }
   }
-  setInterval(tryProactive, 60_000)
+  // [beat] setInterval(tryProactive, 60_000) -> self.decide() 决定 social 时才动
 
   // ── 承诺执行器单独跑（10-28）────────────────────────────────────────
   // 和"主动搭话"彻底解耦：到点就做，不需要先开口、不需要掷骰子、不占搭话日额。
   // 启动 25 秒后先补做一次 —— 机器睡了一夜的话，这一下就把昨晚欠的活补上。
   setTimeout(() => { void runDuePromises('醒来补做') }, 25_000)
-  setInterval(() => { void runDuePromises('tick') }, 60_000)
-
+  // [beat] runDuePromises -> vitals.promises
   // ── 脑的心跳（v3 S1）──────────────────────────────────────────────
   // 60 秒一次：消费 inbox、意图 catchUp（补做昨天没做的）、报告该不该巩固。
   // 巩固要调 LLM，**不在这个进程里做** —— spawn 一个子进程，别把事件循环钉住
   // （douyin-dm-server.mjs:32 那条注释就是上一次的教训：execFileSync 钉了 40~180 秒）。
   let brainConsolidating = false
   try { brain.configure(config()) } catch {}
-  setInterval(() => {
+  // [beat] 脑编排事务（消费 inbox / 意图补做 / 巩固判断）已移入 body.mjs
+  // [beat] 脑编排事务：消费 inbox / 意图补做 / 判断该不该巩固。
+  // 巩固要调 LLM，绝不在这里做 —— spawn 子进程，别钉事件循环
+  // （douyin-dm-server.mjs:32 那条注释是上一次的教训：execFileSync 钉了 40~180 秒）。
+  const brainTick = () => {
     try {
       const t = brain.tick()
-      if (t.catchUp?.missed?.length) log(`[qq] 🧠 有 ${t.catchUp.missed.length} 件答应过的事彻底错过了（转 missed）`)
-      if (t.catchUp?.doing?.length) log(`[qq] 🧠 补做 ${t.catchUp.doing.length} 件欠着的事：${t.catchUp.doing.map((x) => x.object).join('，')}`)
-      // 睡眠（10-30）：积累驱动+每日保底小睡，shouldSleep 是唯一决策点。
-      if (!brainConsolidating) {
-        import("./sleep.mjs").then(async ({ shouldSleep }) => {
-          try {
-            const d = await shouldSleep()
-            if (d.sleep && !brainConsolidating) {
-              brainConsolidating = true
-              console.log("[qq] 😴 " + d.why + " → 睡眠开始")
-              const p = spawn(process.execPath, [path.join(FEiyuRoot(), "tools", "feiyu.mjs"), "sleep", "--force"], { detached: true, stdio: "ignore", windowsHide: true })
-              p.on("exit", () => { brainConsolidating = false })
-              p.on("error", () => { brainConsolidating = false })
-              p.unref()
-            }
-          } catch {}
-        }).catch((e) => console.log("[qq] 睡眠钩子失败：" + String(e && e.message || e).slice(0, 80)))
-      }
-      // share-queue consumer (10-31): fun non-report events -> timed casual share.
-      // 10-31 审计：wander 在 commands/ 不在 lib/ —— 之前这行每 60s 静默失败，自主探索从未跑过
-      import('./wander.mjs').then(async ({ doWander }) => {
-        try {
-          const wr = await doWander()
-          if (wr) log('[qq] 🌊 自主探索：' + wr.want.slice(0, 60))
-        } catch (e) { log('[qq] wander 执行失败：' + String((e && e.message) || e).slice(0, 80)) }
-      }).catch((e) => log('[qq] wander 加载失败：' + String((e && e.message) || e).slice(0, 80)))
-      import('../lib/share-queue.mjs').then(async ({ shareTick }) => {
-        try {
-          const r = await shareTick()
-          if (r) log('[qq] share sent: ' + r.text.slice(0, 50))
-        } catch {}
-      }).catch(() => {})
-      if (t.shouldConsolidate && !brainConsolidating) {
-        brainConsolidating = true
-        log('[qq] 🧠 该巩固了 → 起子进程（不阻塞聊天）')
-        try {
-          const p = spawn(process.execPath, [path.join(FEiyuRoot(), 'tools', 'feiyu.mjs'), 'brain', 'consolidate'], { detached: true, stdio: 'ignore', windowsHide: true })
-          p.on('exit', () => { brainConsolidating = false })
-          p.on('error', () => { brainConsolidating = false })
-          p.unref()
-        } catch { brainConsolidating = false }
-      }
-    } catch (e) { logErr('[qq] 脑心跳异常：' + (e?.message ?? e)) }
-  }, 60_000)
+      if (t.catchUp?.missed?.length) log(`[qq] 🧠 ${t.catchUp.missed.length} 件答应过的事彻底错过了`)
+      if (brainConsolidating) return
+      // 睡眠判定已交给 heartbeat/self.decide()，这里不再自己判断要不要睡
+    } catch (e) { swallow(e, 'qq:brainTick') }
+  }
+
 
   // ── 身体/工具协议（11-01）：脑出任务，这里认领并异步执行 ──────────────────
   // 铁律：kind 必须白名单、args 必须是数组逐项透传（绝不拼 shell）；执行结果回写 task-log
@@ -1591,7 +1556,7 @@ export async function run(argv = []) {
     finally { taskBusy = false }
   }
   if ((config().brain?.task?.enabled ?? true) !== false) {
-    setInterval(() => { void pollTasks() }, Math.max(5, Number(config().brain?.task?.pollSec) || 20) * 1000)
+    // [beat] pollTasks interval -> heartbeat vitals.tasks
     setTimeout(() => { void pollTasks() }, 8_000)
   }
 
@@ -1674,7 +1639,7 @@ export async function run(argv = []) {
       }
     } catch (e) { logErr('[qq] 群聊插话失败：' + (e?.message ?? e)) }
   }
-  setInterval(tryGroupChat, 60_000)
+  // [beat] setInterval(tryGroupChat, 60_000) -> self.decide() 决定 social 时才动
 
   // ── 自主写说说引擎（10-25）：她自己的见闻+心情 → 攒着劲发一条 QQ 空间说说（可文配图）──
   // 内容从她的世界来（人设+世界块+情绪），图是她的鲸鱼娘图生图 —— 说说像她，不像模板。
@@ -1733,5 +1698,17 @@ export async function run(argv = []) {
       log(`[qzone] ✍️ 说说已发布${images ? '（配图）' : ''}：${String(text).slice(0, 40)}`)
     } catch (e) { logErr('[qzone] 自主说说失败：' + (e?.message ?? e)) }
   }
-  setInterval(tryQzone, 30 * 60_000)
+  // [beat] tryQzone -> vitals.qzone
+  // 2026-11-02 绑心跳：节拍与决策在 body.mjs + heartbeat.mjs，不属于任何 IM 通道
+  try {
+    const { bindBody } = await import('../lib/body.mjs')
+    const st = await bindBody({
+      spawn, log, logErr, checkNapcat, pollTasks, runDuePromises, warmQuoteIndex,
+      tryQzone, tryProactive, tryGroupChat, brainTick,
+      isBusy: () => brainConsolidating, setBusy: (v) => { brainConsolidating = !!v },
+      feiyuPath: () => path.join(FEiyuRoot(), 'tools', 'feiyu.mjs'),
+      queued: () => { try { return Number(CHANNEL.snapshot()?.queuedTotal || 0) } catch { return 0 } },
+    })
+    log('[beat] ' + JSON.stringify(st))
+  } catch (e) { logErr('[beat] 心跳绑定失败：' + (e?.message ?? e)) }
 }

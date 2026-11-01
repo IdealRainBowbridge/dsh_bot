@@ -596,6 +596,9 @@ const ALLOWED_REVERSE = [
   'tools/lib/persona.mjs',           // 提示词装配要用脑的七路召回
   'tools/lib/promise-executor.mjs',  // 承诺兑现要落 intents
   'tools/lib/promises.mjs',          // 同上
+  'tools/lib/body.mjs',              // 身体：把心跳的决定接到能力上。它要看自我的心跳/睡眠/节律，
+                                     // 才知道"此刻该做什么"—— 判断权在脑，执行接线在 lib，
+                                     // 这个方向是刻意的（脑不该认识 socket，body 不该做决定）。
   'tools/lib/think.mjs',             // 「先想后说」的执行体：要读身体状态（field）和心里的念头（inner）
                                      // 才能决定她此刻会怎么想。它是 lib 层里唯一必须看脑的地方 ——
                                      // 因为"怎么想"本身就是脑的职责，而它只是个执行器。
