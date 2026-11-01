@@ -60,17 +60,37 @@ export function aliveSuppressed(chatId, now = Date.now()) {
 }
 
 /** 渲染成提示词里的一块（≤1000 字）。 */
-export function render(chatId, now = Date.now()) {
+/**
+ * @param {object} [o] { dropIf: (text)=>boolean }
+ *   dropIf 由调用方给（assemble 用它判"这句是不是等下 recall 槽也要说"），
+ *   这里不 import recall —— 工作记忆不该知道召回的事，那是编排层的判断。
+ */
+export function render(chatId, now = Date.now(), o = {}) {
   const cur = load(chatId)
   const lines = []
+  const dropIf = typeof o.dropIf === 'function' ? o.dropIf : () => false
   const push = (key, label) => {
     const v = cur.slots[key]
-    if (v) lines.push(`${label}：${v}`)
+    if (v && !dropIf(v)) lines.push(`${label}：${v}`)
   }
   push('intent', '现在最要紧的')
   push('topic', '正在聊')
-  push('mood', '心情')
-  push('recallA', '你想起来的')
+  // ⚠️ mood 槽**不渲染**（2026-11-02）。
+  //
+  // 它是 `brain/index.mjs:174` 在收消息时写进文件的**快照**，之后就不再更新；
+  // 而 affect 是实时状态，每轮现读。两者必然漂移 ——
+  // 实测同一轮里 system 同时出现：
+  //     [22] 你现在的底色：平稳（情绪 -0.32，唤醒 0.38）   ← affect，实时
+  //     [25] 心情：平稳（情绪 -0.29，唤醒 0.45）           ← working，旧快照
+  // 同一件事说两遍、数值还不一样。她读到会困惑"到底哪个是我"。
+  //
+  // 情绪只由 affect.sense() 在一个地方给（第一人称、无数字）。
+  // 槽本身保留不删 —— 里面可能还有别的写者，删了会丢数据；只是不再往提示词里放。
+  // recallA 和【你想起来的事】（assemble 的 recall 槽）内容相同，以前两处都渲染，
+  // 于是 system 里同一句"刚还说心情好呢…"出现两次。
+  // 保留这里是因为它带 chatId 作用域（这份是**这个会话**的），
+  // 但改个说法，让它读起来是"刚接上的话头"而不是"又一次回忆"。
+  push('recallA', '刚接上的话头')
   push('recallB', '还有')
   push('todo', '待办')
   push('unfinished', '没说完的话头')

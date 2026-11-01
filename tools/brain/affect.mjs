@@ -78,5 +78,51 @@ export function line() {
   const v = Number(s.valence || 0)
   const moodWord = label(v, Number(s.arousal || 0), Number(s.tension || 0))
   const extra = s.tension >= 2 ? `；心里还压着 ${s.tension} 件事没落地` : ''
-  return `你现在的底色：${moodWord}（情绪 ${v >= 0 ? '+' : ''}${v.toFixed(2)}，唤醒 ${Number(s.arousal || 0).toFixed(2)}）${extra}`
+  return `你现在的底色：${moodWord}${extra}`
+}
+
+/**
+ * 第一人称的说法（给「主观」那一层用）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么不要数字（这是被明确否过一次的做法）
+ * ══════════════════════════════════════════════════════════════════════
+ * 原来 line() 给出的是：
+ *     你现在的底色：平稳（情绪 -0.32，唤醒 0.38）
+ *
+ * 两个问题：
+ *   ① **"情绪 -0.32" 不是一个体验。** 人不会知道自己此刻的值是负三毛二。
+ *      这是仪表盘的语言。用户的口径是"她**体验到**什么，而不是系统**断言**什么"。
+ *   ② 更实际的：模型拿到一个带符号的数字，会忍不住在话里提它
+ *      （"我现在心情有点低"变成"我今天状态负的"这类怪话），
+ *      或者被数字锚定 —— 看到 -0.32 就觉得"我该是难过的"，
+ *      于是明明只是平静也被写成低落。
+ *
+ * 第一人称的说法只保留**方向**：
+ *     "有点提不起劲" / "心里挺松快的" / "说不上好也说不上坏"
+ * 人能分辨的是这个，不是小数点。
+ */
+export function sense() {
+  const s = state()
+  const v = Number(s.valence || 0)
+  const a = Number(s.arousal || 0)
+  const bits = []
+
+  // 效价：只给方向，不给量
+  if (v >= 0.35) bits.push('心里挺松快')
+  else if (v >= 0.12) bits.push('心情是往上的')
+  else if (v <= -0.35) bits.push('心里堵得慌')
+  else if (v <= -0.12) bits.push('有点提不起劲')
+
+  // 唤醒：高唤醒和低唤醒的体验完全不同，分开说
+  if (a >= 0.62) bits.push('人是醒着的，话来得快')
+  else if (a <= 0.22) bits.push('整个人都懒得动')
+
+  // 未了之事
+  const t = Number(s.tension || 0)
+  if (t >= 3) bits.push('好几件事悬着没落地')
+  else if (t >= 1.5) bits.push('隐约有件事没落地')
+
+  if (!bits.length) bits.push('说不上好也说不上坏')
+  return '我' + bits.join('，') + '。'
 }

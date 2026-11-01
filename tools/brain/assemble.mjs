@@ -108,12 +108,39 @@ function slotList(ctx) {
   //
   // 注意：sense() 返回的是"你此刻的身体：……。"这种**第一人称可读**的句子，
   // 不是"fatigue=0.72"。数字进提示词她就变成仪表盘了。
+  // 三样"体验到的东西"合并成**一行**，用同一个第一人称。
+  //
+  // ══════════════════════════════════════════════════════════════════════
+  // 为什么合并（2026-11-02）
+  // ══════════════════════════════════════════════════════════════════════
+  // 原来这里是三块分开的：
+  //     [21] 你此刻的身体：缺觉，脑子发钝。              ← field.sense()，第二人称
+  //     [22] 你现在的底色：平稳（情绪 -0.32，唤醒 0.38）  ← affect.line()，第二人称 + 数字
+  //     [26] 【你想起来的事】...                          ← 记忆
+  // 前两块说的是同一件事（我此刻什么感觉），却分成两个人称、两种语气，
+  // 中间还夹着时间和【此刻】。读起来像三个人在描述同一个病人。
+  //
+  // 一个人的自我感知是**一团**的：身上乏、心里低、还有件事悬着 —— 这些不是
+  // 三个独立字段，是同一口气里说出来的。所以合并成一行：
+  //     身体：感觉缺觉，脑子发钝。心里：我有点提不起劲。
+  //
+  // 保留"身体：""心里："这两个提示词，是为了让她分得清
+  // "身上难受"和"心里难受" —— 这两件事会互相影响但不一样，
+  // 混成一句"我不太舒服"会丢掉这个区分，那还是电路板。
+  const feels = []
   try {
-    const body = field.sense()
-    if (body) add('body', body, 31)
+    const b = field.sense()
+    if (b) feels.push('身体：' + b)
   } catch { }
+  try {
+    const a = affect.sense()
+    if (a) feels.push('心里：' + a)
+  } catch { }
+  if (feels.length) add('feel', feels.join('\n'), 31)
 
-  add('affect', affect.line(), 31)
+  // affect.line() 仍保留调用点给需要第二人称/带数字的地方，
+  // 但不再进 system —— 她的自我感知统一走上面那条。
+
   add('clock', clockBlock(platform, chatId, userText, isGroup), 32)
 
   // 【此刻】她正在做什么 —— 取自 self-state.json 的 lean（**她自己说的那句**）。
@@ -134,7 +161,60 @@ function slotList(ctx) {
     if (lean) add('selfstate', '【此刻】' + lean, 18)
   } catch { }
 
-  const wm = working.render(chatId, now)
+  // ══════════════════════════════════════════════════════════════════════
+  // 去重：working 里两个槽和下面的【你想起来的事】说的是同一句
+  // ══════════════════════════════════════════════════════════════════════
+  // 实测改前 system 里同一句"刚还说心情好呢…"出现了**三次**：
+  //   [24] 正在聊：刚还说心情好呢…
+  //   [24] 刚接上的话头：刚说的：刚还说心情好呢…
+  //   [25] 【你想起来的事】- 3 小时前 刚还说心情好呢…
+  //
+  // 这不是"多一点上下文"，是**复读**。模型看到同一句三遍，会以为这件事特别重要，
+  // 于是反复提它 —— 用户抱怨过的"你怎么老说这个"就是这么来的。
+  //
+  // 处理：working 里的 topic / recallA 与 recall 槽同源（都出自最近 episode），
+  // 保留信息密度更高的那个：
+  //   · recall 槽有相对时间 + ep-id + 相似度，信息更多 → 保留
+  //   · working 的 topic 只有一句原话，没有时效标注，且常常就是这个 chat 的最后一句
+  //     → 只在 recall 槽为空时兜底
+  // 判重方式用**子串包含**而不是全等：working 存的常常是 gist 的截断版。
+  const recallText = (() => {
+    try {
+      const b = recall.bundle({ platform, chatId, userId, userText, isGroup, now })
+      return b.lines.join('\n')
+    } catch { return '' }
+  })()
+  // 判重用的指纹：剥掉 working 自己加的前缀（"刚说的："），再去掉标点空白。
+  //
+  // ⚠️ 第一版用"前 12 字包含"失败。working 里存的是
+  //     `刚说的：刚还说心情好呢，怎么没一会儿又累了……`（完整原文 + 前缀）
+  //   而 recall 槽里是 `刚还说心情好呢，怎么没一会儿又累了……`（gist，可能截断）
+  //   前 12 字带上前缀 5 个字就和 gist 对不上了 → 判不出重复。
+  //
+  // 正确做法：剥前缀 + 用 **字符级 bigram 覆盖率**，而不是位置对齐。
+  //   两句说的是不是同一件事，跟字在哪个位置无关。
+  //   （注意：这里判的是"同一句话"，不是"同一件事" —— 后者中文短句做不到，
+  //     M57 里 2-gram 重叠判切段失败过；但判"是不是同一句原文"很可靠。）
+  const norm = (t) => String(t || '')
+    .replace(/^刚说的[:：]/, '')
+    .replace(/[\s，。！？…~～、,.!?]/g, '')
+  const bigrams = (t) => {
+    const g = new Set()
+    for (let i = 0; i + 1 < t.length; i++) g.add(t.slice(i, i + 2))
+    return g
+  }
+  const dupOfRecall = (v) => {
+    const n = norm(v)
+    if (n.length < 8 || !recallText) return false
+    const A = bigrams(n)
+    const B = bigrams(norm(recallText))
+    if (!A.size) return false
+    let hit = 0
+    for (const g of A) if (B.has(g)) hit++
+    return hit / A.size >= 0.6          // 六成 bigram 重合 = 同一句原文
+  }
+
+  const wm = working.render(chatId, now, { dropIf: dupOfRecall })
   if (wm) add('working', '【你此刻脑子里装着的】\n' + wm, 20)
 
   const bundle = recall.bundle({ platform, chatId, userId, userText, isGroup, now })
