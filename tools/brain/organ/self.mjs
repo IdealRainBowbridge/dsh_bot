@@ -175,7 +175,7 @@ export function desire(action, ctx) {
  * @param {object} o { candidates, ctx, llm, now }
  * @returns {Promise<string>} 她自己的说法（一句，口语）
  */
-async function leanOf({ candidates = [], ctx = {}, llm = null, now = Date.now() } = {}) {
+async function leanOf({ candidates = [], ctx = {}, picked = '', llm = null, now = Date.now() } = {}) {
   const LLM = llm || await import('../../lib/llm.mjs')
   const F = ctx.field || {}
   const sleepy = ctx.sleepy || {}
@@ -208,7 +208,29 @@ async function leanOf({ candidates = [], ctx = {}, llm = null, now = Date.now() 
   else if (Number(sleepy.score || 0) >= 60) backlog.push('有点攒着了')
 
   // ③ 候选倾向（**只说方向，不说权重**）
+  //
+  // ⚠️ 2026-11-02 修正：原来只给前 4 条候选的 hint，**不含决定选中的那个**。
+  //    实测原始状态（06:26 self-state.json）：
+  //      action = 'consolidate'，why = '想做：整理记忆（意愿 0.70）'
+  //      lean   = '想随便翻翻手机看点轻松的东西，脑子实在转不动了。'
+  //    → decide 说"整理记忆"，她自己说"想看轻松的东西"。
+  //    然后 body.consolidate 照 action 执行，而【此刻】注入 system 的是 lean。
+  //    **结果是她心里想的和身体在做的完全对不上，而且她自己也读得到这个矛盾。**
+  //
+  //    根因不是模型不听话 —— 是 **leanOf 根本不知道 decide 选了什么**。
+  //    它只拿到 candidates 列表，那个列表里连 consolidate 都不在
+  //    （decide 调 leanOf 前把 sleep 排除了，但候选是全部 ACTIONS，hint 只取了前 4 条）。
+  //
+  //    这违反了用户定的那条："丢骰子也是在模型通道这边很融洽地自动考虑权重"。
+  //    骰子要在她脑子里掷 —— 那就得把"权重最高的那个方向"交给她，让她自己说出来，
+  //    **而不是在外面掷完、只让她猜。**
+  //
+  //    修法：picked 作为**倾向最强的那一条**放进输入，明确标注"你手上这阵子最偏向这件"。
+  //    仍然不提概率/分数/时长；仍然允许她说"不想干这个"（那是她的权利，
+  //    也说出了真实心理：明明该干活但就是不想动）。
   const wants = candidates.slice(0, 4).map((c) => c.hint).filter(Boolean)
+  const pickedHint = picked ? (HINTS[picked] || (ACTIONS[picked] && ACTIONS[picked].label) || '') : ''
+  if (pickedHint && !wants.includes(pickedHint)) wants.unshift(pickedHint)
 
   // 状态整体是正面的吗？如果是，明确告诉她"该轻快"，否则模型会惯性往沉重写。
   const positive = Number(F.fatigue || 0) <= 0.3 && Number(F.sleepDebt || 0) <= 0.3 && Number(F.valence || 0) > 0.1
@@ -223,7 +245,8 @@ async function leanOf({ candidates = [], ctx = {}, llm = null, now = Date.now() 
       '身体：' + feels.join('，') + '。\n' + tone +
       (backlog.length ? '心里：' + backlog.join('，') + '。\n' : '') +
       (ctx.interrupted ? '刚刚有人在叫你。\n' : '') +
-      (wants.length ? '\n这会儿你心里隐约有点想干的事：\n' + wants.map((w) => '- ' + w).join('\n') : '') +
+      (pickedHint ? '\n你手上这阵子最偏向的是：' + pickedHint + '\n（这不是命令，是你自己此刻的倾向。你要是不想干它，也照实说。）\n' : '') +
+      (wants.length > 1 ? '\n另外心里也隐约有点想干的事：\n' + wants.filter((w) => w !== pickedHint).map((w) => '- ' + w).join('\n') : '') +
       '\n\n请用**第一人称、口语、一句到两句**说：你现在最想干什么、为什么。\n' +
       '规则：\n' +
       '- 不要列清单，不要说"根据我的状态"\n' +
@@ -316,11 +339,25 @@ export async function decide(o = {}) {
   //    注意：只把**倾向方向**给她，不给她权重数字，也不给她"系统选了哪个"。
   let lean = ''
   try {
-    const cands = Object.keys(ACTIONS)
-      .filter((k) => k !== 'sleep')
-      .map((k) => ({ k, hint: HINTS[k] || ACTIONS[k].label }))
+    // 只把**真正在这一层参与竞争**的动作交给她 —— 也就是过了 need 过滤的那些。
+    //
+    // ⚠️ 2026-11-02 修正：原来这里给她的是**全部** ACTIONS（除了 sleep），
+    //    包括她此刻根本没资格做的 write（need 0.6 > depth+0.15）。
+    //    后果实测：action=rest，她却说"就想随便走走看看有啥新鲜的，
+    //    **顺便把等我的那人应付一下**" —— 后半句来自 reply 的 hint
+    //    「好像有人在等我」，而 reply 这一轮根本不是候选。
+    //
+    //    一个"此刻不能做某件事"的人在自言自语时不会提到那件事。
+    //    把不可及的选项塞进她的心流，等于让她对着菜单念菜名。
+    //    这也是"主观"那一层的要求：她体验到的必须是她**真能想到**的范围。
+    const live = Object.keys(ACTIONS)
+      .filter((k) => k !== 'sleep' && k !== 'reply')     // 睡和回话不参与"想做"这一层
+      .filter((k) => ACTIONS[k].need <= depth + 0.15)
     lean = await leanOf({
-      candidates: cands, ctx: { ...ctx, interrupted: ctx.hasInterrupt },
+      candidates: live.map((k) => ({ k, hint: HINTS[k] || ACTIONS[k].label })),
+      ctx: { ...ctx, interrupted: ctx.hasInterrupt },
+      picked: action,        // ← 把 decide 选中的那个一起交给她（见 leanOf 注释）
+      now,
     })
   } catch (e) { /* lean 失败不影响决策 */ }
 

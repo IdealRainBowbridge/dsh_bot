@@ -120,7 +120,13 @@ export function sample({ force = false, now = Date.now() } = {}) {
   }
 
   const scored = rows
-    .map((r) => ({ text: String(r.text).trim(), at: Number(r.at || now), s: score(r.text, r.at, now) }))
+    // ⚠️ 2026-11-02：她自己说的话常常是多行的（换行写在同一个气泡里）。
+    //    直接塞进锚块会变成"一条占四行"，整个【你自己说过的话】读起来像碎纸，
+    //    而且模型会对着换行位置学断句。压成单行 + 截断更接近"一个人想起来的一句话"。
+    .map((r) => {
+      const one = String(r.text || '').replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
+      return { text: one, at: Number(r.at || now), s: score(one, r.at, now) }
+    })
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s)
 
@@ -168,7 +174,10 @@ function similar(a, b) {
 export function block({ now = Date.now() } = {}) {
   const st = hydrate(readJson(anchorPath(), null))
   if (!st.items.length) return ''
-  const lines = st.items.map((x) => '· ' + x.text).join('\n')
+  const lines = st.items
+    .map((x) => '· ' + String(x.text || '').replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim())
+    .filter((x) => x.length > 2)
+    .join('\n')
   return `【你自己说过的话】\n${lines}\n\n` +
     `上面这些是你真的说过的话，原样留着。不是让你模仿，是提醒你本来是什么语气。\n` +
     `不用刻意照它们的说法讲，也别刻意避开。`

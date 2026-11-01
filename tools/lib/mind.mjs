@@ -24,6 +24,7 @@ import { config } from './config.mjs'
 import { dataPath, dshPath } from './paths.mjs'
 import { readFocus, writeFocus, labelOf, isLoopActivity, LOOP_ACTIVITIES } from './focus.mjs'
 import { swallow } from './swallow.mjs'
+import * as promisesMod from './promises.mjs'
 import { writeJsonAtomic } from './atomic.mjs'
 import { fill } from './persona-voice.mjs'
 
@@ -87,11 +88,34 @@ function gatherContext(now = Date.now()) {
   }
 
   // 到点 / 欠着的承诺
+  //
+  // ⚠️ 2026-11-02 修两个错，叠在一起等于这段从上线起就没生效过：
+  //
+  //    ① **形状读错**：promises.json 的真实结构是 `{ items: [...] }`，
+  //       这里却 `readJson(..., [])` 拿到对象，再 `(pr || []).filter(...)`
+  //       → `filter is not a function` → 被 catch 吞掉 →
+  //       swallowed.log 里那句「mind.mjs:93 ×1 最后：(pr || []).filter is not a function」。
+  //
+  //    ② **状态名读错**：真实状态是 'open'（见 promises.mjs:165 `state === 'open'`），
+  //       这里写的是 'pending' —— 就算形状对了，也永远筛不出东西。
+  //
+  //    两处加起来的效果：**她做"此刻在想什么"的时候，从来不知道自己欠着事。**
+  //    承诺系统本身是好的（有 dueNow / list / done），只是这一个消费点断了。
+  //
+  //    根因是绕过接口直接读文件：promises.mjs 早有 list(state) 这个口子，
+  //    这里手搓了一遍 JSON 结构，文件结构一变就静默失效。
+  //    现在改成走接口 —— 以后 promises.json 换结构，这里不用改。
   try {
-    const pr = readJson(dataPath('promises.json'), [])
-    ctx.promises = (pr || []).filter((p) => p.state === 'pending').slice(0, 5).map((p) => ({
-      text: String(p.text || '').slice(0, 50),
-      due: Number(p.dueAt || 0) ? (Number(p.dueAt) <= now ? '已到点' : new Date(Number(p.dueAt)).toLocaleString('zh-CN', { hour12: false }).slice(5, 16)) : '没定时间',
+    const items = promisesMod.list('open')
+    const dueItems = promisesMod.dueNow(now)
+    const dueIds = new Set(dueItems.map((x) => x.id))
+    ctx.promises = items.slice(0, 5).map((p) => ({
+      text: String(p.text || p.what || '').slice(0, 50),
+      due: dueIds.has(p.id)
+        ? '已到点'
+        : Number(p.dueAt || 0)
+          ? new Date(Number(p.dueAt)).toLocaleString('zh-CN', { hour12: false }).slice(5, 16)
+          : '没定时间',
     }))
   } catch (e) { swallow(e, 'tools/lib/mind.mjs:93') }
 

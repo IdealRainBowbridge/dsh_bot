@@ -7,7 +7,9 @@
 //
 // 保留旧装配做对照组：config.brain.mode = 'shadow' 时 qq-server 仍走 buildMessages，
 // 这里只被 doctor / 测试 / live 模式调用。
+import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
+import { homePath } from '../lib/paths.mjs'
 import * as memory from '../lib/memory.mjs'
 import {
   personaText, identityLine, ownerLine, clockBlock, capabilityBlock, groupFactBlock,
@@ -23,6 +25,7 @@ import * as intents from './intents.mjs'
 import * as affect from './affect.mjs'
 import * as selfM from './self.mjs'
 import * as field from './field.mjs'
+import * as anchor from './anchor.mjs'
 import * as schema from './schema.mjs'
 import * as competence from './competence.mjs'
 import { bump, setValue } from './metrics.mjs'
@@ -54,6 +57,33 @@ function slotList(ctx) {
   if (platform === 'qq' || platform === 'wechat' || platform === 'douyin-dm' || isGroup) {
     add('audience', ownerLine(cfg, platform, userId, isGroup), 2, { keep: true })
   }
+  // 【你自己说过的话】—— 2026-11-02 补的**第二个断线**。
+  //
+  // ══════════════════════════════════════════════════════════════════════
+  // 这里的问题不是"没做"，是"做了但在另一条路上"
+  // ══════════════════════════════════════════════════════════════════════
+  // 锚（anchor.mjs）是用户 10-31 定的四件套之一：4 句她真正说过的话冻结进 system，
+  // 当证据用而不是当规定用（"锚 ≠ persona：persona 是应然，读多了越演越假；
+  // 锚是证据，想起来比被告知有效"）。
+  //
+  // 它实现得很完整：从 stream.jsonl 里按口癖/客服腔/长度打分，21 天冻结，
+  // 有 block() 负责措辞。但 assemble.mjs（新 8 槽装配）**从来没 import 过它**。
+  //
+  // 而 qq-server:586 是这样的：
+  //     const brained = brain.assembleFor({...})
+  //     const messages = brained?.messages ?? buildMessages({...})
+  //   → brained 只要非空就走新路，**永远不会回落到 buildMessages**。
+  //
+  // 所以 persona.mjs 里那段读 anchor.json 的代码一直在跑，但产出的 system 永远用不上。
+  // 同一件事还有：【此刻】（她正在做什么）也只有 persona.mjs 里有。
+  //
+  // 这就是"两条装配路线各自演进"的代价 —— 新路做的时候只搬了一半。
+  // 这段注释写在这里，是为了下次加槽的人知道：**加在 assemble 才真的到她眼前**。
+  try {
+    const ab = anchor.block({ now })
+    if (ab) add('anchor', ab, 5)
+  } catch { }
+
   add('honesty', HONESTY, 3, { keep: true })
   if (/微信|wechat/i.test(String(userText || '')) && !isGroup) add('wechat', WECHAT_PHRASE, 4)
 
@@ -85,6 +115,24 @@ function slotList(ctx) {
 
   add('affect', affect.line(), 31)
   add('clock', clockBlock(platform, chatId, userText, isGroup), 32)
+
+  // 【此刻】她正在做什么 —— 取自 self-state.json 的 lean（**她自己说的那句**）。
+  //
+  // 为什么用 lean 而不是 action 标签：
+  //   action 是 'consolidate'，那是调度器的词；
+  //   lean 是"想随便翻翻手机看点轻松的东西，脑子实在转不动了"，那是她的体验。
+  //   用户那句话："要的是她**体验到**什么，而不是系统**断言**什么。"
+  //
+  // 为什么只读文件不调 self.line()：
+  //   ① assemble 是同步的，self.line() 会触发 hydrate/readJson，代价一样但语义更绕
+  //   ② self-state.json 才是"她此刻"的唯一真相（它在每拍决策后落盘）
+  //   ③ 更重要：line() 会拼上"（还有 X 分钟）"—— 那是任务管理器的语言，明确被否掉过。
+  //      这里只取 lean。
+  try {
+    const st = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
+    const lean = String(st?.current?.lean || '').trim()
+    if (lean) add('selfstate', '【此刻】' + lean, 18)
+  } catch { }
 
   const wm = working.render(chatId, now)
   if (wm) add('working', '【你此刻脑子里装着的】\n' + wm, 20)
