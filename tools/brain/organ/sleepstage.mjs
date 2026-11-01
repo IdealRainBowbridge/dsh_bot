@@ -94,6 +94,22 @@ export const CYCLE = {
   },
 }
 
+/**
+ * 某一阶段在第 col 个周期里占多少分钟。
+ *
+ * 和 accrual() 里同一套算法：share 是未归一化的"形状"，
+ * 先除该周期所有阶段的和，再乘周期长度。**两处必须同一个口径**，
+ * 否则"预演算出的 91 分钟 N3"和"实时算出的 N3 位置"会对不上。
+ */
+function stageMin(stage, col) {
+  const shares = CYCLE.share
+  if (!shares || !shares[stage]) return 0
+  let sum = 0
+  for (const st of Object.keys(shares)) sum += Number(shares[st][col] || 0)
+  if (sum <= 0) return 0
+  return (Number(shares[stage][col] || 0) / sum) * CYCLE.lengthMin
+}
+
 const empty = () => ({
   at: 0,
   inSleep: false,
@@ -167,6 +183,63 @@ export function accrual(elapsedMin, interruptions = 0) {
   for (const k of Object.keys(acc)) acc[k] = Number(acc[k].toFixed(1))
   return acc
 }
+
+/**
+ * 这一觉**打算**睡多久，各阶段将分到多少分钟（预演）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么需要"预演"（2026-11-02）
+ * ══════════════════════════════════════════════════════════════════════
+ * `sleep.mjs` 是**醒来之后**才跑的（body.mjs 在 beginSleep 之后 spawn 它）。
+ * 那时 inSleep 已经是 true，而 accrual 要的是"睡了多久" ——
+ * 于是它拿不到"这一觉能睡多深"，只能固定跑同一套流程。
+ *
+ * 但"睡多久"决定了**能干什么活**，这是真实生理：
+ *   · 只睡 2 小时 → 主要是 N3（前半夜深睡集中），REM 几乎没有
+ *     → 能修身体，做不了情绪加工
+ *   · 睡 8 小时 → N3 早没了，后半段全是 REM
+ *     → 情绪加工做得多，但深睡修复少
+ *
+ * 所以要在**入睡那一刻**就把"这一觉各阶段能分到多少"算出来，
+ * 交给 sleep.mjs 按这个来定两条通道的深度。
+ *
+ * 用 plannedMin = 0 调就是"此刻已经睡了多久"的实时值，两种用法共一个函数。
+ *
+ * @param {number} plannedMin 这一觉计划睡多少分钟
+ * @param {number} [interruptions] 已经发生的打断次数（预演时传 0）
+ */
+export function plan(plannedMin = 0, interruptions = 0) {
+  const acc = accrual(plannedMin, interruptions)
+  const total = Number(plannedMin) || 0
+  return {
+    minutes: Number(total.toFixed(0)),
+    acc,
+    // 两条通道各跑多深（0..1）
+    //
+    // N3 → 维护通道的深度：深睡主要修**事实与结构**（受体池、突触、巩固）
+    // REM → 梦境通道的深度：REM 主要修**情绪强度**（脱敏）
+    //
+    // ══════════════════════════════════════════════════════════════════
+    // 分母定多大：按**真实整夜量**定，不是按"最少够用"定
+    // ══════════════════════════════════════════════════════════════════
+    // ⚠️ 第一版写 N3/60、REM/35，结果睡 2 小时就 maintenance=0.90、
+    //    4 小时起就满 1.00 —— "睡 2 小时"和"睡 8 小时"做的事几乎一样，
+    //    等于分层没生效。根因是我拿"最低够用线"当分母了。
+    //
+    //    正确的分母是**一次完整整夜会给多少**（生理实测，8 小时）：
+    //      N3  ≈ 91 分钟（占 19%，多导睡眠图 13~23% 的中位）
+    //      REM ≈ 114 分钟（占 24%，20~25% 的中位）
+    //    按这个定，8 小时才刚好 1.00，短睡就会明显不足 —— 这才是真实的形状。
+    //
+    //    这跟 HPA 那条教训同源："阈值要对着真实量级定，别对着'我最少需要多少'定"。
+    maintenance: clamp01(acc.N3 / 90),
+    dream: clamp01(acc.REM / 110),
+    // 睡到 N2 就够"顺手清队列"了，这个不看深度只看有没有睡
+    light: clamp01(acc.N2 / 60),
+  }
+}
+
+function clamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)) }
 
 /* ── 入睡 / 醒来 ──────────────────────────────────────────────────── */
 
@@ -290,7 +363,21 @@ export function currentStage(now = Date.now()) {
     const col = Math.min(cycle, 4)
     let cycLeft = CYCLE.lengthMin
     for (const s of CYCLE.stages) {
-      const dur = Math.min(CYCLE.byCycle[s][col] || 0, cycLeft)
+      // ⚠️ 2026-11-02：这里原来写 `CYCLE.byCycle[s][col]`，而 CYCLE 里**只有 share，
+      //    没有 byCycle** —— 于是 currentStage() 从写出来那天起，每次调用都抛
+      //    `TypeError: Cannot read properties of undefined (reading 'N1')`。
+      //
+      //    后果链（全被 try/catch 吞掉，所以只表现为"功能不存在"而不是报错）：
+      //      sleepstage.snapshot() → 抛 → night.duty() 拿不到阶段
+      //      → "睡着时现在是什么阶段、该干什么活"从来没生效
+      //      → sleep.mjs 结算时 stage.wake() 里的 stage 字段也拿不到
+      //
+      //    这是本项目第 N 次"静默假数据"：有函数、有注释、有调用点，
+      //    但没有一次成功执行过。
+      //
+      //    修法：用 share 现算 —— 和 accrual() 里完全同一套归一化
+      //    （share 是"未归一化的比例"，除以该周期的总和再乘 92 分钟才是分钟数）。
+      const dur = Math.min(stageMin(s, col), cycLeft)
       if (dur <= 0) continue
       if (left < dur) { stage = s; break outer }   // 停在这里
       left -= dur

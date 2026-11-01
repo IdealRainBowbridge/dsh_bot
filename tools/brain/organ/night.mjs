@@ -276,11 +276,34 @@ export function beginSleep(o = {}) {
   const out = { at: now, reason: String(o.reason || ''), backlog: Number(o.backlog || 0) }
   try { stage.sleep(now) } catch (e) { swallow(e, 'night:begin:sleep') }
   try { rhythm.asleep(now) } catch (e) { swallow(e, 'night:begin:rhythm') }
+
+  // ── 预演这一觉各阶段分到多少（2026-11-02）─────────────────────────
+  //
+  // 为什么要在这里算：sleep.mjs 是醒来后才跑的，那时拿不到"这一觉睡多深"，
+  // 于是它只能固定跑同一套流程 —— N3/REM 算出来的分钟数成了摆设。
+  //
+  // plannedMin 从哪来：默认按"睡到自然醒"估 480 分钟（8 小时，生理整夜）。
+  // 如果调用方给了 o.plannedMin（例如她只是打个盹），就用那个。
+  // 真实睡多久会在 wake() 里重新算一次 —— 预演只是给**运行时**一个尺度，
+  // 结算永远用真实时长，两者不是一回事（预报 vs 实况）。
+  let plan = null
+  try {
+    const plannedMin = Number(o.plannedMin || 480)
+    plan = stage.plan(plannedMin, 0)
+    out.plan = plan
+  } catch (e) { swallow(e, 'night:begin:plan') }
+
   // 记下"这一觉打算干多少活"，醒来时按实际睡到的阶段算完成度。
   // 单独一个文件，不塞进 sleepstage 的状态结构 —— 那是器官自己的盘，
   // 编排层的记账不该混进去（改了会破坏器官的状态机语义）。
   try {
-    writeJsonAtomic(nightWorkPath(), { at: now, backlog: out.backlog, done: false })
+    writeJsonAtomic(nightWorkPath(), {
+      at: now,
+      backlog: out.backlog,
+      done: false,
+      // 这份 plan 是 sleep.mjs 定"两条通道跑多深"的唯一依据
+      plan,
+    })
   } catch (e) { swallow(e, 'night:begin:work') }
   return out
 }
