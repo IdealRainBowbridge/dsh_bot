@@ -270,6 +270,31 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   const idLine = identityLine(cfg, isGroup)
   if (idLine) parts.push(idLine)
 
+  // ── 此刻的倾向（2026-11-02）────────────────────────────────────────
+  //
+  // 这一段的写法比它读什么更重要。原来的写法和新的写法差别是：
+  //
+  //   旧：【你正在做的事】看番/刷视频（还剩 43 分钟），理由：想放松一下
+  //       ← 这是**被告知**。她读到的是"有人把我安排在看番"。
+  //         模型会照这个演，但她心里没有那个念头。
+  //
+  //   新：这会儿更想看点什么，不想动脑子。已经翻了一会儿了。
+  //       ← 这是**她自己的状态**。没有"安排"，没有"理由"，没有剩余分钟。
+  //         她读到的是自己此刻的样子，然后自然地说话。
+  //
+  // 为什么去掉"理由"和"剩 X 分钟"：真人不会在心里计着自己还剩 43 分钟。
+  // 那是任务管理器的语言，不是内心的语言。保留"大概多久"这种模糊感才对。
+  //
+  // 权重怎么来的、骰子在哪掷的 —— **一律不写**。她不该知道自己是被算出来的。
+  try {
+    const sj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
+    const c = sj?.current
+    if (c && Number(c.until || 0) > Date.now()) {
+      const lean = String(c.lean || '').trim()   // decide() 写的"她自己的说法"
+      if (lean) parts.push('【此刻】' + lean)
+    }
+  } catch (e) { swallow(e, 'persona:selfState') }
+
   // ── 锚（2026-11-02）──────────────────────────────────────────────────
   // 从**她自己真说过的话**里挑 4 句原样放进来，冻结不变。
   //
@@ -296,9 +321,10 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     const mp = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'mind-plan.json'), 'utf8'))
     const act = String(mp.activity || '')
     if (act && Number(mp.until || 0) > Date.now()) {
-      const LABEL = { web: '自由上网', bilibili: '刷B站', binge: '看番/看剧', rest: '歇着', free: '自由时间' }
-      const remain = Math.max(0, Math.round((Number(mp.until) - Date.now()) / 60_000))
-      parts.push(`【你正在做的事】${LABEL[act] || act}${remain ? `（还剩 ${remain} 分钟）` : ''}${mp.why ? `，理由：${mp.why}` : ''}`)
+      // 已由上面的【此刻】取代。这里保留读取但**不再注入时限与理由** ——
+      // 那是任务管理器的语言。若 self-state 还没写（老数据），退回一句模糊的。
+      const LABEL = { web: '在逛网页', bilibili: '在刷B站', binge: '在看番', rest: '歇着', free: '' }
+      if (LABEL[act]) parts.push('【此刻】' + LABEL[act] + '。')
     }
   } catch (e) { swallow(e, 'tools/lib/persona.mjs:271') }
 

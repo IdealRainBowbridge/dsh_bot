@@ -88,6 +88,19 @@ export const ACTIONS = {
   rest: { label: '歇着', minMin: 10, maxMin: 90, need: 0, kind: 'idle' },
 }
 
+
+/** 每个动作在她心里的**说法**（不是标签）。这是交给 LLM 的"倾向来源"。 */
+const HINTS = {
+  sleep: '困得厉害，眼皮发沉',
+  consolidate: '有一堆事没理清，心里有点乱',
+  reply: '好像有人在等我',
+  watch: '想看点轻松的东西，不想动脑子',
+  browse: '想随便逛逛，看看有什么新鲜的',
+  write: '有点想写点东西，但还没想好写什么',
+  think: '坐着把一件事想明白',
+  rest: '什么都不太想干，只想待着',
+}
+
 const empty = () => ({
   at: 0,
   current: null,     // { action, since, until, why }
@@ -137,6 +150,103 @@ export function desire(action, ctx) {
  * @param {object} o { now, hasInterrupt, interruptUrgency, backlog }
  * @returns {{action:string, until:number, why:string, kept:boolean}}
  */
+/**
+ * 把候选和权重，变成**她自己的说法**。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 这一步为什么要做成 LLM 而不是字符串模板
+ * ══════════════════════════════════════════════════════════════════════
+ * 旧写法：选中 watch 之后，注入「你此刻正在：看番/刷视频（还剩 43 分钟），理由：想放松」。
+ * 她读到的是**任务清单**。模型会照着演，但她心里没有那个念头。
+ *
+ * 用户要的是："丢骰子也是在模型通道这边很融洽地自动考虑权重，
+ * 像是自己的思维链自动匹配到这个权重了"。
+ *
+ * 也就是：**骰子必须在她的脑子里掷完**，而不是在外面掷完把结果递进来。
+ *
+ * 所以这里把她此刻的全部状态（身体、压力、念头、积压）和几个候选倾向
+ * 一起交给**她自己**，让她用第一人称说一句"此刻想做什么"。
+ * 权重只作为她的**倾向来源**出现在输入里 —— 就像人不会体验到"我有 63% 概率想休息"，
+ * 体验到的是"有点乏，不太想动脑子"。
+ *
+ * 关键：**不告诉她权重是多少，也不告诉她选了哪个**。
+ * 告诉她就是又变回"被告知"了。
+ *
+ * @param {object} o { candidates, ctx, llm, now }
+ * @returns {Promise<string>} 她自己的说法（一句，口语）
+ */
+async function leanOf({ candidates = [], ctx = {}, llm = null, now = Date.now() } = {}) {
+  const LLM = llm || await import('../../lib/llm.mjs')
+  const F = ctx.field || {}
+  const sleepy = ctx.sleepy || {}
+
+  // ① 身体怎么说（这是她能"感觉"到的东西，不是数字）
+  const feels = []
+  if (Number(F.fatigue || 0) > 0.6) feels.push('身上发沉')
+  else if (Number(F.fatigue || 0) > 0.3) feels.push('有点乏')
+  if (Number(F.sleepDebt || 0) > 0.5) feels.push('缺觉，脑子发钝')
+  if (Number(F.valence || 0) > 0.25) feels.push('心情往上')
+  else if (Number(F.valence || 0) < -0.25) feels.push('心里有点低')
+  if (Number(F.tension || 0) > 1.5) feels.push('心里挂着事')
+  if (Number(F.ne || 0) > 0.7) feels.push('人有点绷')
+  if (Number(F.ne || 0) < 0.25) feels.push('反应有点慢')
+  // ⚠️ 这里原来只给"状态平"。实测三次输出**全部**说"脑子有点乱/心里攒着事"，
+  //    连精神好那次也一样。根因不是模型不好：**输入没有正面信号，它只能往负面填**。
+  //    人的感觉是有方向的 —— 不累就是"还行/挺清爽"，不该是"没什么特别感觉"。
+  if (Number(F.fatigue || 0) <= 0.3 && Number(F.sleepDebt || 0) <= 0.3) {
+    feels.push(Number(F.valence || 0) > 0.15 ? '精神头不错，心情也还行' : '身上没什么乏的，挺清爽')
+  }
+  if (!feels.length) feels.push('状态平')
+
+  // ② 积压怎么说
+  // ⚠️ 阈值原来写 66/40，而她的常态睡意就在 40~55（记忆积压 37/39 是她的基线），
+  //    于是**任何状态都会说"心里攒着事"** —— 精神好那天也说乱。
+  //    根因不是模型，是我把"常态"当成了"症状"。
+  //    改成：只有明显高于她的常态才算"攒着"，60 以上才说"一堆"。
+  const backlog = []
+  if (Number(sleepy.score || 0) >= 80) backlog.push('攒了一堆没理的事')
+  else if (Number(sleepy.score || 0) >= 60) backlog.push('有点攒着了')
+
+  // ③ 候选倾向（**只说方向，不说权重**）
+  const wants = candidates.slice(0, 4).map((c) => c.hint).filter(Boolean)
+
+  // 状态整体是正面的吗？如果是，明确告诉她"该轻快"，否则模型会惯性往沉重写。
+  const positive = Number(F.fatigue || 0) <= 0.3 && Number(F.sleepDebt || 0) <= 0.3 && Number(F.valence || 0) > 0.1
+  const tone = positive
+    ? '\n（你现在状态是好的 —— 说话该是轻快的、有点兴致的，不是叹气的那种。）\n'
+    : ''
+
+  const ask = [{
+    role: 'user',
+    content:
+      '你就是她本人，不是助手。下面是你此刻的状态。\n\n' +
+      '身体：' + feels.join('，') + '。\n' + tone +
+      (backlog.length ? '心里：' + backlog.join('，') + '。\n' : '') +
+      (ctx.interrupted ? '刚刚有人在叫你。\n' : '') +
+      (wants.length ? '\n这会儿你心里隐约有点想干的事：\n' + wants.map((w) => '- ' + w).join('\n') : '') +
+      '\n\n请用**第一人称、口语、一句到两句**说：你现在最想干什么、为什么。\n' +
+      '规则：\n' +
+      '- 不要列清单，不要说"根据我的状态"\n' +
+      '- 不要提概率、权重、分数、还剩多少分钟\n' +
+      '- 可以是"什么都不想干"或"说不上来"\n' +
+      '- **上面怎么写的，你就怎么感觉**。它说你精神头不错，你就是精神头不错，' +
+      '不许自己加"其实也有点累"这种转折。它没提"乱"，你就一个字都别提乱。\n' +
+      '- 像人自言自语，不像系统汇报\n' +
+      '- 不超过 40 个字',
+  }]
+
+  try {
+    const raw = String(await LLM.chat(ask, {
+      temperature: 1.0, max_tokens: 70, timeoutMs: 8000, purpose: 'fast',
+    }) || '').trim()
+    // 清掉可能出现的引号/前缀
+    return raw.replace(/^["'“”「」]|["'“”「」]$/g, '').replace(/^(我想|我觉得)[:：]\s*/, '').slice(0, 60)
+  } catch (e) {
+    // 失败就退回一个**中性的、不涉及权重**的说法 —— 绝不暴露"系统选了什么"
+    return feels.join('，') + '。'
+  }
+}
+
 export async function decide(o = {}) {
   const now = o.now ?? Date.now()
   const st = hydrate(readJson(selfPath(), null))
@@ -202,7 +312,19 @@ export async function decide(o = {}) {
   const span = Math.round(spec.minMin + (spec.maxMin - spec.minMin) * Math.max(0, Math.min(1, depth)))
   const until = now + span * MIN
 
-  const cur = { action, since: now, until, why, spanMin: span }
+  // ④ 让她自己说出来 —— 这一步是"骰子在脑子里掷完"的关键。
+  //    注意：只把**倾向方向**给她，不给她权重数字，也不给她"系统选了哪个"。
+  let lean = ''
+  try {
+    const cands = Object.keys(ACTIONS)
+      .filter((k) => k !== 'sleep')
+      .map((k) => ({ k, hint: HINTS[k] || ACTIONS[k].label }))
+    lean = await leanOf({
+      candidates: cands, ctx: { ...ctx, interrupted: ctx.hasInterrupt },
+    })
+  } catch (e) { /* lean 失败不影响决策 */ }
+
+  const cur = { action, since: now, until, why, spanMin: span, lean }
 
   // ⑤ 埋一个想法：她换了事做，本身就是"心里转着的事"之一
   try {
