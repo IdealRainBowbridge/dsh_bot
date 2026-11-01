@@ -79,6 +79,48 @@ export function bind(exec) {
   _exec = exec || null
 }
 
+/**
+ * 补注执行器上的**回调**（不是替换整个执行器）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么需要这个函数（2026-11-02 实测踩到的坑）
+ * ══════════════════════════════════════════════════════════════════════
+ * body.mjs 原来这样写：
+ *
+ *     HB.bind({...})
+ *     HB.pendingInterrupt = () => ...        ← ✗ 抛异常
+ *     HB.interruptUrgency = () => 1.0        ← ✗
+ *     HB.start({ log })
+ *
+ * 而 `HB` 是 `await import(...)` 拿到的 **ESM 模块命名空间对象**，
+ * 它按规范是 **[Symbol.toStringTag]: 'Module' 且不可扩展**：
+ *
+ *     Object.isExtensible(HB) === false
+ *     HB.pendingInterrupt = fn  →  TypeError: Cannot add property
+ *                                  pendingInterrupt, object is not extensible
+ *
+ * 后果不是"打断检测失效"这么轻 —— 是**整条启动链断在这里**：
+ * 异常被外层的 try/catch 吞掉（只留下一行 [ERR] [beat] 心跳绑定失败），
+ * 于是 `HB.start()` 从来没被调用过。
+ *
+ * 也就是说：**心跳一次都没跑过。**
+ *   · field.evolve / inner.fade / hpa.evolve 从没在节拍里推进
+ *   · self.decide() 从没被调用过（自主行为全靠 8 个旧定时器，而 body.mjs
+ *     的注释写着"已收拢"—— 文档说收拢了，代码没收拢）
+ *   · write / think 永远不可能被触发
+ *
+ * 这类 bug 最阴的地方：**日志里有一行错误，但系统看起来一切正常**。
+ * 她有在聊天、有在回复、账本在刷新 —— 只是"她"不在。
+ *
+ * 修法：模块命名空间不能写，就改成通过函数把回调传进去。
+ */
+export function bindHooks(hooks = {}) {
+  if (!_exec) _exec = {}
+  if (typeof hooks.pendingInterrupt === 'function') _exec.pendingInterrupt = hooks.pendingInterrupt
+  if (typeof hooks.interruptUrgency === 'function') _exec.interruptUrgency = hooks.interruptUrgency
+  return _exec
+}
+
 /** 一拍。**幂等**：同一毫秒调两次只会跑一次。 */
 export async function beat(now = Date.now()) {
   if (_running) return { skipped: 'busy' }   // 上一拍还没跑完，这一拍跳过（不排队 —— 身体不会积压心跳）

@@ -145,8 +145,15 @@ export async function bindBody(deps) {
   })
 
   // 心跳读"有没有打断"：私聊有未处理消息 / 群里有 @
-  HB.pendingInterrupt = () => { try { return Number(deps.queued?.() || 0) > 0 } catch { return false } }
-  HB.interruptUrgency = () => 1.0
+  //
+  // ⚠️ 原来这里直接 `HB.pendingInterrupt = () => …`。HB 是 ESM 模块命名空间，
+  //    按规范不可扩展 → 抛 TypeError → 被外层 catch 吞掉 → **HB.start() 没执行过**。
+  //    详细推演见 heartbeat.mjs 的 bindHooks 注释。
+  //    现在走 bindHooks，回调挂在 _exec 对象上（那是普通对象，可写）。
+  HB.bindHooks({
+    pendingInterrupt: () => { try { return Number(deps.queued?.() || 0) > 0 } catch { return false } },
+    interruptUrgency: () => 1.0,
+  })
 
   HB.start({ log: deps.log })
   return HB.status()
