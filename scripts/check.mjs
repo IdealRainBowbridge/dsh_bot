@@ -263,6 +263,176 @@ function checkSyncThenable(files) {
   }
 }
 
+// ── 9.5 引用了从未声明的标识符（2026-11-01 真事故）──────────────────────
+// 为什么加：qq-server.mjs 里有一行 `if (smartHook) hooks.push(... + smartHook)`，
+// 而 smartHook **全文没有任何声明**。它在 try 之外，每次主动搭话 tick 都抛
+// ReferenceError，被外层 catch 吞掉 → 表现为"主动搭话 100% 失败"，
+// 一天 31 次，一次都没说出口。语法检查通过、断链通过、42 套测试全绿、门禁全绿。
+//
+// 与第 6.5 条（同步当异步）同一类：语法正确、逻辑看似在，运行期才炸。
+// 静态能抓的特征：一个裸标识符在 `if (x)` / `(x)` / `+ x` 之类位置被读，
+// 但同文件里既没有 `const/let/var/function/class x`、也不是形参、
+// 也不是 import 进来的、也不是已知全局。宁可少量误报，也别再让这类静默失效溜过。
+function checkUndeclaredIdentifiers(files) {
+  // JS 保留字/字面量：绝不能被当"未声明变量"
+  const KEYWORDS = new Set([
+    'true', 'false', 'null', 'undefined', 'new', 'delete', 'typeof', 'instanceof', 'void',
+    'in', 'of', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break',
+    'continue', 'try', 'catch', 'finally', 'throw', 'function', 'class', 'extends', 'super',
+    'this', 'async', 'await', 'yield', 'import', 'export', 'from', 'as', 'default', 'const',
+    'let', 'var', 'static', 'get', 'set', 'with', 'debugger', 'enum', 'implements',
+    'interface', 'package', 'private', 'protected', 'public',
+  ])
+  const KNOWN = new Set([
+    'process', 'console', 'require', 'module', 'exports', '__dirname', '__filename', 'Buffer',
+    'globalThis', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate',
+    'queueMicrotask', 'structuredClone', 'fetch', 'URL', 'URLSearchParams', 'AbortController',
+    'TextEncoder', 'TextDecoder', 'Promise', 'JSON', 'Math', 'Date', 'Number', 'String',
+    'Boolean', 'Array', 'Object', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Symbol', 'BigInt',
+    'Error', 'TypeError', 'RangeError', 'SyntaxError', 'RegExp', 'Function', 'Intl',
+    'isNaN', 'isFinite', 'parseInt', 'parseFloat', 'decodeURIComponent', 'encodeURIComponent',
+    'decodeURI', 'encodeURI', 'undefined', 'NaN', 'Infinity', 'arguments', 'this',
+    'global', 'crypto', 'performance', 'localStorage', 'document', 'window', 'navigator',
+    'onmessage', 'postMessage', 'self', 'importScripts',
+  ])
+  for (const f of files) {
+    if (!/\.(mjs|js|cjs)$/.test(f)) continue
+    const raw = fs.readFileSync(f, 'utf8')
+    const src = stripComments(raw)
+
+    const declared = new Set()
+    // 声明：const/let/var/function/class
+    // 一行多声明：`let rows = 0, imported = 0, skipped = 0` —— 只抓第一个会漏后面全部
+    // （全量跑第二版就被它坑了 3 处误报：imported / skipped / chat）。
+    for (const m of src.matchAll(/\b(?:const|let|var)\s+([^;\n]+)/g)) {
+      // 按顶层逗号切（粗略：不处理嵌套逗号，够用）
+      let depth = 0, cur = ''
+      const parts = []
+      for (const ch of m[1]) {
+        if ('([{'.includes(ch)) depth++
+        else if (')]}'.includes(ch)) depth--
+        if (ch === ',' && depth === 0) { parts.push(cur); cur = '' } else cur += ch
+      }
+      parts.push(cur)
+      for (const part of parts) {
+        const k = part.split('=')[0].trim().replace(/^\.\.\./, '').replace(/^[\{\[]/, '').split(':').pop().trim().replace(/[\}\]].*$/, '')
+        if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+      }
+    }
+    for (const m of src.matchAll(/\b(?:const|let|var)\s*[\{\[]\s*([^}=]*)[\}\]]\s*=/g)) {
+      for (const part of m[1].split(',')) {
+        const k = part.split(':').pop().trim().replace(/^\.\.\./, '')
+        if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+      }
+    }
+    for (const m of src.matchAll(/\bfunction\s*\*?\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1])
+    for (const m of src.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)/g)) declared.add(m[1])
+    // import
+    for (const m of src.matchAll(/\bimport\s+([^;'"]+?)\s+from\b/g)) {
+      for (const part of m[1].replace(/[{}]/g, ',').split(',')) {
+        const k = part.trim().split(/\s+as\s+/).pop().replace(/^\*$/, '').replace(/^\*/, '').trim()
+        if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+      }
+    }
+    // 形参（含解构）
+    for (const m of src.matchAll(/\(([^()]*)\)\s*=>/g)) {
+      for (const part of m[1].split(',')) {
+        const k = part.split('=')[0].split(':').pop().trim().replace(/^[.\s]*/, '').replace(/[{}[\]]/g, '')
+        if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+      }
+    }
+    for (const m of src.matchAll(/\bfunction\s*\*?\s*[A-Za-z_$][\w$]*\s*\(([^)]*)\)/g)) {
+      for (const part of m[1].split(',')) {
+        const k = part.split('=')[0].split(':').pop().trim().replace(/^[.\s]*/, '').replace(/[{}[\]]/g, '')
+        if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+      }
+    }
+    // 函数形参整段是解构对象：`function search({ cues, chat = '', x = {} } = {})`
+    // 外层 `{…} = {}` 里既有 = 又有嵌套，上面那条按 `\{([^{}]*=[^{}]*)\}` 匹配不到。
+    // 这里改为「取每个函数/箭头的小括号内容，再从中抠所有 `{…}` 块，逐个按逗号切」。
+    {
+      // ⚠️ 不能用 [^()]* —— 形参里有 `Date.now()` 这种内嵌括号，
+      // 会在第一个 `)` 处截断（第一版就栽在这，`search({...chat = ''...})` 一直误报）。
+      // 必须做括号配平：从 `(` 开始数到深度归零。
+      const paramBlocks = []
+      const grabParens = (startIdx) => {
+        let depth = 0
+        for (let k = startIdx; k < src.length; k++) {
+          const ch = src[k]
+          if (ch === '(') depth++
+          else if (ch === ')') {
+            depth--
+            if (depth === 0) return src.slice(startIdx + 1, k)
+          }
+        }
+        return ''
+      }
+      for (const m of src.matchAll(/\bfunction\s*\*?\s*[A-Za-z_$]?[\w$]*\s*\(/g)) {
+        paramBlocks.push(grabParens(m.index + m[0].length - 1))
+      }
+      for (const m of src.matchAll(/\)\s*=>/g)) { /* 箭头函数：用上面的方法反推不方便，改在下面统一抓 */ }
+      {
+        // 箭头函数形参：`(...) =>` / `x =>`，用配平法从每个 `(`
+        for (let i = 0; i < src.length; i++) {
+          if (src[i] !== '(') continue
+          const inner = grabParens(i)
+          const after = src.slice(i + inner.length + 2).match(/^\s*=>/)
+          if (after) paramBlocks.push(inner)
+        }
+      }
+      for (const block of paramBlocks) {
+        for (const br of block.matchAll(/\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)) {
+          for (const part of br[1].split(',')) {
+            const k = part.split('=')[0].split(':').pop().trim().replace(/^\.\.\./, '').replace(/[{}\[\]]/g, '')
+            if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+          }
+        }
+      }
+    }
+    // 解构形参带默认值：`{ write = true, proxy = false }` / `({ a, b = 1 })`
+    // 这是最容易漏的一类 —— 全量跑第一版就漏了 10 处，全是它导致的误报。
+    for (const m of src.matchAll(/\{\s*([^{}]*=[^{}]*)\}/g)) {
+      for (const part of m[1].split(',')) {
+        const k = part.split('=')[0].split(':').pop().trim().replace(/^\.\.\./, '').replace(/[{}[\]]/g, '')
+        if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+      }
+    }
+    // 方法简写里的参数：invalidate(resetPlan = false) { … }
+    for (const m of src.matchAll(/[A-Za-z_$][\w$]*\s*\(([^()]*=[^()]*)\)\s*\{/g)) {
+      for (const part of m[1].split(',')) {
+        const k = part.split('=')[0].split(':').pop().trim().replace(/^[.\s]*/, '').replace(/[{}[\]]/g, '')
+        if (/^[A-Za-z_$][\w$]*$/.test(k)) declared.add(k)
+      }
+    }
+    for (const m of src.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1])
+    // 循环变量 / for-of
+    for (const m of src.matchAll(/\bfor\s*\(\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) declared.add(m[1])
+
+    // 只在"被当作自由变量读取"的高信噪比位置取样：
+    //   if (x) / while (x) / !x / (x) / + x  —— 且 x 不在声明集合里
+    const suspects = new Set()
+    // 只取 `if (x)` / `while (x)` —— 这两个位置是"把变量当布尔读"的典型，
+    // 且几乎不会被字符串/注释污染。低信噪比的取样（!x 之类）已去掉。
+    for (const m of src.matchAll(/\b(?:if|while)\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) suspects.add(m[1])
+
+    for (const name of suspects) {
+      if (KEYWORDS.has(name) || KNOWN.has(name) || declared.has(name)) continue
+      // 排除：紧跟在 `.` 后面的是属性名
+      const re = new RegExp('(?<![.\\w$])' + name.replace(/\\$/g, '\\\\$') + '\\b', 'g')
+      let hit = false
+      for (const m of src.matchAll(re)) {
+        const before = src.slice(Math.max(0, m.index - 1), m.index)
+        if (before === '.') continue
+        hit = true
+        break
+      }
+      if (!hit) continue
+      const line = src.slice(0, src.search(re)).split('\n').length
+      push('引用了未声明的变量', `${rel(f)}:${line}`, `\`${name}\` 在这个文件里从未声明（也不是形参/import/全局）—— 运行期会抛 ReferenceError，被 catch 吞掉就成静默失效`)
+    }
+  }
+}
+
 // ── 10. 没有超时的网络/子进程调用（v5 深度排查）────────────────────────
 // 为什么加：这一轮查出 4 处 fetch 和 6 处 ffmpeg execFileSync **完全没有 timeout**。
 // 后果不是"慢"，是**永久挂死**：fetch 等到 TCP 超时（可达数分钟），
@@ -320,25 +490,134 @@ function checkBareJsonParse(files) {
 // 实测：无锁 read-modify-write，20 进程并发丢 28.8%。
 // 额度账本漏记 = 她超额发评论/点赞 = 平台风控；情绪值丢 = 行为漂移。
 // 规则：写这些"多写入者"的状态文件时，必须用 atomic 的 updateJson（或显式加锁）。
+// ── 6.5 状态文件必须原子写（v5 深度排查 + 2026-11-02 升级） ──────────────────
+//
+// 老版本的做法：在源码行文本里找 MULTI_WRITER 列表里的**文件名字面量**。
+// 2026-11-02 审查发现它漏检了 tools/lib/proactive-gate.mjs：
+//
+//     const GATE = () => dataPath('qq-proactive-gate.json')   // 文件名在这
+//     fs.writeFileSync(f, JSON.stringify(o, null, 1))          // 裸写只写了变量 f
+//
+// → 门禁全绿，但那张闸门账是三条主动通道跨进程共用的唯一节流依据。
+//   实测：旧写法 3 进程 × 20 次自增，计数从 61 掉到 5（丢失 193%，不只是丢增量，
+//   发生了**回退**）。这就是"门禁全绿 ≠ 覆盖完全"。
+//
+// 新版本改成**同文件内符号追踪**：
+//   ① 找出本文件里所有"多写者文件名"出现的位置；
+//   ② 把这些文件名绑定的**标识符名**收集起来（字面量所在行的 `const X =` / 赋值目标，
+//      以及 const F = () => dataPath('x.json') 这类函数名）；
+//   ③ 任何 writeFileSync 的第一个参数只要由这些标识符**构成**（直接、或包在函数调用里
+//      如 GATE()、String(F)、path.join(F)、`${F}`），且往前 12 行没有 atomic 调用 → 报错。
+// 仍然处理不了：跨文件别名、动态拼接后完全不可追溯的名字（记 warning，不阻断）。
 const MULTI_WRITER = [
   'quota.json', 'bili-actions.json', 'share-queue.json', 'mood.json',
   'lore.json', 'promises.json', 'sent-at.json', 'sent-log.json',
   'qq-proactive-gate.json', 'sleep-state.json',
+  'focus.json', 'replies-state.json', 'status.json', 'mind-plan.json',
+  'skipped-messages.json', 'qq/episodes.jsonl', 'episodes.jsonl',
 ]
+
+/** 把 arguments 里出现的标识符名抠出来（去掉字符串字面量与数字）。 */
+function identsOf(arg) {
+  const noStr = arg.replace(/'[^']*'|"[^"]*"|`[^`]*`/g, ' ')
+  return (noStr.match(/[A-Za-z_$][\w$]*/g) || [])
+}
+
 function checkAtomicWrites(files) {
   for (const f of files) {
     // 测试要在"没有锁"的前提下验证旧行为；一次性脚本只跑一次，不参与并发
     if (/\/(test|scripts)\//.test(f) || /tools\/(drill-|tidy-|trim-|restore-|reset-|fix-|probe)/.test(f)) continue
+    // atomic.mjs 自己是锁的实现
+    if (/tools\/lib\/atomic\.mjs$/.test(f)) continue
     const src = stripComments(fs.readFileSync(f, 'utf8'))
     const lines = src.split('\n')
+
+    // ① 哪些文件名出现在本文件里
+    const hitNames = MULTI_WRITER.filter((n) => src.includes(n))
+    if (!hitNames.length) continue
+
+    // ② 把文件名绑定的标识符收集起来
+    const guarded = new Set()
+    for (const name of hitNames) {
+      lines.forEach((l) => {
+        if (!l.includes(name)) return
+        // const X = ...   /  let X = ...  /  X = ...
+        const m = l.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/)
+        if (m) guarded.add(m[1])
+        // const F = () => ... / const f = function () {...
+        const fn = l.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\(|\bfunction\b)/)
+        if (fn) guarded.add(fn[1])
+        // 直接赋值：  this.gate = ...   /  obj.F = ...
+        const as = l.match(/^\s*(?:this\.)?([A-Za-z_$][\w$]*)\s*=\s*[^=]/)
+        if (as) guarded.add(as[1])
+      })
+    }
+    // 常见的「文件名直接内联在 writeFileSync 第一个参数」也要算
+    for (const name of hitNames) guarded.add("'" + name + "'")
+
+    // ③ 查每一种裸写
     lines.forEach((l, i) => {
-      if (!/writeFileSync\s*\(/.test(l)) return
-      const name = MULTI_WRITER.find((n) => l.includes(n) || (i > 0 && lines[i - 1].includes(n)))
-      if (!name) return
-      const win = lines.slice(Math.max(0, i - 8), i + 1).join('\n')
+      if (!/writeFileSync\s*\(|appendFileSync\s*\(/.test(l)) return
+      const args = l.slice(l.indexOf('(') + 1)
+      // 去掉嵌套括号里更深的结构，只取到匹配的右括号（简化：取到最后一个 )）
+      const first = args.split(',')[0] || ''
+      const ids = identsOf(first)
+      // 直接内联文件名
+      const inline = hitNames.some((n) => first.includes("'" + n + "'") || first.includes('"' + n + '"'))
+      const viaId = ids.some((id) => guarded.has(id))
+      if (!inline && !viaId) return
+      // 往前 12 行有 atomic 调用就放行（updateJson 内部自己会写）
+      const win = lines.slice(Math.max(0, i - 12), i + 1).join('\n')
       if (/updateJson|withFileLock|acquireLock|writeJsonAtomic/.test(win)) return
-      push('多进程状态文件裸写', `${rel(f)}:${i + 1}`, name + ' 有多个进程写，必须走 atomic.updateJson（实测无锁并发丢 28.8%）')
+      const why = inline ? '文件名直接内联' : '经由标识符 ' + ids.filter((x) => guarded.has(x)).join('/')
+      push('多进程状态文件裸写', `${rel(f)}:${i + 1}`,
+        `多写者状态文件必须走 atomic.updateJson（实测无锁并发丢 28.8%，3进程×20次实测计数回退）—— ${why}`)
     })
+  }
+}
+
+// ── 6.6 import 方向（2026-11-02 新增，第 13 条）──────────────────────────────
+//
+// 层序（单向）：lib/  →  tools/lib/  →  tools/brain/ / tools/commands/
+// 反向不是"绝对不能有"，但**出现一次就要显式记账**，否则分层图会慢慢失真。
+// 目前允许的反向只有一条：tools/lib/*.mjs → ../brain/*（记忆/人设/通知都要读脑，
+// 有 8 条，且都在函数体内调用，不构成模块级环）。其余方向一律判红。
+//
+// 用 Tarjan 跑不出真环（2026-11-02 实测：SCC 全为单点），说明现在没有模块级循环；
+// 但"没有环"不等于"分层干净"，所以这条检查盯的是**方向**而不是环。
+const ALLOWED_REVERSE = [
+  'tools/lib/brain-bridge.mjs',      // remember 双写 brain（桥就是它的职责）
+  'tools/lib/dream-read.mjs',        // 读梦境 jsonl，只借 brain/json 的读取器
+  'tools/lib/notify.mjs',            // 通知发出后要写 delivery 账（交付证据）
+  'tools/lib/persona.mjs',           // 提示词装配要用脑的七路召回
+  'tools/lib/promise-executor.mjs',  // 承诺兑现要落 intents
+  'tools/lib/promises.mjs',          // 同上
+  'tools/lib/reply-gate.mjs',        // 函数体内动态 import：判完接话时机顺手把情绪写进 affect，
+                                     // 省掉「回复完再单独调一次判情绪」那次 LLM 往返
+]
+
+function checkImportDirections(files) {
+  for (const f of files) {
+    const r = rel(f)
+    const src = stripComments(fs.readFileSync(f, 'utf8'))
+    const specs = [...src.matchAll(/(?:from\s*|import\s*\(\s*)['"]([^'"]+)['"]/g)].map((m) => m[1])
+    for (const sp of specs) {
+      if (!sp.startsWith('.')) continue
+      const target = path.resolve(path.dirname(f), sp)
+      const rt = rel(target)
+      // lib/ 不许 import tools/commands 或 tools/brain
+      if (/^lib\//.test(r) && /^tools\/(commands|brain)\//.test(rt)) {
+        push('分层反向依赖', `${r} → ${rt}`, 'lib/ 是插件壳，不应依赖编排层或脑层')
+      }
+      // tools/brain 与 tools/commands 互不依赖
+      if (/^tools\/brain\//.test(r) && /^tools\/commands\//.test(rt)) {
+        push('分层反向依赖', `${r} → ${rt}`, '脑层不应依赖编排层（命令是调用方，不是被调方）')
+      }
+      // tools/lib → tools/brain 在白名单外要报
+      if (/^tools\/lib\//.test(r) && /^tools\/brain\//.test(rt) && !ALLOWED_REVERSE.includes(r)) {
+        push('分层反向依赖', `${r} → ${rt}`, '新增的 tlib→brain 反向依赖需要显式加进 check.mjs 的 ALLOWED_REVERSE 并写明理由')
+      }
+    }
   }
 }
 
@@ -450,9 +729,11 @@ if (!FAST) {
   checkEmptyCatch(files)
   checkHardcodedPaths(files)
   checkSyncThenable(files)
+  checkUndeclaredIdentifiers(files)
   checkNoTimeout(files)
   checkBareJsonParse(files)
   checkAtomicWrites(files)
+  checkImportDirections(files)
   checkSize(files)
 }
 
@@ -460,7 +741,7 @@ const grouped = {}
 for (const p of problems) (grouped[p.kind] ||= []).push(p)
 
 if (!problems.length) {
-  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/同步异步/超时/JSON/原子写/规模 全绿'}`)
+  console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/同步异步/未声明变量/超时/JSON/原子写/import方向/规模 全绿'}`)
   for (const n of notes) console.log(`   · ${n}`)
   process.exit(0)
 }

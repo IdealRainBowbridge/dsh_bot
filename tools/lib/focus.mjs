@@ -15,6 +15,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dshPath } from './paths.mjs'
+import { writeJsonAtomic } from './atomic.mjs'
+import { swallow } from './swallow.mjs'
 
 export const FOCUS_PATH = dshPath('feiyu-focus.json')
 
@@ -74,10 +76,10 @@ export function writeFocus(activity, min = 0, note = '') {
     min: mins,
     note: String(note || '').slice(0, 200),
   }
-  try {
-    fs.mkdirSync(path.dirname(FOCUS_PATH), { recursive: true })
-    fs.writeFileSync(FOCUS_PATH, JSON.stringify(obj, null, 2))
-  } catch {}
+  // 2026-11-02：改原子写。focus 有两个写者 —— focus CLI（她自己挑活动，命令行进程）
+  // 和 mind.mjs（重规划时同步写，可能是 qq-server 里跑的）。宿主半边 lib/index.js
+  // 每 60 秒读它决定**只放行一个**常驻循环；读到半截 JSON 会让三条循环同时起或全不起。
+  try { writeJsonAtomic(FOCUS_PATH, obj) } catch (e) { swallow(e, 'focus:write') }
   return obj
 }
 

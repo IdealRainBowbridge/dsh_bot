@@ -2,11 +2,11 @@
 // SnowLuma 的 set_online_status（OneBot v11 扩展）。
 //   11=在线  1=Q我吧  30=离开  50=忙碌  60=勿扰  70=隐身
 // 触发：睡眠开始→勿扰；睡醒→在线。也能手动换。
-// 铁律：状态是她自己的事，随睡眠/情绪自动走，不用笨蛋老爹管。
+// 铁律：状态是她自己的事，随睡眠/情绪自动走，不用笨蛋老爸管。
 import fs from 'node:fs'
-import path from 'node:path'
 import { config } from '../lib/config.mjs'
 import { dataPath } from '../lib/paths.mjs'
+import { writeJsonAtomic } from '../lib/atomic.mjs'
 
 const CODES = { online: 11, qme: 1, away: 30, busy: 50, dnd: 60, invisible: 70 }
 const NAMES = { 11: '在线', 1: 'Q我吧', 30: '离开', 50: '忙碌', 60: '勿扰', 70: '隐身' }
@@ -31,10 +31,9 @@ export async function setOnline(key) {
   const j = await callOnebot('set_online_status', { status: code, ext_status: 0, battery_status: 100 })
   const ok = j?.retcode === 0 || j?.status === 'ok'
   if (ok) {
-    try {
-      fs.mkdirSync(path.dirname(STATE()), { recursive: true })
-      fs.writeFileSync(STATE(), JSON.stringify({ status: String(key), code, at: Date.now() }, null, 1))
-    } catch {}
+    // 2026-11-02：改原子写。setOnline 会从 sleep（systemd 定时进程）和 status CLI 两边调，
+    // 裸写有互相覆盖的风险；这份状态还被 /health 与面板读。
+    try { writeJsonAtomic(STATE(), { status: String(key), code, at: Date.now() }) } catch { /* 换状态失败不该挡睡眠 */ }
   }
   return { ok, code, name: NAMES[code] || String(code), resp: j }
 }

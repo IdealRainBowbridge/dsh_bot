@@ -8,33 +8,53 @@
 //   ② 全局每日上限      qq.proactive.globalDailyMax 默认 8 条
 //   ③ 连续主动上限      qq.proactive.maxStreak     默认 2 条（主人没说话就最多连发 2 条）
 //   ④ 主人刚说过话      qq.proactive.ownerActiveMin 默认 3 分钟（他正在聊，别插）
-import fs from 'node:fs'
-import path from 'node:path'
+//
+// ── 2026-11-02 补丁：改走 atomic ────────────────────────────────────────────
+// 这里原来是裸 fs.writeFileSync。这张闸门账是三条主动通道**唯一**的共用节流依据，
+// 而它们分属不同进程（qq-server / share-queue / tattle）—— 后写的会把先写的增量
+// 整个覆盖掉，闸门失效，于是又变回刷屏。同 atomic.mjs 注释里那个实测：
+// 20 进程并发自增丢 28.8%。
+//
+// 为什么之前门禁没抓到：check.mjs 的 checkAtomicWrites 按「文件名字面量 / 变量名」
+// 匹配源码行，而这里的路径是 GATE() 现算出来的，裸写那行只有变量 f。
+// **门禁全绿不等于覆盖完全** —— 这是本轮审查发现的，已同步把门禁规则升级（见 check.mjs）。
 import { dataPath } from './paths.mjs'
 import { config } from './config.mjs'
+import { updateJson, readJsonSafe } from './atomic.mjs'
+import { swallow } from './swallow.mjs'
 
 const GATE = () => dataPath('qq-proactive-gate.json')
+const EMPTY = () => ({ day: '', sent: 0, lastAt: 0, streak: 0, ownerLastAt: 0 })
 
 function read() {
-  try {
-    const j = JSON.parse(fs.readFileSync(GATE(), 'utf8'))
-    return { day: '', sent: 0, lastAt: 0, streak: 0, ownerLastAt: 0, ...j }
-  } catch { return { day: '', sent: 0, lastAt: 0, streak: 0, ownerLastAt: 0 } }
+  const j = readJsonSafe(GATE(), null)
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return EMPTY()
+  return { ...EMPTY(), ...j }
 }
-function write(o) {
-  try {
-    const f = GATE()
-    fs.mkdirSync(path.dirname(f), { recursive: true })
-    fs.writeFileSync(f, JSON.stringify(o, null, 1))
-  } catch { /* 闸门写不进去不该挡业务 */ }
+
+/**
+ * 跨进程安全的「读-改-写」。
+ *
+ * 拿不到锁就**这次不写** —— 宁可少发一条主动消息，也不能多发。这条取舍是有意的：
+ * 主动消息超发的代价（刷屏、被主人当成 bug）远大于少发的代价。
+ *
+ * @param {(cur: object) => object | undefined} mutate
+ * @returns {{ok: boolean, value?: object, error?: string}}
+ */
+function save(mutate) {
+  const r = updateJson(GATE(), (cur) => {
+    const base = (cur && typeof cur === 'object' && !Array.isArray(cur)) ? { ...EMPTY(), ...cur } : EMPTY()
+    return mutate(base)
+  }, { fallback: null, waitMs: 3000, mode: 0o600 })
+  if (!r || !r.ok) {
+    try { swallow(new Error('proactive-gate 未写入：' + ((r && r.error) || 'unknown')), 'proactive-gate:save') } catch { /* 闸门写不进去不该挡业务 */ }
+  }
+  return r || { ok: false, error: 'no-result' }
 }
 
 /** 记一次"主人说话了"（重置连续计数）。 */
 export function noteOwnerSpoke(at = Date.now()) {
-  const st = read()
-  st.ownerLastAt = at
-  st.streak = 0
-  write(st)
+  save((st) => { st.ownerLastAt = at; st.streak = 0; return st })
 }
 
 /**
@@ -69,14 +89,15 @@ export function allow(kind = 'proactive') {
 
 /** 记一次"真的发出去了"。 */
 export function commit(kind = 'proactive') {
-  const st = read()
   const day = new Date().toLocaleDateString('sv-SE')
-  if (st.day !== day) { st.day = day; st.sent = 0; st.streak = 0 }
-  st.sent = Number(st.sent || 0) + 1
-  st.streak = Number(st.streak || 0) + 1
-  st.lastAt = Date.now()
-  st.lastKind = String(kind)
-  write(st)
+  save((st) => {
+    if (st.day !== day) { st.day = day; st.sent = 0; st.streak = 0 }
+    st.sent = Number(st.sent || 0) + 1
+    st.streak = Number(st.streak || 0) + 1
+    st.lastAt = Date.now()
+    st.lastKind = String(kind)
+    return st
+  })
 }
 
 /** 给面板/diagnose 看的快照。 */

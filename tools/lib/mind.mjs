@@ -24,6 +24,7 @@ import { config } from './config.mjs'
 import { dataPath, dshPath } from './paths.mjs'
 import { readFocus, writeFocus, labelOf, isLoopActivity, LOOP_ACTIVITIES } from './focus.mjs'
 import { swallow } from './swallow.mjs'
+import { writeJsonAtomic } from './atomic.mjs'
 import { fill } from './persona-voice.mjs'
 
 const PLAN_PATH = () => dataPath('mind-plan.json')
@@ -197,10 +198,8 @@ export async function plan({ now = Date.now(), force = false } = {}) {
     until: now + min * 60_000,
     context: { hour: ctx.hour, mood: ctx.mood, quietMin: ctx.quietMin ?? null, promises: ctx.promises.length },
   }
-  try {
-    fs.mkdirSync(path.dirname(PLAN_PATH()), { recursive: true })
-    fs.writeFileSync(PLAN_PATH(), JSON.stringify(planObj, null, 2))
-  } catch (e) { swallow(e, 'tools/lib/mind.mjs:200') }
+  // 2026-11-02：改原子写。mind-plan.json 的写者不止这里 —— qq-server 里也会重算计划。
+  try { writeJsonAtomic(PLAN_PATH(), planObj) } catch (e) { swallow(e, 'tools/lib/mind.mjs:200') }
 
   // 同步写进 focus —— 那是宿主半边唯一认的东西
   if (act === 'rest' || act === 'free') writeFocus(act === 'free' ? '' : 'rest', min, why)
