@@ -1,6 +1,6 @@
 // persona-voice-test —— 人设措辞单一来源（v5 新增）。
 //
-// 回归的真问题：20+ 个文件把"大肥鱼/笨蛋老爹/鲸鱼娘"写死在 system prompt 里。
+// 回归的真问题：20+ 个文件把"大肥鱼/笨蛋老爸/鲸鱼娘"写死在 system prompt 里。
 // 换一个主人称呼，她就会叫错人 —— 对人格是硬伤；而且漏改一处还不报错。
 import assert from 'node:assert'
 import fs from 'node:fs'

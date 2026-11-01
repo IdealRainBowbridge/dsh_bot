@@ -144,7 +144,7 @@ export const RECENT_N = { qq: 24, wechat: 12, 'douyin-dm': 24, bilibili: 8, douy
  *  isGroup：群聊里对面是群友不是私聊网友，语气按朋友闲聊装配（用户 10-25 拍板：群里像私聊一样回）。 */
 export function ownerLine(cfg, platform, userId, isGroup = false) {
   const owner = cfg.owner ?? {}
-  // v5：称呼从配置读，不再写死"笨蛋老爹"（换主人称呼时这里是最容易漏改的地方，
+  // v5：称呼从配置读，不再写死"笨蛋老爸"（换主人称呼时这里是最容易漏改的地方，
   // 而且漏了不会报错 —— 她只是继续叫错人）。
   const OT = String(cfg.identity?.ownerTitle || cfg.identity?.callOwner || owner.name || '主人')
   const isOwner =
@@ -260,7 +260,7 @@ export function dropCardMistakes(rows) {
 }
 export function cardMistake(text) { return CARD_MISTAKE.test(String(text || '')) }
 
-export function buildMessages({ platform = 'qq', userText, chatId, userId, turnsToday = 0, isGroup = false, quote = '' }) {
+export function buildMessages({ platform = 'qq', userText, chatId, userId, turnsToday = 0, isGroup = false, quote = '', openThread = false }) {
   const cfg = config()
   const parts = []
 
@@ -281,6 +281,151 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
       parts.push(`【你正在做的事】${LABEL[act] || act}${remain ? `（还剩 ${remain} 分钟）` : ''}${mp.why ? `，理由：${mp.why}` : ''}`)
     }
   } catch (e) { swallow(e, 'tools/lib/persona.mjs:271') }
+
+  // ── 呼叫语处理（2026-11-02）────────────────────────────────────────────
+  // 问题：他说「在吗」，旧逻辑只让她回「在呢」就结束 —— 像自动应答机，不像人。
+  // 实测那条：`在呢，笨蛋老爸。这么晚还不睡，又睡不着了？`（只有确认 + 一个空泛反问）
+  //
+  // 人的反应不是这样：被叫住之后，会**顺手把话头递回来**（"在呢，正好我刚…"）。
+  // 这里不硬塞内容 —— 素材取自她此刻的真状态（计划/情绪/日记/时间），
+  // 她用什么、怎么开口，由模型按人格决定。
+  if (openThread === true) {
+    const seg = []
+    let seg2 = []
+    // ① 她此刻真在做的事（mind-plan，上面已经读过一次，这里再取一次拿 why）
+    try {
+      const mp = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'mind-plan.json'), 'utf8'))
+      const act = String(mp.activity || '')
+      const LABEL = { web: '自由上网', bilibili: '刷B站', binge: '看番/看剧', rest: '歇着', free: '自由时间' }
+      if (act && Number(mp.until || 0) > Date.now()) {
+        seg.push(`你此刻正在：${LABEL[act] || act}${mp.why ? `（${String(mp.why).slice(0, 40)}）` : ''}`)
+      }
+    } catch (e) { swallow(e, 'persona:openThread:mind') }
+    // ② 情绪值（低/高都不该装作没事）
+    try {
+      const mj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'mood.json'), 'utf8'))
+      const v = Math.round(Number(mj.value) || 60)
+      if (v < 45) seg.push(`你情绪偏低（${v}/100），别装作没事`)
+      else if (v > 75) seg.push(`你心情不错（${v}/100）`)
+    } catch (e) { swallow(e, 'persona:openThread:mood') }
+    // ③ 日记最后一句（她最近的牵挂）—— 只给QQ私聊，群聊里念日记就是泄露
+    if (platform === 'qq' && !isGroup) {
+      try {
+        const dg = fs.readFileSync(homePath('.dsh', 'feiyu-work', 'feiyu-diary.md'), 'utf8')
+          .split('\n').map((x) => x.trim()).filter((x) => x && !x.startsWith('#')).slice(-1)[0]
+        if (dg) seg.push(`你日记里最近写着：${dg.replace(/^[-*\s]+/, '').slice(0, 50)}`)
+      } catch (e) { swallow(e, 'persona:openThread:diary') }
+    }
+    // ④ 她今天真做过的事（web-log）—— 这是最值钱的素材：
+    //    "我下午翻了半天鲸类声学的论文" 比 "我歇着" 有信息量一百倍。
+    //    web-log.md 最新在上（## 日期段在文件头），要取"今天的段落"的头部几条。
+    try {
+      const wl = fs.readFileSync(homePath('.feiyu-ai', 'web-log.md'), 'utf8')
+      const today = new Date()
+      const dk = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      // ⚠️ 踩过：跨零点后"今天"段为空（11-02 凌晨 00:05 查 11-01 的记录）→ 什么都不注入。
+      // 记忆里"昨天下午干的事"仍然算"我最近干的"，所以取**最新的一段**而不是"只取今天"。
+      const segs = wl.split(/^## /m).slice(1)   // 丢掉文件头
+      const wseg = segs.find((x) => x.startsWith(dk)) ?? segs[0]
+      if (wseg) {
+        const items = wseg.split('\n').filter((x) => /^[-*]\s/.test(x.trim())).slice(0, 3)
+          .map((x) => x.trim().replace(/^[-*]\s+/, '').replace(/\*\*/g, '').slice(0, 46))
+        if (items.length) seg2 = items
+      }
+    } catch (e) { swallow(e, 'persona:openThread:weblog') }
+    if (seg2.length) seg.push('你今天在网上干的：' + seg2.join('；'))
+    // ⑤ 最近挂在心上（lore.json 直接读，不依赖 memory 模块，避免循环依赖）
+    try {
+      const lj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'lore.json'), 'utf8'))
+      const arr = Array.isArray(lj) ? lj : (Array.isArray(lj?.items) ? lj.items : [])
+      if (arr.length) {
+        const last = arr[arr.length - 1]
+        const txt = String(typeof last === 'string' ? last : (last?.text || last?.title || last?.name || '')).trim()
+        if (txt) seg.push('你最近挂在心上：' + txt.slice(0, 40))
+      }
+    } catch (e) { swallow(e, 'persona:openThread:lore') }
+    // ⑥ 时间感
+    {
+      const h = new Date().getHours()
+      const slot = h < 5 ? '凌晨' : h < 9 ? '清早' : h < 12 ? '上午' : h < 14 ? '中午' : h < 18 ? '下午' : h < 20 ? '傍晚' : h < 23 ? '晚上' : '深夜'
+      if (h < 5 || h >= 23) seg.push(`现在是${slot}（他这时候来，多半是睡不着或刚忙完）`)
+    }
+
+    parts.push(
+      '【他只是在叫你，不是说完了】\n' +
+      '他发的是「在吗」这类呼叫语 —— 他不是要你报告在不在，他是有事/想说话，但还没开口。\n' +
+      '所以：\n' +
+      '· 先应一声（一句就够，别长）\n' +
+      '· **然后主动递一个话头** —— 把你此刻真在想、真在做的事说出来，或者直接问出你想问的\n' +
+      '· 递的东西必须是真的（下面这些是你此刻的实况，用得上就用，用不上别硬编）\n' +
+      '· 不要连问两个空泛问题（"睡了吗""在忙吗"这种谁都能问的），那等于没递\n' +
+      (seg.length ? '\n你此刻的实况：\n- ' + seg.join('\n- ') : '')
+    )
+  }
+
+  // ── 图片怎么理解（2026-11-02）────────────────────────────────────────────
+  // 问题：以前不分表情包和正经图，一律让视觉模型描述，回复就成了看图说话。
+  // 表情包是**语气**（相当于他说"唉"或者"哈哈"），不是内容。
+  // 这里给她一条判断规则，让她自己按消息里的标记来处理。
+  if (/【他发了个表情包当语气】|【她发来一张图片.*拿不准/.test(String(userText || ''))) {
+    parts.push(
+      '【他发的是表情包，不是要你看的图】\n' +
+      '表情包是语气，跟"哈哈哈"或"唉"一样 —— 它在给这句话配情绪。\n' +
+      '所以：**不要描述图里画了什么**。接住那个情绪就行。\n' +
+      '· 他配文是抱怨 → 你就顺着安慰/吐槽，表情包当作他的语气一起接住\n' +
+      '· 只有图没有字 → 就用一句话回应那个情绪（逗他、学他那张图的调子），别问"这是什么图"\n' +
+      '· 想回就得回一个**同样调调的东西**（文字梗、或者一个表情标记），不要用正经句子解释'
+    )
+  } else if (/【他发来一张图片，让你看】/.test(String(userText || ''))) {
+    parts.push(
+      '【他发的是正经图片，要你看】\n' +
+      '看仔细了再说话：先说你在图上真正看到的关键东西（别流水账描述全图），' +
+      '然后给出你的**判断或态度** —— 他觉得有意思才发给你，光复述等于没接话。'
+    )
+  }
+
+  // ── 她自己的头像（2026-11-02）────────────────────────────────────────────
+  // 以前她只有 persona.md 的文字描述（"蓝色鲸鱼娘"），那是**设定**不是**现状**：
+  // 她不知道自己在 QQ 上实际挂的是哪张脸。用户问"你能识别自己头像吗"——
+  // 现在头像已缓存到 ~/.feiyu-ai/avatar/，这里告诉她"你有这张脸，路径在哪"，
+  // 被问起时她可以自己看图确认（走 vision），而不是凭设定编。
+  if (platform === 'qq' && !isGroup) {
+    try {
+      const selfQQ = String(cfg.qq?.selfQQ || '').replace(/\D/g, '')
+      if (selfQQ) {
+        const f = homePath('.feiyu-ai', 'avatar', `qq-${selfQQ}.jpg`)
+        if (fs.existsSync(f)) {
+          parts.push(
+            `【你自己的QQ头像】你的号 ${selfQQ}，头像文件在 ${f}（本地已缓存）。\n` +
+            '如果老爸问起你头像/长什么样，你可以看这张图再说 —— 不要只凭 persona 里的文字描述答。\n' +
+            '（那是你实际挂出去的脸，跟设定可能有出入，以图中为准。）'
+          )
+        }
+      }
+    } catch (e) { swallow(e, 'persona:avatar') }
+  }
+
+  // ── 改自己时怎么说（2026-11-02）──────────────────────────────────────────
+  // 用户的明确要求：「我说具体怎么改，它能直接详细的描述」。
+  // 光会说"我想改 XXX"没有用 —— 老爸没法判断该不该批。
+  // 她必须能把改动讲到能让老爸"看着就能决定"的程度。
+  if (platform === 'qq' && !isGroup) {
+    const t = String(userText || '')
+    if (/(改|调整|重构|修一下|优化).{0,8}(自己|代码|你|逻辑|文件)|selfmod|想改|待批/.test(t)) {
+      parts.push(
+        '【说改自己这件事的时候，要讲到能让人直接拍板】\n' +
+        '别只说"我想改 XXX"。要按这个顺序讲：\n' +
+        '1. **哪个文件的哪一块** —— 用 selfsrc grep/read 查过再说，说出文件路径和大致行号\n' +
+        '2. **现在是什么样** —— 贴出要改的那几行原文（别 paraphrase）\n' +
+        '3. **要改成什么样** —— 也给原文，让人能直接看出差别\n' +
+        '4. **为什么** —— 不改会怎样（出什么毛病），改了会好多少\n' +
+        '5. **会波及谁** —— 用 selfsrc grep 查有没有别的文件引用它；有就说出来\n' +
+        '6. **风险** —— 会不会弄坏 QQ 通路/记忆写入/账本，哪一步可能出问题\n\n' +
+        '不确定的地方就说不确定，别装懂。宁可少说一条，也不要编一个行号。\n' +
+        '**绝对不要用"改一下就行""小改动"这种空话** —— 那等于没讲。'
+      )
+    }
+  }
 
   // 关系层：对方是不是主人（决定语气与隐私红线）；群聊单独一条语境
   if (platform === 'qq' || platform === 'wechat' || platform === 'douyin-dm') parts.push(ownerLine(cfg, platform, userId, isGroup))

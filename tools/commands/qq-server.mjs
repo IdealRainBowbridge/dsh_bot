@@ -319,7 +319,10 @@ export async function run(argv = []) {
         ? { api: 'send_group_msg', key: 'group_id', id: Number(groupId) }
         : { api: 'send_private_msg', key: 'user_id', id: Number(userId) }
       await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000))   // 像人翻表情包的工夫
-      const ok = await send(target.api, { [target.key]: target.id, message: [{ type: 'image', data: { file: 'file:///' + file.replace(/\\/g, '/') } }] })
+      // 2026-11-02: 不再传容器内 file:// 路径（宿主 SnowLuma 读不到 → EACCES）。
+      // 转 base64 随请求体走，与文件系统无关。
+      const { onebotFileValue } = await import('../lib/onebot-file.mjs')
+      const ok = await send(target.api, { [target.key]: target.id, message: [{ type: 'image', data: { file: onebotFileValue(file) } }] })
       if (ok) log(`[qq] 🎨 AI 表情包已入库补发：${desc} → ${path.basename(file)}`)
     } catch (e) { log('[qq] AI 表情包补发异常：' + (e?.message ?? e)) }
     finally { aiInflight.delete(key) }
@@ -395,7 +398,47 @@ export async function run(argv = []) {
         const ownerQQNow = String(config().owner?.qq || '')
         if (!isGroup && ownerQQNow && String(userId) === ownerQQNow) ownerLastMsgAt = Date.now()
       } catch {}
+
+      // ── 自我改动审批闸（2026-11-02）──────────────────────────────────────
+      // 老爸在私聊里说的话，先过一道指令词检查：
+      //   「改吧 / 批准 / 可以改」 → 批准最近一条待批，然后真改
+      //   「不改 / 别改 / 算了」   → 作废
+      //   「回滚」                → 撤销上一次改的
+      //   「想改什么 / 待批」      → 念一遍清单
+      // 注意：这条**先于**正常聊天处理 —— 审批不该走 LLM（不能让模型决定是否批准自己）。
+      if (!isGroup) {
+        try {
+          const ownerQQsm = String(config().owner?.qq || '')
+          if (ownerQQsm && String(userId) === ownerQQsm) {
+            const { selfmodCmd } = await import('../lib/selfmod-cmd.mjs')
+            const hit = await selfmodCmd(String(text || '').trim())
+            if (hit) {
+              log(`[qq][selfmod] ${hit.log}`)
+              // 「重启」：先回一句话，再延时杀掉自己（im-gateway 的 while 会立刻拉起）。
+              // 为什么要延时：直接 process.exit 会打断这条消息的发送，老爸什么也收不到。
+              if (hit.reply === '__RESTART__') {
+                try {
+                  const bye = '好，我重开一下，几秒钟就回来 (・_・;)'
+                  await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: bye } }] })
+                  // 也记进记忆 —— 不然重启后她不记得自己刚说要重开（记忆断档）
+                  memory.remember('qq', chatId, userId, 'assistant', bye, { isGroup: false })
+                } catch {}
+                log('[qq][selfmod] 收到重启指令，3 秒后退出交给 im-gateway 拉起')
+                setTimeout(() => { process.exit(0) }, 3000)
+                return
+              }
+              // 直接把结果发回去，不进聊天链路（避免模型重写这段系统消息）
+              try {
+                await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: hit.reply } }] })
+                memory.remember('qq', chatId, userId, 'assistant', hit.reply, { isGroup: false })
+              } catch (e) { logErr('[qq][selfmod] 回复失败：' + e.message) }
+              return
+            }
+          }
+        } catch (e) { logErr('[qq][selfmod] 拦截异常：' + (e?.message ?? e)) }
+      }
       let imageDesc = ''
+      let imageIsSticker = false
       const imageUris = []   // 10-30 合并通道：原图直接进聊天请求，不再先 VL 描述成文字
       if (images.length) {
         try {
@@ -406,8 +449,44 @@ export async function run(argv = []) {
             await execFileAsync(exe, ['-sS', '-L', '-m', '30', '-A', 'Mozilla/5.0', '-o', dl, u], { timeout: 35000, windowsHide: true })
             if (fs.existsSync(dl) && fs.statSync(dl).size > 2000) imageUris.push(dl)
           }
-          imageDesc = imageUris.length ? '【她发来一张图片（我直接看到了原图）】' : '【她发来一张图片，但下载失败】'
-        } catch { imageDesc = '【她发来一张图片】' }
+          // 2026-11-02：不再一律写"她发来一张图片" —— 先判断这是表情包还是正经图。
+          // 表情包是**语气**，不是内容；当成图片去描述，回复就变成说明文了。
+          try {
+            const { classifyImage } = await import('../lib/image-kind.mjs')
+            const seg0 = (Array.isArray(evt.message) ? evt.message : []).find((x) => x?.type === 'image')
+            // 最近语气：看上一轮他的用词，轻松/严肃决定"没配文小图"该当什么
+            const prevText = (() => { try { return String(memory.recent(chatId).slice(-1)[0]?.text || '') } catch { return '' } })()
+            const tone = /(哈哈|笑死|好家伙|草|乐|梗|表情包|😂|🤣|🐟)/.test(prevText) ? 'light'
+              : /(难受|难过|烦|焦虑|压力|急|怎么办)/.test(prevText) ? 'serious' : ''
+            const c = classifyImage({ file: imageUris[0], seg: seg0, text: text, recentTone: tone })
+            if (c.kind === 'sticker') {
+              // 只给一个短标记：她要读的是"他用了个表情"，不是图里画了什么
+              imageDesc = `【他发了个表情包当语气】（${c.why}）`
+              imageIsSticker = true
+              log(`[qq] 🎭 判为表情包（${c.why}）—— 按语气处理，不描述画面`)
+            } else if (c.kind === 'photo') {
+              imageDesc = '【他发来一张图片，让你看】（我看到了原图）'
+              log(`[qq] 🖼 判为正经图片（${c.why}）`)
+            } else {
+              imageDesc = '【他发来一张图片】（拿不准是表情包还是内容，先按语气理解，真看不清再问）'
+            }
+          } catch {
+            imageDesc = imageUris.length ? '【他发来一张图片】' : '【他发来一张图片，但下载失败】'
+          }
+          // 2026-11-02：表情包下载失败**不算失败** —— 它的信息是"他用了个表情"，
+          // 不需要图片内容。只有正经图下载失败才该告诉她"没看到"。
+          if (!imageUris.length) {
+            const { classifyImage: ci } = await import('../lib/image-kind.mjs')
+            const seg0b = (Array.isArray(evt.message) ? evt.message : []).find((x) => x?.type === 'image')
+            const cb = ci({ seg: seg0b, text })
+            if (cb.kind === 'sticker') {
+              imageDesc = `【他发了个表情包当语气】（${cb.why}）`
+              imageIsSticker = true
+            } else {
+              imageDesc = '【他发来一张图片，但下载失败，看不到内容】'
+            }
+          }
+        } catch { imageDesc = '【他发来一张图片】' }
         // 图暂不删：等聊天请求带完原图再清（见 answer 之后）
       }
       // 10-27：引用行（他引用了哪一条）拼在正文前面 —— 记忆里也留着，回头能还原上下文
@@ -494,7 +573,12 @@ export async function run(argv = []) {
       } catch (e) { logErr('[qq] 记事实失败：' + (e?.message ?? e)) }
 
       // 接话判断（10-31）：要不要回、隔多久回 —— 逻辑在 lib/reply-gate.mjs
-      if (!(await replyGate({ text: userText, merged: mergedN || 1, isGroup, atMe, extra, chatId, platform: EVT_PLATFORM, log }))) return
+      // 2026-11-02：gate 现在返回判定对象（不再是 boolean），这样才能拿到 openThread。
+      const gateRes = await replyGate({ text: userText, merged: mergedN || 1, isGroup, atMe, extra, chatId, platform: EVT_PLATFORM, log })
+      if (!gateRes || gateRes.reply !== true) return
+      // 呼叫语（在吗/人呢/喂）：不该只回"在呢"就完。把话头递回去 —— 让她把此刻真在想/在做的事说出来。
+      const openThread = gateRes.openThread === true
+      if (openThread) log('[qq] 🪝 呼叫语 → 让她主动递话头')
 
       // 生成回复（三段式 prompt + 走神注入）
       const turns = memory.recent(chatId).length
@@ -504,7 +588,7 @@ export async function run(argv = []) {
         log(`[qq] 🧠 新装配 ${brained.chars} 字${brained.dropped.length ? `（截断 ${brained.dropped.length} 块）` : ''}`)
       }
       const messages = brained?.messages
-        ?? buildMessages({ platform: 'qq', userText, chatId, userId, turnsToday: turns, isGroup, quote: quoteLine })
+        ?? buildMessages({ platform: 'qq', userText, chatId, userId, turnsToday: turns, isGroup, quote: quoteLine, openThread })
       messages[0].content += thinkingInstruction()
       // 时间锚点已经搬进 persona 的「【现在】」常驻层（10-25 重构，照 dsh-world 的 timeContext）：
       // 贴在最后一条消息上的临时提示一重写就丢，现在每轮都在 system 里。
@@ -528,7 +612,10 @@ export async function run(argv = []) {
         messages[0].content += '\n\n【这条回复必须带一个图片表情】在正文句尾追加一个标记，二选一：'
           + `[表情:标签]（可用标签：${availableTags().join('/')}）或 [自制表情:八个字以内的短句]（会现场画一张新的）。只带一个，别解释。`
       }
-      if (imageUris.length) {
+      // 2026-11-02：表情包**不塞原图**给视觉模型 ——
+      // 一是浪费 token（一张图几百到上千 token），二是只要图进来了模型就忍不住去描述。
+      // 表情包的信息已经在文本里的【他发了个表情包当语气】标记，够她接住语气了。
+      if (imageUris.length && !imageIsSticker) {
         // 10-30 合并通道：原图直接进 user 消息（v4 模型原生收图），一次调用完成看图+回复
         const last = messages[messages.length - 1]
         const content = [{ type: 'text', text: typeof last.content === 'string' ? last.content : '' }]
@@ -755,7 +842,7 @@ export async function run(argv = []) {
       // 表情：文字或语音发完都补发（以前语音命中时表情整个被跳过——10-25 实测坑）
       if (stickerFile) {
         await new Promise(r => setTimeout(r, 300 + Math.random() * 500))
-        const okImg = await send(target.api, { [target.key]: target.id, message: [{ type: 'image', data: { file: 'file:///' + stickerFile.replace(/\\/g, '/') } }] })
+        const okImg = await send(target.api, { [target.key]: target.id, message: [{ type: 'image', data: { file: (await import('../lib/onebot-file.mjs')).onebotFileValue(stickerFile) } }] })
         if (okImg) log(`[qq] 已发表情：${tag || caption || '?'}`)
       }
       // AI 表情包：生成入库 + 补发（异步，不占回复主线；干跑分支已在上面 return，走不到这）
@@ -1259,7 +1346,6 @@ export async function run(argv = []) {
         const tt = JSON.parse(fs.readFileSync(dataPath('tattle.json'), 'utf8'))
         if (tt.lastAt && Date.now() - Number(tt.lastAt) < 2 * 3600_000) return
       } catch {}
-      if (smartHook) hooks.push('你自己现在想说的（决策预检给的由头）：' + smartHook)
       const lastProact = readProact()
       const lastType = String(lastProact.lastType || '')
 
@@ -1370,7 +1456,7 @@ export async function run(argv = []) {
         if (pfile) {
           await new Promise(r => setTimeout(r, 400 + Math.random() * 700))
           try {
-            const okImg = await send('send_private_msg', { user_id: Number(ownerQQ), message: [{ type: 'image', data: { file: 'file:///' + pfile.replace(/\\/g, '/') } }] })
+            const okImg = await send('send_private_msg', { user_id: Number(ownerQQ), message: [{ type: 'image', data: { file: (await import('../lib/onebot-file.mjs')).onebotFileValue(pfile) } }] })
             if (okImg) log(`[qq] 🐟 主动搭话带图：${ptag} → ${path.basename(pfile)}`)
           } catch (e) { logErr('[qq] 主动搭话补图失败：' + (e?.message ?? e)) }
         }
@@ -1610,7 +1696,7 @@ export async function run(argv = []) {
           const caption = String(text).replace(/[，。！？…~～\s]+/g, ' ').trim().split(' ').filter(Boolean).slice(0, 2).join(' ').slice(0, 12) || '今天的心情'
           const { generateStickerImage } = await import('../lib/imggen.mjs')
           const img = await generateStickerImage(caption, {})
-          if (img) images = ['file:///' + String(img).replace(/\\/g, '/')]
+          if (img) images = [(await import('../lib/onebot-file.mjs')).onebotFileValue(img)]
         }
       } catch {}
       const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')

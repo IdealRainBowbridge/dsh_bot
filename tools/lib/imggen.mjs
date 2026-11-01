@@ -16,6 +16,39 @@ import { config } from './config.mjs'
 import { STICKER_DIR } from './stickers.mjs'
 
 const GEN_FILE = () => dataPath('imggen.json')
+
+// ── 代理策略（2026-11-02 修）────────────────────────────────────────────
+// 病根：代码里 5 处硬写 `http://127.0.0.1:7897`（Clash）。但这是**主机上的**代理，
+// 容器里 127.0.0.1 是容器自己，那个端口根本没人听；宿主 mihomo 如今也没在跑。
+// 结果：每次出图 curl 连代理失败 → "生成失败（额度/代理/图床）"，
+// 而实际上 image.pollinations.ai 从容器内**直连就是通的**（实测 200）。
+// 现在：先检测代理端口活不活，不活就直连（--noproxy "*"），并且结果缓存 60 秒，
+// 别每次都去连一次死端口。
+let _proxyAlive = null
+let _proxyCheckedAt = 0
+function proxyUsable(p) {
+  if (!p) return false
+  const now = Date.now()
+  if (_proxyAlive !== null && now - _proxyCheckedAt < 60_000) return _proxyAlive
+  _proxyCheckedAt = now
+  try {
+    const m = String(p).match(/^https?:\/\/([^:/]+):(\d+)/)
+    if (!m) { _proxyAlive = false; return false }
+    // 用 curl 连一下代理端口（同步、极短超时），比 net.connect 更稳
+    const exe = fs.existsSync('C:/Windows/System32/curl.exe') ? 'C:/Windows/System32/curl.exe' : 'curl'
+    execFileSync(exe, ['-sS', '-m', '2', '-o', '/dev/null', `http://${m[1]}:${m[2]}`],
+      { timeout: 3000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore' })
+    _proxyAlive = true
+  } catch {
+    _proxyAlive = false
+  }
+  return _proxyAlive
+}
+/** 取一个可用的代理参数数组：可用返回 ['-x', url]，不可用返回 ['--noproxy','*']（直连）。 */
+function proxyArgs(cfg = config()) {
+  const p = cfg.imageGen?.proxy || 'http://127.0.0.1:7897'
+  return proxyUsable(p) ? ['-x', p] : ['--noproxy', '*']
+}
 const REF_CACHE = () => dataPath('imggen-ref.json')
 const dayKey = () => new Date().toLocaleDateString('sv-SE')
 /** 固定形象基底：鲸鱼娘（2D 动漫贴纸风，蓝发鱼尾少女 —— 参考主人给的形象），成品才像"她的"表情包。
@@ -54,7 +87,7 @@ function uploadRef(localPath) {
       run: () => {
         // v5：opts 里本来就有 timeout:100000，但门禁扫不到"变量里的 timeout"；
         // 内联成显式对象，既让门禁看得见，也让下一次改动不容易漏。
-        const r = execFileSync(exe, ['-sS', '-m', '90', '-x', REF_UPLOAD_PROXY(), '-F', `file=@${sep}`, 'https://tmpfiles.org/api/v1/upload'],
+        const r = execFileSync(exe, ['-sS', '-m', '90', ...proxyArgs(), '-F', `file=@${sep}`, 'https://tmpfiles.org/api/v1/upload'],
           { encoding: 'utf8', timeout: 100_000, killSignal: 'SIGKILL', windowsHide: true })
         const page = String(JSON.parse(r)?.data?.url || '')
         if (!page) throw new Error('tmpfiles 没回 url')
@@ -201,7 +234,7 @@ async function genQwenImage(prompt, tmpFile, q, cap = '') {
     try {
       execFileSync(exe, ['-sS', '-m', '120', '-o', tmpFile, url], { encoding: 'utf8', timeout: 130000, windowsHide: true })
     } catch {
-      execFileSync(exe, ['-sS', '-m', '120', '-x', q.proxy || 'http://127.0.0.1:7897', '-o', tmpFile, url], { encoding: 'utf8', timeout: 130000, windowsHide: true })
+      execFileSync(exe, ['-sS', '-m', '120', ...proxyArgs(), '-o', tmpFile, url], { encoding: 'utf8', timeout: 130000, windowsHide: true })
     }
     if (!isImageFile(tmpFile)) throw new Error('下载的不是有效图片')
     return true
@@ -215,11 +248,12 @@ async function genQwenImage(prompt, tmpFile, q, cap = '') {
 // ── 生成主流程 ──────────────────────────────────────────────────────────────
 const inflight = new Map()   // 同一文案/标签并发生成去重（qq-server 两条消息先后到时别画两张）
 
+// proxy 参数现在只是"要不要用代理"的开关（true/false/undefined=按配置探测）
 function curlTo(url, file, timeoutMs, proxy) {
   return new Promise((resolve, reject) => {
     const exe = fs.existsSync('C:/Windows/System32/curl.exe') ? 'C:/Windows/System32/curl.exe' : 'curl'
     const args = ['-sS', '-L', '-m', String(Math.ceil(timeoutMs / 1000)), '-o', file, '-w', '%{http_code}',
-      ...(proxy ? ['-x', proxy] : []), url]
+      ...(proxy === false ? ['--noproxy', '*'] : proxyArgs()), url]
     execFile(exe, args, { windowsHide: true, timeout: timeoutMs + 8000 }, (e, so, se) => {
       if (e && !fs.existsSync(file)) return reject(new Error(String(se || e.message).slice(-200)))
       resolve(String(so || '').trim())
@@ -288,7 +322,7 @@ export async function generateStickerImage(caption, o = {}) {
       // 免费档 1 张/45s + 服务偶发 503：402/503 退避 55s 重试，最多 3 次
       let code = ''
       for (let attempt = 1; attempt <= 3; attempt++) {
-        code = await curlTo(url, tmp, o.timeoutMs ?? 120000, ig.proxy ?? 'http://127.0.0.1:7897')
+        code = await curlTo(url, tmp, o.timeoutMs ?? 120000, ig.proxy === false ? false : undefined)
         if (code === '200') break
         try { fs.rmSync(tmp, { force: true }) } catch {}
         if (attempt < 3 && (code === '402' || code === '503')) {
@@ -342,7 +376,7 @@ export async function editImage({ instruction, caption = '', out, model } = {}) 
   try {
     execFileSync(exe, ['-sS', '-m', '120', '-o', out, url], { encoding: 'utf8', timeout: 130000, windowsHide: true })
   } catch {
-    execFileSync(exe, ['-sS', '-m', '120', '-x', ig.proxy || 'http://127.0.0.1:7897', '-o', out, url], { encoding: 'utf8', timeout: 130000, windowsHide: true })
+    execFileSync(exe, ['-sS', '-m', '120', ...proxyArgs(), '-o', out, url], { encoding: 'utf8', timeout: 130000, windowsHide: true })
   }
   if (!isImageFile(out)) throw new Error('下载的不是有效图片')
   return out

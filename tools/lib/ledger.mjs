@@ -155,6 +155,31 @@ async function mergeDirect(data) {
   } catch { return data }
 }
 
+// ── credit ⇄ 钱（2026-11-02）────────────────────────────────────────────────
+// 为什么加：官方口径 1 credit = 0.01 USD（a2a `/v1/credits` 里 usd_per_credit 字段）。
+// 以前的账本按 DeepSeek 官方单价估 token → 元，跟 a2a 实际扣的 credit **是两套账**，
+// 实测差 800 倍（DSH 记 5131 token 对应 a2a 掉 241 credit = ¥17，账本却说 ≈¥0.02）。
+// 现在统一：**一切以 credit 为准**，钱只是给主人看的换算视图。
+export const USD_PER_CREDIT = 0.01
+/** 美元 → 人民币（估，仅用于展示；可在 config.ledger.usdCny 覆盖） */
+function usdCny(cfg = config()) {
+  return num(cfg.ledger?.usdCny, 7.1)
+}
+/** credit → 元（展示用） */
+export function creditToYuan(c, cfg = config()) {
+  return round2((Number(c) || 0) * USD_PER_CREDIT * usdCny(cfg))
+}
+/** 元 → credit */
+export function yuanToCredit(y, cfg = config()) {
+  const rate = USD_PER_CREDIT * usdCny(cfg)
+  return rate > 0 ? (Number(y) || 0) / rate : 0
+}
+/** 钱的展示串：同时给元与 credit，避免"21100 积分"被读成一万块 */
+function moneyView(credit, cfg = config()) {
+  const y = creditToYuan(credit, cfg)
+  return `¥${y}（${Math.round(Number(credit) || 0)} credit）`
+}
+
 // ── 饭钱折算 ────────────────────────────────────────────────────────────────
 /** 单价（元/百万 token）。默认值按 DeepSeek 档位估，可在 config.ledger.price 覆盖。 */
 export function price(cfg = config()) {
@@ -302,7 +327,16 @@ export async function report(opts = {}) {
   const mine7 = last7.reduce((a, r) => addTok(a, r.mine), emptyTok())
   const daysWithUse = last7.filter((r) => (r.mine?.total || 0) > 0).length || 1
   const avgMineCost = costOf(mine7, cfg) / daysWithUse
-  const budget = num(cfg.ledger?.dailyBudget, 0)          // 0 = 没设预算
+  // ── 预算口径（2026-11-02 改）──────────────────────────────────────────
+  // 以前：cfg.ledger.dailyBudget 写死一个元数（¥3/天），跟真实余额脱节 ——
+  //   余额 21100 credit 却只让她花 ¥3，等于告诉一个有一千五的人"今天预算三块"。
+  // 现在：**预算 = 余额本身**。她没有"日额度"这个概念，只有"我还剩多少"。
+  //   dailyBudget 仅在显式配置时作为**上限闸**（防止哪天想限流），不配就是余额。
+  const balanceForBudget = await balance(cfg, opts)
+  const creditNow = Number(balanceForBudget?.usableNow ?? balanceForBudget?.total ?? 0)
+  const balanceYuan = creditToYuan(creditNow, cfg)
+  const hardCap = num(cfg.ledger?.dailyBudget, 0)      // 0 = 不设上限
+  const budget = hardCap > 0 ? Math.min(hardCap, balanceYuan) : balanceYuan
   const todayCost = costOf(todayRow.mine, cfg)
   const bal = opts.balance === false ? null : await balance(cfg)
   return {
@@ -321,7 +355,23 @@ export async function report(opts = {}) {
       mineCost: round2(costOf(u.lifetime?.mine, cfg)),
     },
     balance: bal,
-    runwayDays: bal && avgMineCost > 0 ? Math.floor(bal.total / avgMineCost) : null,
+    // 2026-11-02 修单位错配：bal.total 是 **credit**，avgMineCost 是 **元** —
+    // credit ÷ 元 是个没有意义的数（旧算法把 21100 credit ÷ ¥1.2/天 = 17583 天）。
+    // 另外：日花费波动极大（今天清过库所以几乎没花），直接用"今天"外推会得出
+    // "还能撑 11021 天"这种没人会信的答案。改为看**最近连续用过的天数**的均值，
+    // 且样本不足 2 天就返回 null（宁可不给，也不给一个假的天数）。
+    runwayDays: (() => {
+      if (!bal) return null
+      const creditLeft = Number(bal.usableNow ?? bal.total)
+      const usedDays = last7.filter((d) => {
+        const t = d.mine || {}
+        return ((t.input || 0) + (t.cache || 0) + (t.output || 0)) > 0
+      })
+      if (usedDays.length < 2) return null            // 样本不足，不猜
+      const avgCredit = usedDays.reduce((a, d) => a + yuanToCredit(costOf(d.mine, cfg), cfg), 0) / usedDays.length
+      if (!(avgCredit > 0.5)) return null             // 日均不到 0.5 credit，等于没在用
+      return Math.floor(creditLeft / avgCredit)
+    })(),
     quotas: quotas(cfg, today),
     price: price(cfg),
     usageCached: !!u.cached,
@@ -346,19 +396,43 @@ function round2(n) {
 /** 一行摘要（给提示语注入用，别塞太长）。 */
 export function brief(r) {
   if (!r) return ''
+  const cfg = config()
   const p = []
-  p.push(`今天吃了 ${fmtTok(r.me.tokens.total)} token ≈ ¥${r.me.cost}`)
-  if (r.me.budget != null) {
-    p.push(r.me.overBudget ? `超了预算 ¥${Math.abs(r.me.leftOfBudget)}（预算 ¥${r.me.budget}/天）` : `预算 ¥${r.me.budget}/天，还剩 ¥${r.me.leftOfBudget}`)
+  // ① 余额放最前面 —— 她真正该关心的是"我还剩多少"，不是"今天花了多少"。
+  if (r.balance?.currency === 'A2A') {
+    const u = Number(r.balance.usableNow ?? r.balance.total ?? 0)
+    const y = creditToYuan(u, cfg)
+    // 2026-11-02：不再说"21100 积分"——那个词会让人以为是两万块或两万次。
+    // 直接给钱 + credit 两个数，并且给出"按今天这个花法还能撑几天"。
+    // 文案：这里曾经写"按今天这花法还能撑 N 天" —— 一旦某天没怎么用就报出
+    // "还能撑 19601 天"，既不可信也像 bug。改成引用**近7天日均**的口径，
+    // 超过一年就只说"够用很久"，不给一个看着像玩笑的具体数字。
+    const runway = (() => {
+      if (r.runwayDays == null) return ''
+      if (r.runwayDays > 365) return '，够用很久'
+      const perDay = r.week?.avgPerDay
+      return `，按近七天日均${perDay != null ? ` ¥${perDay}` : ''}还能撑 ${r.runwayDays} 天`
+    })()
+    p.push(u < 500
+      ? `余额快见底了：${moneyView(u, cfg)}${runway}，今天省着点`
+      : `余额 ${moneyView(u, cfg)}${runway}`)
+  } else if (r.balance) {
+    p.push(`钱包余额 ¥${r.balance.total}（按这个花法还能撑 ${r.runwayDays} 天）`)
   }
+  // ② 今天花了多少
+  p.push(`今天吃了 ${fmtTok(r.me.tokens.total)} token ≈ ¥${r.me.cost}`)
+  // ③ 预算：现在是"余额本身"，不再是写死的日额
+  if (r.me.budget != null) {
+    // 注意措辞：查不到余额时不能出现"余额"二字（测试锁着这条：
+    // 宁可说"预算 ¥X"，也不能暗示一个我们并不知道的余额）。
+    const fromBalance = r.balance?.currency === 'A2A'
+    p.push(r.me.overBudget
+      ? `超了预算 ¥${Math.abs(r.me.leftOfBudget)}（预算 ¥${r.me.budget}${fromBalance ? '，上限来自余额' : ''}）`
+      : `预算 ¥${r.me.budget}，还剩 ¥${r.me.leftOfBudget}`)
+  }
+  // ④ 动作额度
   const q = (r.quotas || []).filter((x) => x.limit > 0).map((x) => `${x.label} ${x.left}/${x.limit}`)
   if (q.length) p.push('额度：' + q.join(' · '))
-  if (r.balance?.currency === 'A2A') {
-    // 官方 credit 口径（10-30 v2）：宿主聚合器算好的「此刻可用」。
-    // 单位是官方积分（credit），不是钱也不是次数；每日会随账号刷新回血。
-    const u = r.balance.usableNow ?? r.balance.usableToday ?? r.balance.total
-    p.push(u < 100 ? `额度快见底了（剩 ${u} 积分），今天省着点用` : `现在可用 ${u} 积分`)
-  } else if (r.balance) p.push(`钱包余额 ¥${r.balance.total}（按这个花法还能撑 ${r.runwayDays} 天）`)
   return p.join(' ； ')
 }
 

@@ -1,4 +1,4 @@
-// tattle —— 打小报告：看完好视频 → LLM 写一段"汇报" → QQ 私信发给笨蛋老爹。
+// tattle —— 打小报告：看完好视频 → LLM 写一段"汇报" → QQ 私信发给笨蛋老爸。
 // 形态（网上流行的鱼号）：不是甩链接，是「老爹我跟你说，我今天看到…」的人话汇报。
 // 触发：bili-watch 深读评分 >= 阈值（默认 15）时调用；手动也能跑。
 // 节流：一天最多 3 条（config.tattle.dailyMax），避免变成骚扰。
@@ -32,7 +32,7 @@ function markSent(st) {
   writeState(st)
 }
 
-/** 写汇报：LLM 用她的口吻把「看了什么+我的看法」讲给笨蛋老爹听。 */
+/** 写汇报：LLM 用她的口吻把「看了什么+我的看法」讲给笨蛋老爸听。 */
 async function compose({ title, bvid, score, highlight, reason }) {
   const llm = await import('../lib/llm.mjs')
   const r = await llm.chat([

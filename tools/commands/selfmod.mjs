@@ -1,0 +1,64 @@
+// selfmod —— 她想改自己时的提案入口（2026-11-02）
+//
+//   node feiyu.mjs selfmod list                     # 看有没有待批
+//   node feiyu.mjs selfmod propose <文件> <为什么> --from <新文件路径>
+//   node feiyu.mjs selfmod status                   # 最近改了什么
+//
+// 她的用法：想改自己 → 先把新内容写成临时文件 → propose → 然后在 QQ 里跟老爸说
+// "我想改 XXX，你看行不行"。老爸回「改吧」才会真动手。
+// **这个命令只提案，不落地** —— 落地在 qq-server 的审批拦截里，只有老爸能触发。
+import fs from 'node:fs'
+import * as SM from '../lib/selfmod.mjs'
+
+export async function run(argv = []) {
+  const sub = argv[0] || 'list'
+
+  if (sub === 'list') {
+    const list = SM.listPending()
+    if (!list.length) { console.log('没有待批的改动。'); return }
+    for (const x of list) {
+      console.log(`【${x.id}】${x.file}`)
+      console.log(`  为什么：${x.why}`)
+      console.log(`  状态：${x.state}   ${new Date(x.at).toLocaleString('zh-CN')}`)
+    }
+    return
+  }
+
+  if (sub === 'propose') {
+    const file = argv[1]
+    const why = argv[2]
+    const i = argv.indexOf('--from')
+    const from = i >= 0 ? argv[i + 1] : ''
+    if (!file || !why) {
+      console.error('用法：selfmod propose <项目内相对路径> <为什么> --from <含新内容的文件>')
+      process.exit(1)
+    }
+    let change = ''
+    if (from) {
+      try { change = fs.readFileSync(from, 'utf8') }
+      catch (e) { console.error('读不到新内容文件：' + e.message); process.exit(1) }
+    } else {
+      console.error('必须用 --from 指定新内容文件（不让你在命令行里内联整段代码）')
+      process.exit(1)
+    }
+    const r = SM.propose({ file, why, change })
+    if (!r.ok) { console.error('提案失败：' + r.reason); process.exit(1) }
+    console.log(`✓ 已提案【${r.id}】${r.file}`)
+    console.log('  现在去跟老爸说一声：想改什么、为什么。他回「改吧」才动手。')
+    return
+  }
+
+  if (sub === 'status') {
+    try {
+      const { dataPath } = await import('../lib/paths.mjs')
+      const s = JSON.parse(fs.readFileSync(dataPath('selfmod.json'), 'utf8'))
+      if (!s.history?.length) { console.log('还没有对自己的改动记录。'); return }
+      for (const h of s.history.slice(0, 8)) {
+        console.log(`【${h.id}】${h.state}  ${h.file}  ${new Date(h.at).toLocaleString('zh-CN')}`)
+      }
+    } catch { console.log('还没有对自己的改动记录。') }
+    return
+  }
+
+  console.log('用法：selfmod list | selfmod propose <文件> <为什么> --from <新内容文件> | selfmod status')
+}

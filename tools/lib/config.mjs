@@ -40,7 +40,10 @@ export const DEFAULTS = {
   // dailyBudget > 0 时她会按"今天超没超预算"说话；0 = 不设预算，只报花了多少。
   ledger: {
     enabled: true,
-    dailyBudget: 3,                     // 元/天，0 = 不设预算
+    // 2026-11-02 改：默认 0 = **预算就是余额本身**。
+    // 以前写死 3 元/天，跟 a2a 真实余额完全脱节（余额 ¥1500 却只让她花 ¥3）。
+    // 想人为限流时才配一个正数，它会和余额取 min。
+    dailyBudget: 0,                     // 元/天，0 = 预算=余额
     mineWorkspace: 'feiyu-work',        // 哪个工作区的会话算"她自己吃的"（她的是 ~/.dsh/feiyu-work）
     price: { inputPerM: 2, cachePerM: 0.2, outputPerM: 3 },   // 元/百万 token（按 DeepSeek 档位估，可改）
     balanceUrl: '',                     // 填 https://api.deepseek.com/user/balance 且 apiKey 有效才查余额

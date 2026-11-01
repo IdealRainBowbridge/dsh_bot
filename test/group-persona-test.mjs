@@ -63,7 +63,7 @@ memory.remember('bilibili', 'bilibili:feed', 'self', 'assistant', '我在B站刷
 
 // ① 私聊主人
 const priv = sysOf({ platform: 'qq', userText: '在吗', chatId: 'qq:10001', userId: '10001', turnsToday: 3 })
-// v5：人设措辞已改为"从配置读"（identity.ownerTitle），不再写死"笨蛋老爹"。
+// v5：人设措辞已改为"从配置读"（identity.ownerTitle），不再写死"笨蛋老爸"。
 // 这里跟着改成对**配置值**断言 —— 测试断言的是"她按配置称呼人"，不是某个固定字面量。
 const OT = '主人'   // 与上面 cfgFile 里的 identity.ownerTitle 一致
 ok('私聊主人 → 认得出是本人', priv.includes(`【对方是${OT}本人】`))

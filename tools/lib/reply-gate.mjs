@@ -155,7 +155,18 @@ async function _decideInner({ text = '', merged = 1, isGroup = false, atMe = fal
   //    实测调参：呼叫语（在吗）必须**快**（1~1.6s，像立刻摸手机），
   //    短问题 ~1.5-2.5s，长吐槽/情绪 ~2.5-4.5s（像组织了一下话）。
   const isCall = /^(在吗|在不在|喂|人呢)/.test(t)
-  if (isCall) return { reply: true, delayMs: Math.round(rand(g.callDelayMin ?? 900, g.callDelayMax ?? 1600) + Number(r.extraDelay || 0)), why: '呼叫语(快回)' + (r.extraDelay ? '(连珠炮，放慢)' : '') }
+  if (isCall) {
+    // 2026-11-02：呼叫语不再只是"报个到就完"。
+    // 旧行为：在吗 → "在呢" → 结束。人不会这样 —— 真人被叫住，会顺手把话头递回来
+    // （"在呢，正好跟你说个事…"）。这里加 openThread，让 persona 层去决定递什么，
+    // 递什么由她当下的计划/日记/情绪决定，不是这里硬塞。
+    return {
+      reply: true,
+      delayMs: Math.round(rand(g.callDelayMin ?? 900, g.callDelayMax ?? 1600) + Number(r.extraDelay || 0)),
+      why: '呼叫语(快回+递话头)' + (r.extraDelay ? '(连珠炮，放慢)' : ''),
+      openThread: true,
+    }
+  }
 
   const weight = Math.min(1, t.length / 90) + (must ? 0.3 : 0) + (merged > 1 ? 0.25 : 0)
   const base = rand(baseMin, baseMax) * (0.6 + weight * 0.8)
@@ -206,12 +217,14 @@ export async function gate({ text, merged = 1, isGroup = false, atMe = false, ex
   noteDecision(d)
   if (!d.reply) {
     log('[qq] 🤐 这条不接（' + d.why + '）：' + String(text || '').slice(0, 30))
-    return false
+    // 仍然返回对象：调用方用 `!g.decision.reply` 判断，兼容旧的 truthiness 用法
+    return { reply: false, why: d.why, openThread: false, delayMs: 0 }
   }
   if (d.delayMs > 0) {
     // 人是先看到、停顿、再打字。停顿期间界面上会有"正在输入"，比干等自然。
     log('[qq] ⏳ 停顿 ' + d.delayMs + 'ms 再回（' + d.why + '）')
     await new Promise((r) => setTimeout(r, d.delayMs))
   }
-  return true
+  // 2026-11-02：把 openThread 透出来 —— 呼叫语（在吗）时要让她递个话头，不是只报平安。
+  return { reply: true, why: d.why, openThread: d.openThread === true, delayMs: d.delayMs }
 }

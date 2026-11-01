@@ -14,6 +14,7 @@ import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { homePath } from './paths.mjs'
+import { config } from './config.mjs'
 import { findPythonWith } from './python-runtime.mjs'
 import { renderSticker, available as stickerRendererAvailable } from './sticker-render.mjs'
 import { swallow } from './swallow.mjs'
@@ -22,6 +23,19 @@ export const STICKER_DIR = homePath('.feiyu-ai', 'stickers')
 
 /** 内置兜底标签（文件夹空着也不影响 prompt 里出现这几个）。 */
 export const DEFAULT_TAGS = ['开心', '无语', '委屈', '生气', '困', '比心']
+
+/**
+ * 私藏目录（2026-11-02）：图存在本地，但**不进 availableTags** ——
+ * 她平时不会被告知有这些标签，随机取图也绕开。
+ *
+ * 为什么需要：availableTags() 的实现是"扫目录名，有目录就报"，所以
+ * 建一个「亲密」目录会立刻变成可发标签。用户的意思是这些图留着以后用
+ * （俏皮/撒娇场合），不是要它进日常情绪菜单。
+ *
+ * 想让她在特定场合用：往 config.qq.sticker.allowPrivate 里写标签名，
+ * 或者直接调 pickSticker('亲密') —— 后者不受这里限制。
+ */
+export const PRIVATE_DIRS = new Set(['亲密', '私藏', '不合适', '_private'])
 
 /** B站评论区能渲染成图的表情码：内置这 16 个（已用真实账号核对，全部存在）。 */
 export const BILI_FACES = [
@@ -94,7 +108,9 @@ export function listStickers() {
 /** 可用标签（本机有图的优先；一张图都没有时退回内置标签，只走颜文字）。 */
 export function availableTags() {
   // 自制 是渲染缓存目录，不算一个可选标签
-  const have = Object.keys(listStickers()).filter(t => t !== '自制')
+  // 2026-11-02：排除私藏目录 —— 有图不等于该主动告诉她能用
+  const allowPriv = new Set(config().qq?.sticker?.allowPrivate || [])
+  const have = Object.keys(listStickers()).filter(t => t !== '自制' && (!PRIVATE_DIRS.has(t) || allowPriv.has(t)))
   return have.length ? have : DEFAULT_TAGS
 }
 

@@ -21,6 +21,31 @@ export function inboundToken(cfg) {
   return String(process.env.FEIYU_INBOUND_TOKEN || cfg?.qq?.inboundToken || '')
 }
 
+/**
+ * 请求是不是从 **本机 docker 网桥网关** 转进来的。
+ *
+ * 为什么需要（2026-11-01 真 P0）：容器里的 qq-server 必须绑 0.0.0.0 才能被
+ * docker-proxy 转发进来（绑 127.0.0.1 时 docker-proxy 往 172.17.0.3:8081 连，
+ * 必然 fetch failed）。但一绑 0.0.0.0，SnowLuma 经宿主 127.0.0.1:8081 映射进来的
+ * 请求，源地址就变成 172.17.0.1（docker 网关），**不是回环** —— 于是 /onebot
+ * 的 loopback 豁免失效，SnowLuma 每条上报都 401。
+ *
+ * 而 OneBot v11 的 HTTP 上报**不支持自定义头**，也没法带 Bearer token，
+ * SnowLuma 的 httpClients.secret 走的是 HMAC 签名，这套鉴权不认。
+ *
+ * 所以：把"默认网桥网关地址"也视为本机来源。
+ * 安全边界没有放宽 —— 172.17.0.1 只有宿主自己能路由到，局域网/公网进不来；
+ * 且只在本文件被 allowLoopback=true 的入口（即 /onebot）上生效。
+ */
+const DOCKER_GW_RE = /^172\.(1[6-9]|2\d|3[01])\.0\.1$/
+
+export function isDockerGateway(req) {
+  const a = String(req?.socket?.remoteAddress || '')
+  if (!a) return false
+  const v4 = a.startsWith('::ffff:') ? a.slice(7) : a
+  return DOCKER_GW_RE.test(v4)
+}
+
 /** 请求来源是不是本机回环。 */
 export function isLoopback(req) {
   const a = String(req?.socket?.remoteAddress || '')
@@ -74,7 +99,9 @@ export function inboundTokenOk(req, cfg, opts = {}) {
       return { ok: true, reason: 'token' }
     }
     // 没带 token：只有"回环 + 明确允许回环"的入口才放行（OneBot 上报口）
-    if (opts.allowLoopback === true && isLoopback(req)) return { ok: true, reason: 'loopback(onebot)' }
+    if (opts.allowLoopback === true && (isLoopback(req) || isDockerGateway(req))) {
+      return { ok: true, reason: isLoopback(req) ? 'loopback(onebot)' : 'docker-gw(onebot)' }
+    }
     return { ok: false, reason: 'missing-token' }
   }
   // 没配 token：只允许本机回环
