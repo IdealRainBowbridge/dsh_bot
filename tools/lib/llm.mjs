@@ -260,11 +260,68 @@ function isOpen(key, breakers) {
   const b = breakers[key]
   return !!(b && b.until && Date.now() < b.until)
 }
+/**
+ * 把错误压成一行**能排障**的文字。
+ *
+ * 为什么要有它（2026-11-02 排查实录）：网关在并发压满时会直接 RST 掉连接，
+ * Node fetch 抛的是 `TypeError: fetch failed` —— 真正的原因码（UND_ERR_SOCKET /
+ * ECONNRESET / ETIMEDOUT）在 `e.cause.code` 里。老代码只记 `e.message`，
+ * 于是日志上永远只有一句 `fetch failed`，看日志的人（包括我）只能靠推理反推。
+ * 那次排查里我花了半小时才确认是 socket 被重置而不是超时/鉴权/模型问题。
+ */
+function describeErr(err) {
+  const base = String(err?.message ?? err)
+  const c = err?.cause
+  const code = c?.code || c?.errno || ''
+  const extra = []
+  if (code) extra.push(code)
+  if (c?.syscall) extra.push(c.syscall)
+  if (c?.address) extra.push(c.address + (c?.port ? ':' + c.port : ''))
+  if (c?.message && String(c.message) !== base) extra.push(String(c.message).slice(0, 80))
+  const tail = extra.length ? ' [' + extra.join(' ') + ']' : ''
+  return (base + tail).slice(0, 180)
+}
+
+/**
+ * 是不是**连接层瞬时**失败（不是模型/鉴权/参数问题）。
+ *
+ * 这类失败的共同点：请求可能压根没到上游，或者到了但连接被中间层掐断 ——
+ * 换一条连接重发一次大概率就好了。**它们不该被当成"这个通道坏了"**，
+ * 因为通道本身是好的，坏的是一次 TCP 会话。
+ *
+ * 实测依据（2026-11-02）：网关 agent2api 在账号池并发压满时，
+ * `ulimit -n=1024` 且只有 4 核，20 并发下稳定丢 3~5 个连接，
+ * 客户端看到的就是 UND_ERR_SOCKET("other side closed") / ECONNRESET。
+ */
+const TRANSIENT_CODES = new Set([
+  'UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT',
+  'UND_ERR_CLOSED', 'UND_ERR_CONNECT_TIMEOUT', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH',
+])
+function isTransient(err) {
+  if (!err) return false
+  if (err.reasoningOnly) return false          // max_tokens 给小了，重发没用
+  if (err.transient === true) return true      // 下面自己打的标
+  const code = err?.cause?.code || err?.code || ''
+  if (TRANSIENT_CODES.has(String(code))) return true
+  // undici 在 keep-alive 复用坏连接时给的是 "fetch failed" 且 cause 是 SocketError
+  if (/fetch failed/i.test(String(err.message || '')) && err.cause) return true
+  if (err.name === 'TimeoutError' || err.name === 'AbortError') return false  // 超时不在此列，交给熔断
+  return false
+}
+
 function bumpFail(key, err) {
   const all = readBreakers()
   const cur = all[key] || { fails: 0, until: 0, lastErr: '' }
+  cur.lastErr = describeErr(err)
+  // 瞬时连接失败**不计入熔断**：通道没坏，只是这一次的 TCP 会话被掐断了。
+  // 计入的话，并发高峰几次抖动就会把好通道熔断 3 分钟，
+  // 而熔断期间所有请求都跳过它 —— 于是"偶发抖动"被放大成"整段时间不可用"。
+  if (isTransient(err)) {
+    all[key] = cur
+    writeBreakers(all)
+    return cur
+  }
   cur.fails = (Number(cur.fails) || 0) + 1
-  cur.lastErr = String(err?.message ?? err).slice(0, 160)
   // 失败够数就跳闸；每多失败一次多冷一会儿（最长 15 分钟）
   if (cur.fails >= FAIL_N) {
     const extra = Math.min(12 * 60_000, (cur.fails - FAIL_N) * 60_000)
@@ -282,6 +339,8 @@ function bumpOk(key) {
   }
 }
 /** 给 /api/status 与 diagnose 看的熔断快照。 */
+export { describeErr, isTransient }
+
 export function breakerSnapshot() {
   const all = readBreakers()
   const out = []
@@ -307,13 +366,45 @@ export async function chat(messages, opts = {}) {
   if (!opts.noFallback) for (let i = 0; i < _chain().length; i++) levels.push({ ..._chain()[i], __key: 'fb' + (i + 1) })
 
   const tryOne = async (c) => {
-    const r = await fetch(endpointOf(c), {
-      method: 'POST',
-      headers: headersOf({ ...c, api_key: c.api_key || apiKey() }),
-      body: JSON.stringify(payloadOf(c, messages, opts)),
-      signal: AbortSignal.timeout(opts.timeoutMs || 90000),
-    })
-    if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`)
+    // 连接层重试（2026-11-02 新增）。
+    //
+    // 为什么：fallback 链修的是"这个通道不行"，修不了"这一次连接被掐断"。
+    // 主备都是一家网关时，连接层失败会在每一级各丢一次 —— 4 级 fallback 全灭，
+    // 而网关明明是好的（实测：串行 30/30 成功，20 并发稳定丢 3~5 个）。
+    // 这类失败重发一次就好，代价只是多一个 RTT，远小于"整段对话没回复"。
+    //
+    // 只对瞬时连接错误重试；HTTP 4xx/5xx 和"模型输出为空"都不重试
+    // （那些重发一次结果一样，纯浪费钱）。
+    const attemptOnce = async () => {
+      const r = await fetch(endpointOf(c), {
+        method: 'POST',
+        headers: headersOf({ ...c, api_key: c.api_key || apiKey() }),
+        body: JSON.stringify(payloadOf(c, messages, opts)),
+        signal: AbortSignal.timeout(opts.timeoutMs || 90000),
+      })
+      if (!r.ok) throw Object.assign(new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`), { httpStatus: r.status })
+      return r
+    }
+    const RETRIES = Number(opts.connRetries ?? 2)      // 瞬时连接失败额外重试次数
+    let r
+    for (let attempt = 0; ; attempt++) {
+      try {
+        r = await attemptOnce()
+        break
+      } catch (e) {
+        // HTTP 状态错误：不重试（4xx/5xx 重发结果一样）
+        if (e && e.httpStatus) throw e
+        if (attempt < RETRIES && isTransient(e)) {
+          // 120ms / 400ms 退避 + 抖动，避开同一瞬间的拥塞
+          const wait = 120 * Math.pow(2, attempt) + Math.floor(Math.random() * 80)
+          await new Promise((res) => setTimeout(res, wait))
+          continue
+        }
+        // 重试用尽仍失败：标记为瞬时，让上层知道"通道没坏"
+        if (isTransient(e)) { try { e.transient = true } catch {} }
+        throw e
+      }
+    }
     const j = await r.json()
     const ch = j.choices?.[0] ?? {}
     const out = String(ch.message?.content ?? '').trim()
@@ -358,8 +449,8 @@ export async function chat(messages, opts = {}) {
       return out
     } catch (e) {
       const rec = bumpFail(key, e)
-      errs.push(`${key}（${c.model || '?'}）：${String(e.message).slice(0, 90)}`)
-      if (i === 0) fbLog(`主通道失败(${String(e.message).slice(0, 80)})，尝试备用链`)
+      errs.push(`${key}（${c.model || '?'}）：${describeErr(e).slice(0, 110)}`)
+      if (i === 0) fbLog(`主通道失败(${describeErr(e).slice(0, 100)})，尝试备用链`)
     }
   }
   // 全都失败：把每一级的失败原因都带上，别只说"主备都失败"（排障时那句话等于没说）
@@ -394,7 +485,7 @@ export async function* chatStream(messages, opts = {}) {
       bumpFail(c.__key, e)
     }
   }
-  if (!chosen) throw new Error('流式：全部 ' + levels.length + ' 个通道失败 → ' + String(lastErr?.message ?? lastErr).slice(0, 120))
+  if (!chosen) throw new Error('流式：全部 ' + levels.length + ' 个通道失败 → ' + describeErr(lastErr).slice(0, 140))
   const r = chosen.r
   const reader = r.body.getReader()
   const dec = new TextDecoder()
@@ -462,7 +553,7 @@ export async function chatRaw(messages, opts = {}) {
       }
     } catch (e) {
       bumpFail(key, e)
-      errs.push(key + '（' + c.model + '）：' + String(e.message).slice(0, 90))
+      errs.push(key + '（' + c.model + '）：' + describeErr(e).slice(0, 110))
     }
   }
   throw new Error('全部 ' + levels.length + ' 个 LLM 通道失败 → ' + errs.join('；'))
