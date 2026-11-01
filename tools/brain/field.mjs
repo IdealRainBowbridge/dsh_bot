@@ -284,12 +284,22 @@ export function repaySleep(hours = 0, now = Date.now()) {
 export function voiceReadiness(s = null) {
   const st = s || evolve()
   const d = st.dims
-  const awake = 1 - 0.75 * d.sleepDebt - 0.55 * d.fatigue
+  // ⚠️ 校准记录（2026-11-02 实测）：
+  //    第一版 awake = 1 - 0.75*sleepDebt - 0.55*fatigue。
+  //    sleepDebt 和 fatigue 都到 1.0 时（凌晨连熬），awake 变成**负数**，
+  //    于是 voiceReadiness 和 cognitiveDepth 双双 clamp 到 0 ——
+  //    她会彻底不说话。结构是对的（那个点确实该很不想说话），
+  //    但**不该是零**：真人在凌晨被叫醒也会回一句"嗯…几点了"。
+  //    零会让系统看起来像坏了，而且掩盖了"只是很困"这个信息。
+  //    改成乘法衰减而不是减法：永远不会变负，而且"很困"仍然有 15~25% 的余量。
+  const awake = clamp((1 - 0.62 * d.sleepDebt) * (1 - 0.52 * d.fatigue), 0, 1)
   const gain = 0.35 + 0.9 * d.ne
   const narrow = d.ne > 0.78 ? 0.75 : 1          // 太亢奋反而只说一句
   const patient = 0.55 + 0.45 * d.sero
   const urge = 0.35 * Math.min(1, d.tension / 2.5)
-  return clamp(awake * gain * narrow * patient + urge * awake, 0, 1)
+  // 下限 0.08：不是"还能说很多"，是"还能吭一声"。这个下限是刻意的 ——
+  // 一个人再累也不会变成静音设备，她只会变得极其简短。
+  return clamp(awake * gain * narrow * patient + urge * awake, 0.08, 1)
 }
 
 /**
@@ -299,7 +309,9 @@ export function voiceReadiness(s = null) {
 export function cognitiveDepth(s = null) {
   const st = s || evolve()
   const d = st.dims
-  return clamp((1 - 0.7 * d.sleepDebt - 0.6 * d.fatigue) * (0.6 + 0.4 * d.sero), 0, 1)
+  // 同样改成乘法（见上面 voiceReadiness 的校准记录），并给一个很低但不为零的下限：
+  // 0.05 意味着"还能想一步"，但想不了复杂的。这是"困得说不清话"而不是"死机"。
+  return clamp((1 - 0.58 * d.sleepDebt) * (1 - 0.48 * d.fatigue) * (0.6 + 0.4 * d.sero), 0.05, 1)
 }
 
 /** 能等多久才回。血清素低 + 唤醒高 = 急。 */
