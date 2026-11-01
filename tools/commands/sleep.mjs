@@ -116,19 +116,98 @@ export async function sleepNow(opts = {}) {
     console.log("[sleep] 状态已切勿扰（睡觉了）")
   } catch {}
   const mark = (name, result) => { phases.push({ name, ms: Date.now() - started, result }); writeJson(SLEEP_STATE(), { sleeping: true, phase: name, started, phases }); console.log("[sleep] " + name + " 完成") }
+  // ══════════════════════════════════════════════════════════════════════
+  // 两条额外通道（2026-11-02）
+  // ══════════════════════════════════════════════════════════════════════
+  // 用户的要求：「睡眠体系搞个额外通道，一个通道负责给主通道玩 TRPG 用于'做梦'，
+  //              一个通道负责优化整理与增强完善一整套」。
+  //
+  // 原来的形状是一条**线性流水线**：整理 → 做梦 → 审查 → 优化 → 归档，顺序跑完。
+  // 有两个问题：
+  //   ① 做梦被夹在"整理"后面当副产品 —— 可梦的素材恰恰来自刚整理出来的东西吗？
+  //      不一定。REM 修补的是**情绪强度**（sleepstage 里写得很清楚：
+  //      "REM → 重置情绪强度：把这件事还带着的温度降下来"），跟整理没因果关系。
+  //   ② 十项工作（整理/做梦/审查/优化/归档）挤在一条链上，
+  //      哪一步慢就全慢，哪一步抛错后面全废。
+  //
+  // 现在按**睡眠分期**拆成两条通道，各自独立成败：
+  //   N3 深睡 + N2 浅睡 → 维护通道：巩固 / 审查 / 优化 / 归档（修"事实与结构"）
+  //   REM              → 梦境通道：TRPG 式放飞（修"情绪与叙事"）
+  //
+  // 两条通道的产物各有各的隔离，互相不许污染：
+  //   维护通道产出 → brain/consolidation/、自审报告、代码归档
+  //   梦境通道产出 → dreams.jsonl（isFake: true，永不可当记忆引用）
+  //
+  // 为什么分先后而不是真并行：两个通道都要调 LLM，同时跑会抢额度也抢 CPU，
+  // 而且"先想清事实、再做情绪加工"在真实睡眠里就是这个顺序
+  // （N3 集中在前半夜，REM 在后半夜）。所以这里是**分期次序**，不是竞速。
+
+  const NIGHT = await import("../brain/organ/sleepstage.mjs")
+
+  // ── 通道一：维护（N3 为主）─────────────────────────────────────────
+  // 这一步做什么，取决于 N3 分到了多少个"有效分钟"。
+  // 深度睡眠被打断 = 整理没做完，这是 sleepstage 里那条"有效段"的意义。
   if (!phases.some(p => p.name === "整理")) {
     let r = "?"
-    try { const c = brain.runConsolidation({ now: Date.now() }); r = { processed: (c && ((c.processed != null && c.processed) || c.extracted)) != null ? (c.processed != null ? c.processed : c.extracted) : "?" } } catch (e) { r = String(e.message).slice(0, 120) }
+    try {
+      const c = brain.runConsolidation({ now: Date.now() })
+      r = { processed: (c && ((c.processed != null && c.processed) || c.extracted)) != null ? (c.processed != null ? c.processed : c.extracted) : "?" }
+    } catch (e) { r = String(e.message).slice(0, 120) }
     mark("整理", r)
-    // 梦境（10-30）：整理完的副产品。素材当跳板，放飞捏造，独立存储与记忆隔离。
+
+    // 记下这一夜 N3 分到多少 —— 报告里要能看出"整理做够了没有"
+    try {
+      const acc = NIGHT.accrual(0, 0)
+      if (acc && typeof acc === "object") phases[phases.length - 1].n3Min = acc.N3 ?? acc.n3 ?? null
+    } catch { }
+  }
+
+  if (!phases.some(p => p.name === "审查")) mark("审查", await threeReviews())
+
+  if (!phases.some(p => p.name === "优化")) {
+    const reviews = ((phases.find(p => p.name === "审查") || {}).result) || []
+    const bad = reviews.filter(r => !r.ok)
+    const optimize = { problems: bad.length, note: bad.length ? bad.map(b => b.name + ": " + b.detail).join(" | ") : "全部健康，无需修复" }
+    const arch = await archiveCode(started, optimize.note)
+    optimize.archive = arch
+    if (!arch.ok) {
+      optimize.note = String(optimize.note || '') + ' | 归档失败：' + String(arch.error || arch.why || '未知')
+      try { swallow(new Error('archive failed: ' + (arch.error || arch.why)), 'sleep:archive', { force: true }) } catch { }
+    }
+    mark("优化", optimize)
+  }
+
+  // ── 通道二：梦境（REM）─────────────────────────────────────────────
+  // 放在维护通道**之后**：先想清事实，再做情绪加工（真实睡眠就是这个次序）。
+  //
+  // 为什么独立成一个通道而不是"整理的副产品"：
+  //   · 它的输入不同：维护通道吃的是没巩固的 episode；
+  //     梦境通道吃的是**已经消化过的**情绪残留 + 身体状态 + 最近在意的事。
+  //   · 它的产物不同：梦是 isFake 的，永远不许进记忆。混在整理里迟早出事。
+  //   · 它的成败不同：整理失败必须让人看见；梦没做成只是"今晚无梦"，不该报错。
+  if (!phases.some(p => p.name === "做梦")) {
+    let dreamOut = { ok: false, why: "跳过" }
     try {
       const cfg = config()
-      if (cfg.dream?.enabled === false) throw new Error("dream disabled")
-      const { dream } = await import("./dream.mjs")
-      const d = await dream()
-      if (d) console.log("[sleep] 做了一个梦：" + d.text.slice(0, 60))
-      else console.log("[sleep] 今晚无梦")
-    } catch (e) { console.log("[sleep] 梦没做成：" + String(e.message).slice(0, 80)) }
+      if (cfg.dream?.enabled === false) dreamOut.why = "配置关着"
+      else {
+        const { dream, dreamTrpg } = await import("./dream.mjs")
+        // 用 TRPG 版（多幕 + 掷骰 + 选择），有则用之；失败退回单段短梦。
+        //
+        // 为什么先试 TRPG：见 dream.mjs 里 dreamTrpg 的注释 ——
+        // 旁白式做梦她只是在看故事，TRPG 式她要**在梦里做决定**，
+        // 那才是 REM"把这件事还带着的温度降下来"的机制。
+        let d = null
+        try { d = await dreamTrpg({ turns: 3 }) } catch (e) { swallow(e, 'sleep:dream-trpg') }
+        if (!d) d = await dream()
+        dreamOut = d
+          ? { ok: true, turns: d.turns || 0, chars: String(d.text || "").length, head: String(d.text || "").slice(0, 50) }
+          : { ok: false, why: "今晚无梦（没有素材或没通过隔离检查）" }
+        if (d) console.log("[sleep] 💭 梦境通道：" + (d.turns ? d.turns + " 幕 · " : "") + dreamOut.head)
+        else console.log("[sleep] 💭 梦境通道：今晚无梦")
+      }
+    } catch (e) { dreamOut = { ok: false, why: String(e.message).slice(0, 80) }; console.log("[sleep] 💭 梦境通道失败：" + dreamOut.why) }
+    mark("做梦", dreamOut)
   }
   /**
    * 归档代码：git 可用就提交；不可用就 tar.gz 快照（v5）。
