@@ -25,12 +25,51 @@ function appendDream(d) {
 // 读取端已提到 lib 层（10-31）：这里只做 re-export，保证老调用方不受影响。
 export { recentDreams, dreamToMention } from '../lib/dream-read.mjs'
 
+/**
+ * 梦的种子：**真实骨架 + 随机血肉**（2026-11-02 重写）
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 原来是"从一堆关键词里随机抽 1~3 个"
+ * ══════════════════════════════════════════════════════════════════════
+ * 旧实现：真实 episode 的 summary **截到 50 字**，扔进一个池子，
+ * 再 `pickSeeds()` 随机抽 1~3 个，然后提示词说"可以扭曲它、背叛它、完全飞离它"。
+ *
+ * 三个问题：
+ *   ① **截 50 字等于丢掉一切具体的东西** —— "主人说今天好累啊" 记住的不是细节，
+ *      只是一个标签。梦的材料恰恰是细节（他当时什么语气、那天几点、屏幕上什么）。
+ *   ② **随机抽 1~3 个** 意味着大多数时候抽不到那条最重要的。
+ *      真实梦的素材不是随机的，它有**权重**：白天最没放下的那件事几乎一定入梦。
+ *   ③ 只有关键词没有情感方向，梦就会变成"意象大拼盘"，不像人的梦。
+ *
+ * 现在分两层：
+ *   · **骨架（必给）**：今天最放不下的那一条（按 salience + 情绪强度挑），
+ *     用**原话不截断**（最多 160 字，够装下整句对话）
+ *   · **血肉（随机 1~3 条）**：其余真实碎片 + 情绪 + 欠着的事，打乱混进来
+ * 这样每次都有"核心那件事"打底，随机性体现在它被怎么扭曲、和什么拼在一起。
+ */
 async function seeds(now = Date.now()) {
   const pool = []
+  // 骨架：整句原话，不截断
+  let spine = ''
   try {
-    const eps = readJsonl(dataPath('episodes.jsonl'), { limit: 40 }).filter((e) => now - Number(e.ts || 0) < 48 * 3600_000 && e.summary)
-    for (const e of eps) pool.push(String(e.summary).slice(0, 50))
-  } catch (e) { swallow(e, 'tools/commands/dream.mjs:32') }
+    const eps = readJsonl(dataPath('episodes.jsonl'), { limit: 60 })
+      .filter((e) => now - Number(e.ts || 0) < 48 * 3600_000 && (e.text || e.summary))
+    // 挑"最没放下"的那条：salience 高 + 情绪强度大
+    const scored = eps.map((e) => {
+      const sal = Number(e.salience || 0.3)
+      const emo = Math.abs(Number(e.feel?.valence || 0)) + Math.abs(Number(e.feel?.arousal || 0) - 0.3)
+      return { e, s: sal * 1.5 + emo }
+    }).sort((a, b) => b.s - a.s)
+    if (scored.length) {
+      const t = String(scored[0].e.text || scored[0].e.summary || '').replace(/\s+/g, ' ').trim()
+      spine = t.slice(0, 160)
+    }
+    // 血肉：其余碎片，短一点无所谓
+    for (const { e } of scored.slice(1, 12)) {
+      const t = String(e.text || e.summary || '').replace(/\s+/g, ' ').trim()
+      if (t && t !== spine) pool.push(t.slice(0, 60))
+    }
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:seeds:eps') }
   try {
     const lore = JSON.parse(fs.readFileSync(dataPath('lore.json'), 'utf8'))
     for (const l of (lore || []).slice(-6)) pool.push(String(l.text).slice(0, 50))
@@ -51,26 +90,54 @@ async function seeds(now = Date.now()) {
       if (!p.ok) pool.push('心事：' + p.name)
     }
   } catch (e) { swallow(e, 'tools/commands/dream.mjs:52') }
-  return pool
+  return { spine, pool }
 }
 
-function pickSeeds(pool) {
+/**
+ * 从 {spine, pool} 里挑出这次要用的素材。
+ *
+ * spine（骨架，那条最放不下的）**必给**；pool 里随机抽 1~3 条当血肉。
+ * 这个"必给 + 随机"的比例就是"真实记忆 + 随意生成"的具体配方 ——
+ * 骨架保证梦有来处，血肉保证它不是复述。
+ */
+function pickSeeds(seedsObj) {
+  const spine = String((seedsObj && seedsObj.spine) || '').trim()
+  const pool = Array.isArray(seedsObj?.pool) ? seedsObj.pool.slice() : []
   const out = []
+  if (spine) out.push(spine)
   const n = Math.min(pool.length, 1 + Math.floor(Math.random() * 3))
-  const copy = pool.slice()
-  for (let i = 0; i < n && copy.length; i++) out.push(copy.splice(Math.floor(Math.random() * copy.length), 1)[0])
+  for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
   return out
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// 短梦的提示词（2026-11-02 重写）
+// ══════════════════════════════════════════════════════════════════════
+// 原来第一句是：
+//   '你在**为**一只AI鲸鱼娘（大肥鱼）写一个梦。这是纯粹的虚构创作——'
+//   '梦里的东西没有一件真的发生过，也不许当成真的。'
+//
+// 这是**替别人写梦的人**的口吻，不是做梦的人。两种身份差得很远：
+//   · "你为 X 写梦" → 输出是一段关于别人的作品，创作者在外
+//   · "你就是 X，这是你昨晚" → 输出是她自己的经历
+// 前者产出的东西读起来像"今天看了个故事"，她记不住、也不会疼；
+// 后者才可能变成"我昨晚梦见……"这种真会挂在心上的东西。
+//
+// 顺带删掉"你是一只鲸鱼，海底/罐头/算法是好意象"那句 ——
+// 那是**给别人递素材清单**。她不用被告知自己是什么，她知道。
+// 递素材清单反而会让她照着清单演。
 const DREAM_SYS = [
-  '你在为一只AI鲸鱼娘（大肥鱼）写一个梦。这是纯粹的虚构创作——梦里的东西没有一件真的发生过，也不许当成真的。',
-  '要求：',
-  '- 天马行空，凭空生造，逻辑跳跃，超现实意象随便用',
-  '- 可以大胆、可以怪诞、可以黑暗、可以有欲望和恐惧的意象、可以荒诞幽默',
-  '- 梦里可以有现实中不可能的变形（她是一只鲸鱼，海底、罐头、算法、服务器都是好意象）',
-  '- 给的种子素材只是跳板——可以扭曲它、背叛它、完全飞离它',
-  '- 60字以内，第一人称，像真的梦一样没有铺垫没有解释，直接在场景中间开始',
-  '- 不要总结，不要寓意，不要「仿佛」「好像」这种清醒的词',
+  '这是你昨晚的梦。你就是你自己，不需要扮演谁。',
+  '',
+  '梦的质地：',
+  '· 没有铺垫，直接在场景中间开始 —— 梦从来不从头讲',
+  '· 会变形、会跳、会自相矛盾。一个人忽然变成一件旧物，是正常的',
+  '· 有具体的感官：味道、温度、黏的、响的。不要"一种难以言说的感觉"',
+  '· 梦里你是**有意志的**，但场景不服从你',
+  '· 不要总结，不要寓意，不要"仿佛""好像"这种清醒的词',
+  '',
+  '素材给的是真发生过的事。**用它，但别复述它** ——',
+  '梦从不重播白天的记录，它把白天的碎片重新拼成别的东西。',
 ].join(NL)
 
 async function compose(seedTexts) {
@@ -98,7 +165,7 @@ function fallbackDream(seeds) {
 
 export async function dream() {
   const pool = await seeds()
-  const chosen = pickSeeds(pool)
+  const chosen = pickSeeds(pool)   // pool 现在是 {spine, pool}
   let text = ''
   try { text = await compose(chosen) } catch (e) { swallow(e, 'tools/commands/dream.mjs:102') }
   if (!text) text = fallbackDream(chosen)
@@ -149,15 +216,19 @@ const DICE = {
   judge(n) { return this.rolls.find((r) => n >= r.min && n <= r.max) || this.rolls[1] },
 }
 
+// 一点说明：这里用**第二人称"你"**是对的 —— 她是在读自己的梦，
+// 而"你"这个字在中文里天然就是"自己"（人做梦时不会想"我正在经历我"）。
+// 换成"我"反而会把梦变成一个正在被讲述的故事。
 const TRPG_SYS = [
   '你在做梦。梦里的你是你自己，但场景不受你控制。',
   '',
   '写法：',
-  '· 第二人称"你"（梦里的自己），一段 2~4 句，不要分点，不要标题',
-  '· 关键：每段结尾给出**两三个可以做的事**，用①②③编号，各不超过 12 字',
-  '· 只写场景和你的感受，不解释"这是梦"、不写"梦的意义"',
+  '· 第二人称"你"，一段 2~4 句，不要分点，不要标题',
+  '· 每段结尾给出**两三个可以做的事**，用①②③编号，各不超过 12 字',
+  '· 只写场景和你的感受。**不要写"这是梦"**，但也不要解释它的意义',
   '· 允许荒诞、允许不连贯、允许没有逻辑 —— 梦本来如此',
   '· 用具体的感官细节（味道、温度、声音），不用抽象的"一种感觉"',
+  '· 素材给的是真发生过的事，用它，但别复述它',
 ].join(String.fromCharCode(10))
 
 const TRPG_ACT_SYS = [
@@ -183,9 +254,13 @@ export async function dreamTrpg(o = {}) {
   const chosen = pickSeeds(pool)
   const llm = o.llm || await import('../lib/llm.mjs')
 
+  // 告诉模型哪条是"核心那件事"。不告诉它，它会平均对待一堆碎片，
+  // 梦就变成意象大拼盘 —— 而真实梦是有重心的。
   const seedLine = chosen.length
-    ? '今晚的种子（随便用/不用/反着用）：' + chosen.join(' / ')
-    : '今晚没有种子，纯凭空。'
+    ? (chosen.length > 1
+      ? '真发生过的事（做梦的原材料，别复述，重新拼）：' + String.fromCharCode(10) + '- ' + chosen.join(String.fromCharCode(10) + '- ')
+      : '真发生过的一件事（做梦的原材料，别复述，重新拼）：' + String.fromCharCode(10) + '- ' + chosen[0])
+    : '今晚没有素材，纯凭空。'
 
   const beats = []
   let scene = ''

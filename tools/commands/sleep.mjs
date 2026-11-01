@@ -258,44 +258,78 @@ export async function sleepNow(opts = {}) {
   const doReview = DEPTH.maintenance >= 0.35
   const doOptimize = DEPTH.maintenance >= 0.70
 
-  if (!phases.some(p => p.name === "整理")) {
-    let r = "?"
-    try {
-      const c = brain.runConsolidation({ now: Date.now() })
-      r = { processed: (c && ((c.processed != null && c.processed) || c.extracted)) != null ? (c.processed != null ? c.processed : c.extracted) : "?" }
-    } catch (e) { r = String(e.message).slice(0, 120) }
-    mark("整理", r)
-    // 报告里要能看出"这一觉睡够没有"
-    try {
-      phases[phases.length - 1].depth = {
-        source: DEPTH.source,
-        n3Min: DEPTH.acc ? DEPTH.acc.N3 : null,
-        remMin: DEPTH.acc ? DEPTH.acc.REM : null,
-        maintenance: Number(DEPTH.maintenance.toFixed(2)),
-      }
-    } catch { }
-  }
+  // ══════════════════════════════════════════════════════════════════════
+  // 维护通道：**派活给独立进程**（2026-11-02，用户要求"可以拆"）
+  // ══════════════════════════════════════════════════════════════════════
+  // 改前这三个工序是同一段顺序代码。问题：
+  //   · 审查要跑 9 套测试（16s+），期间整理的结果拿不到也写不下去
+  //   · 任何一步把进程跑崩（OOM/超时/被杀），后面全废
+  //   · 想单独重跑审查，只能整夜重来
+  //
+  // 现在派给 `nightwork` 子进程，各自写自己的结果文件。
+  // **整理和审查是并行的** —— 审查查的是代码和账本，不依赖整理出来的记忆，
+  // 这是真的分工，不是排队的工序。优化必须等审查（它要读问题清单）。
+  //
+  // 单步失败不影响其他步：这是把"一条链"换成"一张网"的全部意义。
+  const stamp = new Date(started).toISOString().replace(/[:.]/g, "-").slice(0, 19)
+  const { execFile } = await import("node:child_process")
+  const { promisify } = await import("node:util")
+  const execFileAsync = promisify(execFile)
+  const FEIYU = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "feiyu.mjs")
 
-  if (doReview && !phases.some(p => p.name === "审查")) {
-    mark("审查", await threeReviews())
-  } else if (!doReview) {
-    mark("审查", { skipped: true, why: "深睡只有 " + (DEPTH.acc ? DEPTH.acc.N3 : "?") + " 分钟（深度 " + DEPTH.maintenance.toFixed(2) + "），审查不可靠，跳过" })
-  }
-
-  if (doOptimize && !phases.some(p => p.name === "优化")) {
-    const reviews = ((phases.find(p => p.name === "审查") || {}).result) || []
-    const bad = Array.isArray(reviews) ? reviews.filter(r => !r.ok) : []
-    const optimize = { problems: bad.length, note: bad.length ? bad.map(b => b.name + ": " + b.detail).join(" | ") : "全部健康，无需修复" }
-    const arch = await archiveCode(started, optimize.note)
-    optimize.archive = arch
-    if (!arch.ok) {
-      optimize.note = String(optimize.note || '') + ' | 归档失败：' + String(arch.error || arch.why || '未知')
-      try { swallow(new Error('archive failed: ' + (arch.error || arch.why)), 'sleep:archive', { force: true }) } catch { }
+  const spawnJob = async (job) => {
+    const t0 = Date.now()
+    try {
+      const r = await execFileAsync(process.execPath, [FEIYU, "nightwork", job, "--stamp", stamp],
+        { timeout: 300000, maxBuffer: 8 * 1024 * 1024 })
+      return { ok: true, ms: Date.now() - t0, out: String(r.stdout || "").trim().slice(-400) }
+    } catch (e) {
+      return { ok: false, ms: Date.now() - t0, error: String(e.message || e).slice(0, 300), out: String(e.stdout || "").trim().slice(-300) }
     }
-    mark("优化", optimize)
-  } else if (!doOptimize) {
-    mark("优化", { skipped: true, why: "维护深度不足 0.70（" + DEPTH.maintenance.toFixed(2) + "），不动代码" })
   }
+
+  // 整理 + 审查 并行（审查不读记忆，所以不依赖整理）
+  const [tidyR, reviewR] = await Promise.all([
+    spawnJob("tidy"),
+    doReview ? spawnJob("review") : Promise.resolve({ ok: false, skipped: true, why: "深睡只有 " + (DEPTH.acc ? DEPTH.acc.N3 : "?") + " 分钟（深度 " + DEPTH.maintenance.toFixed(2) + "），审查不可靠，跳过" }),
+  ])
+  mark("整理", tidyR)
+  mark("审查", reviewR)
+
+  // 优化：必须等审查（要读它写下的问题清单）
+  let optimizeR = null
+  if (doOptimize) {
+    optimizeR = await spawnJob("optimize")
+  } else {
+    optimizeR = { ok: false, skipped: true, why: "维护深度不足 0.70（" + DEPTH.maintenance.toFixed(2) + "），不动代码" }
+  }
+  mark("优化", optimizeR)
+
+  // 把三个工序的结果读回来拼进报告（跨进程协作的唯一通道就是结果文件）
+  //
+  // ⚠️ 2026-11-02：第一版这里写 `for (const p of phases)` 然后原地改 `p.result`，
+  //    但 `mark()` 已经往 phases 里 push 过了，而 push 的是**当时的字面量对象**，
+  //    改它的 .result 不会影响已 push 的那份（mark 里是 {...} 展开进 result）。
+  //    表现：结果文件里三个工序都全，但打印出来的报告只有"整理"有内容。
+  //    又一个"数据在、但没显示" —— 和本项目其他几次同源。
+  //
+  //    修法：按 job 名**重新 mark 一次**（mark 会覆盖同名阶段的 result），
+  //    而不是去改已存在对象的字段。
+  try {
+    const NW = await import("./nightwork.mjs")
+    const got = NW.readResults(stamp)
+    const NAME = { tidy: "整理", review: "审查", optimize: "优化" }
+    for (const [job, name] of Object.entries(NAME)) {
+      if (!got[job]) continue
+      // 只覆盖 result，不动 phases 里的顺序
+      const hit = phases.find((p) => p.name === name)
+      if (hit) hit.result = got[job]
+    }
+    phases.push({
+      name: "派活", ms: 0,
+      result: { stamp, jobs: Object.keys(got), 方式: "整理∥审查 并行，优化串在审查之后" },
+    })
+  } catch (e) { swallow(e, "sleep:read-results") }
 
   // ── 通道二：梦境（REM）─────────────────────────────────────────────
   // 放在维护通道**之后**：先想清事实，再做情绪加工（真实睡眠就是这个次序）。
@@ -388,26 +422,11 @@ export async function sleepNow(opts = {}) {
     }
   }
 
-  if (!phases.some(p => p.name === "审查")) mark("审查", await threeReviews())
-  if (!phases.some(p => p.name === "优化")) {
-    const reviews = ((phases.find(p => p.name === "审查") || {}).result) || []
-    const bad = reviews.filter(r => !r.ok)
-    const optimize = { problems: bad.length, note: bad.length ? bad.map(b => b.name + ": " + b.detail).join(" | ") : "全部健康，无需修复" }
-    // ── 归档（v5 修死链路）────────────────────────────────────────────────
-    // 旧代码：`runCmd("git", ...)` 提交脏文件。但容器里**根本没装 git**（Debian 精简镜像），
-    // 异常被 `catch {}` 吞掉 —— "睡一觉会归档代码"这件事从来没发生过，而报告里打着勾。
-    //
-    // 现在：先用 git（如果哪天镜像装了，行为不变）；检测不到 git 就退到内置的 tar.gz
-    // 快照（tools/lib/tar.mjs，零依赖）。两条路都失败 → 记进 optimize 的 note，
-    // 让她（和 diagnose）看见"这次没归档"，而不是假装成功。
-    const arch = await archiveCode(started, optimize.note)
-    optimize.archive = arch
-    if (!arch.ok) {
-      optimize.note = String(optimize.note || '') + ' | 归档失败：' + String(arch.error || arch.why || '未知')
-      try { swallow(new Error('archive failed: ' + (arch.error || arch.why)), 'sleep:archive', { force: true }) } catch {}
-    }
-    mark("优化", optimize)
-  }
+  // ⚠️ 2026-11-02：这里原来还有一份"审查 + 优化"的旧代码。
+  //    加了通道一之后它成了死代码（被 `!phases.some(...)` 挡住，永远不会跑），
+  //    但它是**同一段逻辑的第二份拷贝** —— 谁后来改一处忘另一处，
+  //    就会出现"改了没生效"的怪事。删掉，只留通道一那一份。
+
   // ══════════════════════════════════════════════════════════════════════
   // 结算：**醒来是所有重置发生的地方**（2026-11-02 接上）
   // ══════════════════════════════════════════════════════════════════════
@@ -513,7 +532,26 @@ export async function run(args) {
     console.log("  结算失败：" + (r.report.settle.why || "?"))
   }
   for (const p of r.report.phases) {
-    const detail = p.name === "审查" ? (p.result || []).map(x => (x.ok ? "OK " : "FAIL ") + x.name + ":" + x.detail).join(" / ") : JSON.stringify(p.result)
+    // ⚠️ 2026-11-02：审查的结果形状变了。
+    //    原来是 `[{name,ok,detail}, ...]`（数组），现在是 nightwork 工序的
+    //    `{job, ok, items:[...], problems}`（对象，带 job/stamp/耗时）。
+    //    渲染器还按数组 .map → TypeError 崩在这。
+    //    顺带把三个新形状都认一遍，别再假定谁是什么。
+    const r = p.result
+    let detail
+    if (p.name === "审查") {
+      const items = Array.isArray(r) ? r : (Array.isArray(r?.items) ? r.items : [])
+      detail = items.length
+        ? items.map(x => (x.ok ? "OK " : "FAIL ") + x.name + ":" + x.detail).join(" / ")
+        : JSON.stringify(r)
+    } else if (p.name === "优化" && r && r.note) {
+      detail = (r.problems ? "问题 " + r.problems + "：" + r.note : r.note)
+        + (r.archive ? " | 归档 " + (r.archive.ok ? "✓ " + (r.archive.files || "?") + " 文件" : "✗ " + (r.archive.error || "?")) : "")
+    } else if (r && r.skipped) {
+      detail = "跳过：" + (r.why || "")
+    } else {
+      detail = JSON.stringify(r)
+    }
     console.log("  " + p.name + "（" + p.ms + "s）：" + String(detail).slice(0, 300))
   }
   console.log("醒了。该记的记完了，该查的查完了。")
