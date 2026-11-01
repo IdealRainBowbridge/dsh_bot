@@ -71,3 +71,8 @@ export const rhythmPath = () => path.join(metaDir(), 'rhythm.json')
 export const innerPath = () => path.join(metaDir(), 'inner.json')
 export const innerStreamPath = () => path.join(logDir(), 'stream.jsonl')
 export const segmentDir = () => path.join(BRAIN(), 'seg')
+
+/* ── 2026-11-02：器官层 ─────────────────────────────────────────────── */
+export const hpaPath = () => path.join(metaDir(), 'hpa.json')
+export const thalamusPath = () => path.join(metaDir(), 'thalamus.json')
+export const sleepPath = () => path.join(metaDir(), 'sleep.json')

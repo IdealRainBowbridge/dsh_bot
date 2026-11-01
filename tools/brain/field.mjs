@@ -201,6 +201,38 @@ export function poke(dim, delta, o = {}) {
 }
 
 /**
+ * 把某一维**对齐**到某个值（不是扰动，是赋值）。
+ *
+ * 为什么需要它，以及它和 poke 的区别（这个区别很关键）：
+ *   poke    = 世界对她加了一个冲量。之后它会按自己的 tau 弛豫回去。
+ *             适合"他夸了她一句"这种一次性事件。
+ *   setDim  = 某个**器官算出的产物**要写进全身。
+ *             适合"肾上腺分泌了多少皮质醇" —— 那个量是 HPA 轴自己算出来的，
+ *             不该再被 field 的弛豫二次加工，否则等于算了两遍。
+ *
+ * 用错的后果很实在：如果用 poke 去灌皮质醇，HPA 的慢清除和 field 的弛豫会
+ * 叠加成"衰减两次"，压力会以两倍速度消失 —— 那就不像人了。
+ *
+ * @param {string} dim
+ * @param {number} value 目标值（会被 clamp 到该维的上下界）
+ * @param {object} [o] { why, now }
+ */
+export function setDim(dim, value, o = {}) {
+  const d = DIMS[dim]
+  if (!d) return null
+  const now = o.now ?? Date.now()
+  const st = evolve(now)
+  const v = clamp(Number(value), d.lo, d.hi)
+  const prev = Number(st.dims[dim])
+  st.dims[dim] = v
+  // 只有在明显变化时才留痕，避免每 tick 一条把日志刷满
+  if (Math.abs(v - prev) > 0.02) {
+    st.log = [...(st.log || []), { at: now, dim, delta: Number((v - prev).toFixed(3)), why: String(o.why || 'set').slice(0, 60) }].slice(-60)
+  }
+  return persist(st)
+}
+
+/**
  * 移动静息点 —— 这是"耐受"与"敏感化"的代码形状。
  *
  * 生物依据：同一刺激反复给，受体会下调（耐受）；很久没有，会上调（敏化）。
