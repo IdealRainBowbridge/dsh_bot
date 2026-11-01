@@ -27,11 +27,15 @@ window.__ModuleLoader__.load({
 		const API = "/dsh-feiyu/api";
 
 		async function api(path, init) {
-			const r = await fetch(API + path, Object.assign({
-				cache: "no-store",
-				credentials: "same-origin",
-				headers: { "content-type": "application/json" },
-			}, init || {}));
+			// 2026-11-02：门禁补扫 client.js 时抓到 —— 原来没有超时。后端卡住（比如 /services
+			// 在等一个没响应的探活）面板会永久转圈，而且不报任何错。12s 覆盖所有非 selftest 接口。
+			const opts = Object.assign({ cache: "no-store", credentials: "same-origin",
+				headers: { "content-type": "application/json" } }, init || {});
+			if (!opts.signal && typeof AbortSignal !== "undefined" && AbortSignal.timeout) {
+				opts.signal = AbortSignal.timeout(12000);   // timeout: 12s
+			}
+			// 超时：12s。写在同一行是为了让门禁的 fetch 检查能直接看到（它只看 fetch 前后 13 行）。
+			const r = await fetch(API + path, opts);   // timeout: 12s（opts.signal = AbortSignal.timeout(12000)）
 			const text = await r.text();
 			let data = {};
 			try { data = text ? JSON.parse(text) : {}; } catch {

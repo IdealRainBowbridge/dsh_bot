@@ -447,7 +447,11 @@ function checkNoTimeout(files) {
     const src = stripComments(fs.readFileSync(f, 'utf8'))
     const lines = src.split('\n')
     lines.forEach((l, i) => {
-      const zone = lines.slice(i, i + 13).join('\n')
+      // 窗口必须**双向**：2026-11-02 补扫 client.js 时踩到 —— 正确写法是
+      //   const opts = {...}; opts.signal = AbortSignal.timeout(12000); await fetch(url, opts)
+      // 信号绑在 fetch **上面两行**，而原来只往下看 13 行 → 好代码被判成"无超时"。
+      // 往前看 6 行：足够覆盖"先备好参数再发起"的常规写法，又不至于把隔壁函数的 signal 借过来。
+      const zone = lines.slice(Math.max(0, i - 6), i + 13).join('\n')
       // fetch(...)
       if (/(?<![.\w$])fetch\s*\(/.test(l)) {
         if (!/signal\s*:|AbortSignal|timeout/.test(zone)) {
@@ -679,7 +683,13 @@ const FILE_ALLOW = {
 // 函数级例外：这些是"主闭包"（把所有子功能装进同一个作用域），
 // 拆它们的正确做法是抽出可独立测试的纯逻辑（已完成：onebot.mjs），
 // 剩下的闭包内部函数彼此共享 send/callApi/config，强拆只会制造更多参数传递。
+// 2026-11-02：client.js 被纳入扫描后暴露的真欠账。
+// FeiyuSection() 878 行 —— 它不是"没拆"，而是**树直接吃状态**：return 里 setDraft 出现 44 次、
+// setBusy 14 次，把树抽成纯组件的代价是要把 15 个 setter 逐个往下传，比现在更差。
+// 正确的做法是引入 reducer（draft 22 处直接改）或拆成多个自洽的子面板 —— 那是独立一轮重构。
+// 先登记，别让它挡住门禁；门禁的价值是"新账不许再欠"，不是"旧账一天还完"。
 const FUNC_ALLOW = {
+  'client.js:FeiyuSection': 900,
   // qq-server 的 run() 是主闭包 —— 它的长度 ≈ 文件长度，文件护栏已经覆盖。
   // 10-31 从 1600 调到 1700：为了治"一小时内连发 6 条主动消息"，在闭包里加了
   // 主动发言闸门（ownerSpoke / canSpeak / spokeDone 三个 helper 在模块级，
@@ -719,7 +729,11 @@ function checkSize(files) {
 }
 
 // ── 跑 ────────────────────────────────────────────────────────────────────
-const files = ['tools', 'lib', 'test', 'scripts'].flatMap((d) => walk(path.join(ROOT, d)))
+// 2026-11-02 审查：client.js（1,080 行，面板 UI 逻辑）原来不在扫描范围 ——
+// walk 只走目录，根目录下的单文件被漏掉了，而 FILE_ALLOW 里却给它留了额度（1,150）。
+// 门禁全绿 ≠ 覆盖完全。现在把根目录的独立源文件补进来，任何新增的 *.js / *.mjs 都会自动被扫到。
+const ROOT_FILES = fs.readdirSync(ROOT).filter((n) => /\.(mjs|cjs|js)$/.test(n)).map((n) => path.join(ROOT, n))
+const files = [...['tools', 'lib', 'test', 'scripts'].flatMap((d) => walk(path.join(ROOT, d))), ...ROOT_FILES]
 checkSyntax(files)
 if (!FAST) {
   checkSpecifiers(files)

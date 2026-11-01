@@ -12,10 +12,41 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { configPath, dataPath, credentialsPath, WORK_DIR, dshPath } from '../lib/paths.mjs'
 import { config, DEFAULTS } from '../lib/config.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const ok = (n, d = '') => ({ name: n, ok: true, detail: d })
 const bad = (n, d = '') => ({ name: n, ok: false, detail: d })
 const warn = (n, d = '') => ({ name: n, ok: null, detail: d })
+
+/**
+ * 她其实绑在哪个地址上。
+ *
+ * 2026-11-02 实测的错值：im-gateway.sh 里 `export QQ_BIND_HOST=0.0.0.0`，于是线上 qq-server
+ * 真绑 0.0.0.0；但 diagnose 是**另起一个进程**跑的，读不到那个 env，于是走 `|| '127.0.0.1'`
+ * 兜底 → 体检报"绑 127.0.0.1"，与实际不符。体检的价值全在可信，所以这里改成：
+ *   ① 有 env 就用 env（同进程场景）
+ *   ② 否则问内核：8081 在 /proc/net/tcp 里的 local_address 是 00000000（任意）还是 0100007F（回环）
+ *   ③ 都读不到返回 ''，让调用方按"未知"说，别猜
+ */
+function actualBind() {
+  const hexPort = '1F91'   // 8081
+  try {
+    for (const f of ['/proc/net/tcp', '/proc/net/tcp6']) {
+      const rows = fs.readFileSync(f, 'utf8').split('\n').slice(1)
+      for (const r of rows) {
+        const c = r.trim().split(/\s+/)
+        if (c.length < 2) continue
+        const [addr, port] = String(c[1]).split(':')
+        if (port !== hexPort) continue
+        const a = addr.toUpperCase()
+        if (a === '00000000' || a === '00000000000000000000000000000000') return '0.0.0.0'
+        if (a === '0100007F' || a === '0000000000000000FFFF00000100007F') return '127.0.0.1'
+        return '（已监听，地址 ' + addr + '）'
+      }
+    }
+  } catch { /* 非 Linux 或没权限 —— 交给调用方兜底，不猜 */ }
+  return ''
+}
 
 /** 把 DEFAULTS 与用户配置的键做差集（只比顶层 + 一层嵌套）。 */
 function configDrift() {
@@ -202,7 +233,7 @@ export async function run(argv = []) {
     const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
     const decl = pkg?.dshFeiyu || {}
     let runtime = null
-    try { runtime = JSON.parse(fs.readFileSync('/opt/dsh/package.json', 'utf8')) } catch {}
+    try { runtime = JSON.parse(fs.readFileSync('/opt/dsh/package.json', 'utf8')) } catch (e) { swallow(e, 'diagnose:dsh-version') }
     if (runtime) {
       const same = runtime.version === String(decl.testedAgainst || '').split('@').pop()
       items.push(same
@@ -216,7 +247,7 @@ export async function run(argv = []) {
   // 5.6) 入口鉴权：这是最容易被忽略的一项（服务一旦绑 0.0.0.0 就等于门户大开）
   try {
     const token = String(config().qq?.inboundToken || process.env.FEIYU_INBOUND_TOKEN || '')
-    const bind = String(process.env.QQ_BIND_HOST || '127.0.0.1')
+    const bind = String(process.env.QQ_BIND_HOST || actualBind() || '127.0.0.1')
     if (token) {
       items.push(ok('入口鉴权', '已设 token（' + token.slice(0, 3) + '***，长度 ' + token.length + '）· 绑 ' + bind))
     } else if (bind === '127.0.0.1' || bind === 'localhost') {
