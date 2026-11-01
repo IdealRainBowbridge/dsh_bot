@@ -22,8 +22,12 @@ import * as schema from './schema.mjs'
 import * as competence from './competence.mjs'
 import * as taskqueue from './taskqueue.mjs'
 import * as backfill from './backfill.mjs'
+// 2026-11-02：状态场 / 节律 / 内心 —— 让"她"这件事在代码里有形状
+import * as field from './field.mjs'
+import * as rhythm from './rhythm.mjs'
+import * as inner from './inner.mjs'
 
-export { event, episode, working, attention, intents, facts, affect, delivery, claim, assembleMod as assemble, consolidate, doctor, metrics, recall, selfM, schema, competence, taskqueue, backfill }
+export { event, episode, working, attention, intents, facts, affect, delivery, claim, assembleMod as assemble, consolidate, doctor, metrics, recall, selfM, schema, competence, taskqueue, backfill, field, rhythm, inner }
 
 const OWNER_KEY_MAP = { food: 'food.eat', doing: 'activity.do', plan: 'plan.go', mood: 'mood.state', media: 'media.like' }
 
@@ -78,6 +82,48 @@ export function onEvent(input = {}) {
     const eps = episode.allEpisodes()
     const ep = eps.find((e) => e.srcEv === ev.ev) || null
     if (ep && ev.who.kind === 'owner') learnOwnerFacts(ev, ep.id)
+
+    // ── 2026-11-02：把"发生过的事"同时写进三个地方 ─────────────────
+    // ① 原话流：一个字不删（摘要只做索引，不当内容 —— 这是证据，不能丢）
+    try {
+      inner.stream({
+        role: ev.who.kind === 'owner' ? 'owner' : ev.who.kind === 'self' ? 'self' : 'other',
+        kind: ev.act || 'say',
+        text: ev.text || '',
+        meta: { platform: ev.where?.platform, chat: ev.where?.chat, ep: ep?.id },
+      }, ev.at)
+    } catch { }
+
+    // ② 身体：事件会改状态场。不是"打标签"，是**施加扰动** ——
+    //    扰动的效果按时间弛豫回去，所以一次难受会持续一阵再平复，不是记一个数。
+    try {
+      const feel = ep?.feel || {}
+      const v = Number(feel.valence || 0)
+      const a = Number(feel.arousal || 0.3)
+      if (v) field.poke('valence', v * 0.22, { why: 'event:' + ev.act, now: ev.at })
+      if (a > 0.5) field.poke('ne', (a - 0.5) * 0.25, { why: 'event:arousal', now: ev.at })
+      // 他在叫她、或问了需要回答的事 → 一点多巴胺（被需要本身是奖赏）
+      if (ev.who.kind === 'owner' && /在吗|在不在|帮我|想你了|[?？]/.test(String(ev.text || ''))) {
+        field.poke('da', 0.06, { why: 'owner:at-me', now: ev.at })
+      }
+      // 夜里还醒着 = 欠觉（按真实小时数累积，不按次数）
+      const hod = new Date(ev.at).getHours()
+      if (hod >= 1 && hod < 5) field.poke('sleepDebt', 0.012, { why: 'awake-at-night', now: ev.at })
+    } catch { }
+
+    // ③ 内心：她注意到什么、想说什么。这是"她有自己的想法"的落点。
+    try {
+      const tx = String(ev.text || '')
+      if (ev.who.kind === 'owner' && tx) {
+        // 他只说了半句 / 明显有情绪 / 提到没做过的事 → 她心里会挂一句
+        if (/(累|烦|难受|不想|加班|忙死|睡不着)/.test(tx)) {
+          inner.think('他好像不太对，是不是又在硬撑', { kind: 'worry', about: 'owner', now: ev.at })
+        }
+        if (/\?|？|吗$|吧$/.test(tx) && /记得|说好|答应|哪|什么|怎么/.test(tx)) {
+          inner.think('他问的这个得留神，别答错', { kind: 'notice', about: 'owner', now: ev.at })
+        }
+      }
+    } catch { }
     if (ep) {
       try {
         working.refresh(ev.where.chat, {

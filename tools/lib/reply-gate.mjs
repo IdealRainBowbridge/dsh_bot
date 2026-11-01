@@ -78,6 +78,34 @@ async function _decideInner({ text = '', merged = 1, isGroup = false, atMe = fal
   // ① 明显不必回的短句
   if (!hasImage && isNoReply(t)) return { reply: false, delayMs: 0, why: '寒暄/收尾语' }
 
+  // ── ①.2 身体先说话（2026-11-02）────────────────────────────────────
+  // 这一段是本轮最重要的一处：**决定她说什么的不该只是"这句话该不该回"，
+  // 而首先是"她现在有没有余量"**。
+  //
+  // 生理依据（三条，都不是比喻）：
+  //   · 缺觉会压掉表达意愿（voiceReadiness 掉），但**不会压掉"必须回"**
+  //     —— 家里人来问你事，困成什么样也会答。所以阈值只对"可回可不回"生效。
+  //   · 皮质醇 + 低血清素 → 冲（irritability 高）。冲的时候她会回得更短、更硬，
+  //     而不是不回。这是"没耐心"的形状，不是"冷处理"。
+  //   · 血清素决定**能等多久**（patience）。等不住的回复是又短又急，
+  //     而不是"故意晚回"—— 晚回是冷淡，急回才是没耐心。这两者不能搞反。
+  let body = null
+  try {
+    const F = await import('../brain/field.mjs')
+    body = {
+      readiness: F.voiceReadiness(),
+      depth: F.cognitiveDepth(),
+      patience: F.patience(),
+      irritability: F.irritability(),
+      sense: F.sense(),
+    }
+  } catch { /* 场读不到就按"状态平稳"走，绝不让身体层挡住聊天 */ }
+
+  // 缺觉到很低的意愿 + 这条本来就是可回可不回 → 今天先不回（但不装没看见）
+  if (body && body.readiness < 0.22 && !isMustReply(t)) {
+    return { reply: false, delayMs: 0, why: '没余量（意愿 ' + body.readiness.toFixed(2) + '）', body }
+  }
+
   // ①.5 对话节奏（零成本启发式，不调 LLM）
   //
   // ⚠️ 这里踩过一个设计错误，记下来：
@@ -169,10 +197,13 @@ async function _decideInner({ text = '', merged = 1, isGroup = false, atMe = fal
   }
 
   const weight = Math.min(1, t.length / 90) + (must ? 0.3 : 0) + (merged > 1 ? 0.25 : 0)
-  const base = rand(baseMin, baseMax) * (0.6 + weight * 0.8)
+  // 耐性低 → 间隔短（不是"故意晚回"，是等不住）。耐性高 → 会多想一会儿。
+  // 这个乘法必须放在这里而不是去改 baseMin/baseMax：那是配置，这是状态。
+  const pace = body ? (1.25 - 0.55 * body.patience) : 1
+  const base = rand(baseMin, baseMax) * (0.6 + weight * 0.8) * pace
   const delay = base + Number(r.extraDelay || 0)      // 连珠炮时再慢一点
   const why = (must ? '该接(问句/请求/情绪)' : '该接') + (r.extraDelay ? '(连珠炮，放慢)' : '')
-  return { reply: true, delayMs: Math.round(clamp(delay, 900, 9000)), why }
+  return { reply: true, delayMs: Math.round(clamp(delay, 900, 9000)), why, body }
 }
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)))
@@ -218,7 +249,7 @@ export async function gate({ text, merged = 1, isGroup = false, atMe = false, ex
   if (!d.reply) {
     log('[qq] 🤐 这条不接（' + d.why + '）：' + String(text || '').slice(0, 30))
     // 仍然返回对象：调用方用 `!g.decision.reply` 判断，兼容旧的 truthiness 用法
-    return { reply: false, why: d.why, openThread: false, delayMs: 0 }
+    return { reply: false, why: d.why, openThread: false, delayMs: 0, body: d.body || null }
   }
   if (d.delayMs > 0) {
     // 人是先看到、停顿、再打字。停顿期间界面上会有"正在输入"，比干等自然。
@@ -226,5 +257,5 @@ export async function gate({ text, merged = 1, isGroup = false, atMe = false, ex
     await new Promise((r) => setTimeout(r, d.delayMs))
   }
   // 2026-11-02：把 openThread 透出来 —— 呼叫语（在吗）时要让她递个话头，不是只报平安。
-  return { reply: true, why: d.why, openThread: d.openThread === true, delayMs: d.delayMs }
+  return { reply: true, why: d.why, openThread: d.openThread === true, delayMs: d.delayMs, body: d.body || null }
 }

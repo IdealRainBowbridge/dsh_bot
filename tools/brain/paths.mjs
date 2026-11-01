@@ -65,3 +65,9 @@ export const diaryPath = (date = new Date()) => {
   return path.join(consDir(), `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.md`)
 }
 export const workingPath = (chatId) => path.join(workDir(), String(chatId || 'misc').replace(/[^\w.-]/g, '_') + '.json')
+/* ── 2026-11-02：状态场 / 节律 / 内心（field · rhythm · inner）─────────── */
+export const fieldPath = () => path.join(metaDir(), 'field.json')
+export const rhythmPath = () => path.join(metaDir(), 'rhythm.json')
+export const innerPath = () => path.join(metaDir(), 'inner.json')
+export const innerStreamPath = () => path.join(logDir(), 'stream.jsonl')
+export const segmentDir = () => path.join(BRAIN(), 'seg')

@@ -596,6 +596,9 @@ const ALLOWED_REVERSE = [
   'tools/lib/persona.mjs',           // 提示词装配要用脑的七路召回
   'tools/lib/promise-executor.mjs',  // 承诺兑现要落 intents
   'tools/lib/promises.mjs',          // 同上
+  'tools/lib/think.mjs',             // 「先想后说」的执行体：要读身体状态（field）和心里的念头（inner）
+                                     // 才能决定她此刻会怎么想。它是 lib 层里唯一必须看脑的地方 ——
+                                     // 因为"怎么想"本身就是脑的职责，而它只是个执行器。
   'tools/lib/reply-gate.mjs',        // 函数体内动态 import：判完接话时机顺手把情绪写进 affect，
                                      // 省掉「回复完再单独调一次判情绪」那次 LLM 往返
 ]

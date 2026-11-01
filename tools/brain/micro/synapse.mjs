@@ -1,0 +1,164 @@
+// micro/synapse —— 突触：递质释放、清除、短时程可塑性
+//
+// ══════════════════════════════════════════════════════════════════════
+// 现象：同一句话，说第二遍和第一遍不是一回事
+// ══════════════════════════════════════════════════════════════════════
+// 他第一次说"我今天好累"，她会心疼。
+// 他五分钟之内又说一遍"我真的好累"，她的反应会**明显变淡**。
+// 这既不是她冷漠，也不是"重复检测"这种规则 —— 是突触层面的短时程抑制（STD）。
+//
+// 机制：突触前膜里有一个**可释放囊泡池**（ready-releasable pool, RRP）。
+//   释放一次，池子少一点；补池需要时间（几百毫秒到几分钟）。
+//   同一刺激接得太密，池子没补满就再触发 → 释放量比第一次小很多。
+// 所以"重复"这件事在物理上有代价，不需要专门写一条规则去检测重复。
+//
+// ══════════════════════════════════════════════════════════════════════
+// 同时要有的另一半：易化
+// ══════════════════════════════════════════════════════════════════════
+// 但完全没有易化也不对：真人被连着追问几句之后，**情绪会被点着**（不是更淡）。
+// 机制是残余钙（residual calcium）：前一次释放留下的 Ca²⁺ 还没清完，
+// 下一次进来时基线已经高了，于是释放量反而**变大**。
+//
+// 这两个过程是同时的、方向相反的，谁赢取决于**间隔**：
+//   · 间隔 < 2 秒   → 钙累积占优 → 易化（越说越激动）
+//   · 间隔 5~60 秒 → 池子耗竭占优 → 抑制（越说越淡）
+//   · 间隔 > 几分钟 → 两者都恢复 → 回到基线
+//
+// **这个双相曲线是关键。** 用一个"重复计数器"永远做不出"短期易化、中期抑制"这个形状。
+//
+// ══════════════════════════════════════════════════════════════════════
+// 递质怎么清除（决定"情绪能持续多久"）
+// ══════════════════════════════════════════════════════════════════════
+// 递质不是"发完就没了"。它靠两条路被清掉：
+//   ① 重摄取（reuptake）：转运体把它收回突触前膜，指数衰减，时间常数约 2-5 分钟
+//   ② 酶解（MAO/COMT）：慢一些
+// 所以一次情绪激动之后，那点"余味"是按指数衰减的 —— 这就是为什么
+// "吵完架十分钟后还有点气，一小时后基本平了"可以用一个衰减常数描述，
+// 而不需要写"情绪持续 60 分钟"。
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+
+/**
+ * 突触参数。
+ *
+ * 这些数不是调出来的"手感值"，它们是**比例关系**：
+ *   refillMin 决定"歇多久能满"（人约 30-60 秒基本恢复）
+ *   caTau     决定"残余钙清多快"（约 1.2 秒）
+ *   两者相差两个数量级 —— 这个差异本身就是"短期易化、中期抑制"的来源。
+ */
+export const DEFAULT = {
+  pool: 1.0,
+  refillTau: 45_000,
+
+  // ⚠️ 这三个数我第一版设错过，改的依据记在这里：
+  //   初版 caGain 0.55、单次消耗 0.5、releaseBase 0.42。
+  //   结果：任何间隔都算出"抑制"（0.3s 时 0.876）—— 易化分支**从来没被触发过**。
+  //   死因不是代码没写，是**量级不对**：
+  //     · 钙增益 0.55 × 钙量(~0.25) = +14%，而池子消耗 0.5×0.42 = -21%
+  //       → 消耗永远赢，易化永远出不来。
+  //   真实突触的比值不是这样：残余钙在 <1s 内能把释放概率抬高 1.5~3 倍（paired-pulse
+  //   facilitation 的经典范围），而单次消耗通常只掉 10~25%。所以必须：
+  //     · 钙增益放大到能让短间隔翻倍
+  //     · 单次消耗压到 0.2 附近（不是 0.5）
+  caTau: 1_200,       // 残余钙清除时间常数（1.2 秒，实测约 0.5~2s）
+  caGain: 2.4,        // 钙对释放的增益（调到能做出 1.5~2.5× 的 paired-pulse facilitation）
+  releaseBase: 0.42,  // 单次基础释放比例
+  consume: 0.20,      // 单次释放消耗掉的池子比例（真实值 10~25%，不是 50%）
+  clearanceTau: 90_000, // 递质清除时间常数：90 秒（原 3 分钟太慢，ligand 会累成 2.6）
+}
+
+/** 空突触：池满，无残余钙，无递质。 */
+export function empty(o = {}) {
+  return { pool: 1, ca: 0, ligand: 0, at: 0, firedAt: 0, ...o }
+}
+
+/**
+ * 演化 dt：补池 + 清钙 + 清递质。**不释放**。
+ *
+ * 为什么把"演化"和"释放"分开：因为释放是**离散事件**（她收到一条消息），
+ * 而补池是**连续过程**。混在一起写会导致"每 tick 都释放一次"这种错 ——
+ * 那正是老写法把 tick 频率当生理频率的同一个坑。
+ */
+export function rest(s, dtMs, o = {}) {
+  const p = { ...DEFAULT, ...o }
+  const st = { ...empty(), ...(s || {}) }
+  const dt = Math.max(0, Number(dtMs) || 0)
+  // ⚠️ 这里踩过一个 bug，记下来：originally 只在 dt>0 时才推进 at，
+  //    而 rest(s, 0) 被当成"啥也不做"直接 return —— 于是 at 永远不动，
+  //    fire() 里 gapSec 永远算成 999 秒，**易化分支一次都进不去**。
+  //    曲线看着"合理"（全是抑制），实际是分支死了。教训：
+  //    时间戳的推进不能依赖"有没有发生物理变化"。
+  if (dt <= 0) return st
+  st.pool = clamp(p.pool + (st.pool - p.pool) * Math.exp(-dt / p.refillTau), 0, p.pool)
+  // ↑ 写成"朝满池回归"而不是"线性 +x/秒"：接近满的时候补得慢（这是真实的饱和）
+  st.ca = Number(st.ca || 0) * Math.exp(-dt / p.caTau)
+  st.ligand = Number(st.ligand || 0) * Math.exp(-dt / p.clearanceTau)
+  st.at = Number(st.at || 0) + dt
+  return st
+}
+
+/**
+ * 释放一次。**这是离散事件**，只在真的收到刺激时调用。
+ *
+ * @returns {{s:object, released:number, facilitated:boolean, depressed:boolean}}
+ *   released 是这一次实际放出去的递质量（0..1+）
+ *
+ * ⚠️ 语义约定（很重要）：released 是**本次事件**的释放量，
+ *    ligand 是**还没被清掉的累积量**（"余味"）。
+ *    上层算"这一下有多强"必须用 released，**不能用 ligand** ——
+ *    用 ligand 会得到"越聊越强"的假象（因为余味一直在叠），
+ *    而真实的"聊多了变钝"来自受体下降，不是递质累积。这两个量不能混。
+ */
+export function fire(s, strength = 1, o = {}) {
+  const p = { ...DEFAULT, ...o }
+  const st = { ...empty(), ...(s || {}) }
+  // now 由调用方通过 rest() 推进到"此刻"；没推进过就按 0 算（第一次释放之前）
+  const now = Number(st.at || 0)
+  const gapSec = st.firedAt ? Math.max(0, (now - Number(st.firedAt)) / 1000) : 999
+
+  // ① 残余钙带来的易化：钙还没清完时，这一次释放会被放大
+  const caBoost = 1 + p.caGain * Number(st.ca || 0)
+
+  // ② 池子耗竭带来的抑制：池子越空，放得越少
+  const poolFactor = clamp(Number(st.pool || 0) / p.pool, 0, 1)
+
+  const released = clamp(p.releaseBase * caBoost * poolFactor * Number(strength || 1), 0, 2)
+
+  // ③ 更新状态：池子消耗（不是线性减，是按比例 —— 池子越空越难放）
+  st.pool = clamp(Number(st.pool || 0) - released * (p.consume / Math.max(1e-6, p.releaseBase)), 0, p.pool)
+  // ④ 残余钙累积（但饱和：钙不会无限涨）
+  st.ca = clamp(Number(st.ca || 0) + released * 0.6, 0, 3)
+  // ⑤ 递给突触后膜的递质量累积（这就是"余味"）
+  // ligand 是'余味'不是'水桶' —— 上限压到 1.2，否则高频对话会把它堆成 2.6（第一版实测）
+  st.ligand = clamp(Number(st.ligand || 0) + released * 0.5, 0, 1.2)
+  st.firedAt = now
+
+  // 判定这一次是易化还是抑制 —— 只用于解释/日志，不参与计算
+  const facilitated = gapSec < 2.5 && caBoost > 1.08
+  const depressed = poolFactor < 0.72
+
+  return { s: st, released: Number(released.toFixed(3)), facilitated, depressed, gapSec: Number(gapSec.toFixed(1)) }
+}
+
+/**
+ * 双相曲线：给"第 n 次刺激、间隔 gap 秒"算相对反应强度。
+ *
+ * 这个函数**不参与运行时**，它是给人看的 ——
+ * 用来验证"代码做出来的曲线，和真实突触的曲线是不是一个形状"。
+ * 如果这条曲线的形状不对，说明上面那套池子/钙的实现就是错的，光能跑不算数。
+ */
+export function responseCurve({ gapsSec = [0.5, 1, 2, 5, 10, 30, 60, 300], strength = 1, repeats = 1 } = {}) {
+  return gapsSec.map((gap) => {
+    let s = empty()
+    let last = 0
+    const out = []
+    for (let i = 0; i <= repeats; i++) {
+      s = rest(s, (gap + last) * 1000)
+      const r = fire(s, strength)
+      s = r.s
+      out.push(r.released)
+      last = 0
+    }
+    return { gapSec: gap, released: Number(out[out.length - 1].toFixed(3)), ratio: Number((out[out.length - 1] / Math.max(1e-6, out[0])).toFixed(2)) }
+  })
+}

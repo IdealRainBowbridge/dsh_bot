@@ -648,6 +648,20 @@ export async function run(argv = []) {
         }
       }
       if (!answer) answer = await llm.chat(messages, { temperature: dynTemp, purpose: 'chat' })
+
+      // ── 2026-11-02 ·「先想后说」────────────────────────────────────
+      // 实现挪到 tools/lib/think.mjs：输入是（他说的话 + 她心里的念头 + 身体状态），
+      // 输出是一句"心里话"。它不碰 socket、不碰 OneBot —— 不属于编排层，
+      // 留在 qq-server 里等于把"她想什么"和"怎么发出去"焊死在一起。
+      // 顺带把 qq-server 从 1807 行拉回门禁额度以内（门禁拦得对）。
+      try {
+        const { thinkThenSay } = await import('../lib/think.mjs')
+        const r2 = await thinkThenSay({
+          messages, userText, chatId, isGroup: !!isGroup, dynTemp, toolsOn,
+          chatWithTools: toolsOn ? chatWithTools : null, llm, log,
+        })
+        if (r2.used && r2.text) answer = r2.text
+      } catch (e) { logErr('[qq] 内省失败（不影响回复）：' + (e?.message ?? e)) }
       try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch {}
       // 情绪联动（10-31 优化）：**不再单独调一次 LLM**。
       // reply-gate 那次调用已经顺手把情绪写进 affect 了；这里只在 gate 没跑 LLM 的路径
