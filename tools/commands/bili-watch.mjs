@@ -12,6 +12,7 @@ import * as memory from '../lib/memory.mjs'
 import { ensureSelfSticker } from '../lib/stickers.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { acquire } from '../lib/lock.mjs'
+import * as watchlog from '../lib/watchlog.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const FEIYU = path.join(HERE, '..', 'bot.mjs')
@@ -96,10 +97,43 @@ export async function run(argv = []) {
       const hasSub = /【字幕节选/.test(ctx)
       const hasHot = /【热评】/.test(ctx)
       const hasDesc = /【简介】([\s\S]{20,})/.test(ctx)
-      if (!hasSub && !hasHot && !hasDesc) {
+      // ④ 「专门看 B 站的眼睛」—— 刷到就留痕（2026-11-02 用户要求）
+      //
+      // 放在**材料门槛判定之后**，只记一条。为什么不能"先记 ok:false 再补 ok:true"：
+      // 同一集会出现两行、episodes 也会多算一次 —— 那是自造脏数据。
+      //
+      // 和 binge 那条路的区别：
+      //   · binge  = 她决定看某部剧，有集数、有完整剧情
+      //   · 这里   = 刷 feed 顺手看了一条，没有集数
+      // 两条写同一个账本，所以 system 里是**一句**"我最近在看什么"，
+      // 而不是两个互不相干的列表。
+      const enough = hasSub || hasHot || hasDesc
+      if (!enough) {
         log('  ✗ 材料不足（无字幕/无热评/简介过短），这条不写')
+        // 没看懂也要记：ok:false 是"我扫到了但没看明白"，不是"我没看过"。
+        // 不记的话，她会以为自己从没点开过；记了才不会冒充"看过了"。
+        try {
+          watchlog.record({
+            show: it.title, title: it.title, bvid,
+            plot: '', via: '只有标题', ok: false,
+            durMin: Number(it.duration || 0) || null,
+          })
+        } catch { /* ignore */ }
         continue
       }
+      try {
+        const plotM = ctx.match(/【简介】([\s\S]*?)(?=\n【|$)/)
+        const plot = plotM ? plotM[1].replace(/\s+/g, ' ').trim().slice(0, 300) : ''
+        watchlog.record({
+          show: it.title,
+          title: it.title,
+          bvid,
+          plot,
+          via: /【台词/.test(ctx) ? '台词' : (/【字幕节选/.test(ctx) ? '字幕' : '简介'),
+          durMin: Number(it.duration || 0) || null,
+          ok: true,
+        })
+      } catch { /* 账本写失败不影响刷 */ }
 
       let comment = '', reason = '', score = 15, danmaku = '', sticker = ''
       try {
