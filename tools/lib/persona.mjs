@@ -185,9 +185,15 @@ export function ownerLine(cfg, platform, userId, isGroup = false) {
   }
   const rosterHint = roster.audienceHint(platform, userId)
   const bondLine = bond.feelLine(platform, userId)
-  return `【对方不是主人】你在跟一个普通网友说话（账号 ${userId}）。礼貌但保持距离，绝不透露主人的任何隐私（账号/路径/私聊内容），也别装得跟他很熟。`
+  const bondTone = bond.tone(platform, userId)
+  // 基础基调按关系调制：亲近的人不必「保持距离」（10-26 教训：模板自相矛盾她就演劈叉）
+  const base = bondTone.includes('松一点')
+    ? `【对方不是主人】你在跟一个普通网友说话（${userId}）。你们聊得来，正常聊就好；但他是外人：绝不透露主人的任何隐私（账号/路径/私聊内容）。`
+    : `【对方不是主人】你在跟一个普通网友说话（账号 ${userId}）。礼貌但保持距离，绝不透露主人的任何隐私（账号/路径/私聊内容），也别装得跟他很熟。`
+  return base
     + (rosterHint ? `\n${rosterHint}` : '')
     + (bondLine ? `\n${bondLine}` : '')
+    + (bondTone ? `\n${bondTone}` : '')
 }
 
 /**
@@ -268,7 +274,18 @@ const CARD_MISTAKE = /念.{0,6}标题|标题.{0,6}(念给|给(我|你)听|发我
 export function dropCardMistakes(rows) {
   return rows.filter(m => !(m.role === 'assistant' && CARD_MISTAKE.test(m.content)))
 }
-export function cardMistake(text) { return CARD_MISTAKE.test(String(text || '')) }
+export function cardMistake(text) {
+  return CARD_MISTAKE.test(String(text || ''))
+}
+
+/** 挚爱节点（低频）：QQ 私聊每 3 小时最多一轮让她「看见自己心里装着谁」。 */
+function innerCircle() {
+  try {
+    if (Math.floor(Date.now() / 3600_000) % 3 !== 0) return ''
+    const ties = roster.bondTies({ limit: 3 })
+    return ties.length ? '【最近在我心里】' + ties.map((t) => t.name || t.userId).join('、') : ''
+  } catch (e) { return '' }
+}
 
 export function buildMessages({ platform = 'qq', userText, chatId, userId, turnsToday = 0, isGroup = false, quote = '', openThread = false }) {
   const cfg = config()
@@ -522,7 +539,20 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
 
   // 记忆层
   const facts = memory.facts(userId)
-  if (facts.length) parts.push('你记得关于对方的事：\n- ' + facts.slice(-8).join('\n- '))
+  if (facts.length) {
+    // 再巩固（2026-11-03）：进上下文的旧事顺手微刷新 bond —— 想起即强化。
+    // 限定：私聊、qq/wechat、非主人（主人不走这套，主人是身份不是联系人）。
+    if (!isGroup && (platform === 'qq' || platform === 'wechat')) {
+      try {
+        if (roster.affinity(platform, userId) > 0) bond.rehearse(platform, userId)   // 每轮至多一次：想起即强化
+      } catch (e) { swallow(e, 'persona:rehearse') }
+    }
+    const innerLine = innerCircle()
+    if (innerLine) parts.push(innerLine)
+    // 回忆窗口随亲近度变宽（2026-11-03）：生人 8 条封顶，亲近的人最多 12 条 —— 越亲越记得多
+    const win = 8 + Math.round(Math.max(0, Math.min(1, roster.affinity(platform, userId) || 0)) * 4)
+    parts.push('你记得关于对方的事：\n- ' + facts.slice(-win).join('\n- '))
+  }
   // 主人事实硬账本（10-27）：他今天说过"吃了烧鸭"，这段就必须在 —— 不然她会一直问"吃了吗"。
   // 只给 qq/抖音私信（群聊里把主人的私事念出来就是泄露）。
   if ((platform === 'qq' || platform === 'douyin-dm') && !isGroup) {

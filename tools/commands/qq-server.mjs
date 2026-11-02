@@ -69,6 +69,7 @@ import { fill } from '../lib/persona-voice.mjs'
 import * as selfcon from '../brain/organ/selfcon.mjs'
 import * as roster from '../lib/roster.mjs'
 import * as bond from '../lib/bond.mjs'
+import * as webpush from '../lib/webpush.mjs'
 
 /** 宿主是 stdio:'ignore' 起的进程，不打文件日志等于瞎 —— 出问题只能靠猜。 */
 function logLine(level, args) {
@@ -99,9 +100,10 @@ async function canSpeak(kind = 'proactive') {
 async function spokeDone(kind = 'proactive') {
   try { (await gateMod()).commit(kind) } catch { /* noop */ }
 }
-/** 主人说话了 → 重置连续计数。 */
+/** 主人说话了 → 重置连续计数。顺手给 webui 主动性结账：刚才那条主动消息被接住了吗。 */
 async function ownerSpoke() {
   try { (await gateMod()).noteOwnerSpoke() } catch { /* noop */ }
+  try { const wp = await import('../lib/webpush.mjs'); wp.outcome({ replied: true }) } catch { /* 旁路 */ }
 }
 
 // OneBot 消息解析已拆到 ../lib/onebot.mjs（10-31）：纯函数、可单测。
@@ -444,6 +446,16 @@ export async function run(argv = []) {
       const memText = quoteLine ? `${quoteLine} ${said}` : said
       // 名册登记（2026-11-03）：每条消息过一遍「这是谁」—— 幂等、旁路，失败不影响回复。
       try { roster.observe({ platform: EVT_PLATFORM, userId, name: display || String(evt.sender?.nickname || ''), isGroup }) } catch (e) { swallow(e, 'qq-server:roster') }
+      // bond 快相（2026-11-03 v2）：每条都过；群聊里他对别人刻薄 → 旁观警戒
+      try { bond.taste({ platform: EVT_PLATFORM, userId, text: userText, isGroup }) } catch (e) { swallow(e, 'qq-server:bond-taste') }
+      if (!isGroup) { try { bond.observe({ platform: EVT_PLATFORM, userId, text: userText }) } catch (e) { swallow(e, 'qq-server:bond-observe') } }
+      if (isGroup && /(智障|傻逼|白痴|废物|蠢货|滚蛋|闭嘴|恶心|去死|脑残|低能|有病)/.test(userText) && !/对(我|你)|骂我|骂你/.test(userText)) {
+        try { bond.witnessed({ platform: EVT_PLATFORM, userId }) } catch (e) { swallow(e, 'qq-server:bond-witness') }
+      }
+      // 修复通道：这人刚道歉了（快相已登记 forgiveState）→ 真降 cort。查近况 sincerity 留给慢相，先按常规兑现。
+      if (/(对不起|抱歉|是我不好|我的错|原谅我|别生气了|是我过分了)/.test(userText)) {
+        try { bond.forgive(EVT_PLATFORM, userId, { sincere: userText.length > 12 }) } catch (e) { swallow(e, 'qq-server:bond-forgive') }
+      }
       // bond 器官（2026-11-03）：快相品味每条都过（零 LLM）；私聊攒批等慢相 REM 复盘。
       try { bond.taste({ platform: EVT_PLATFORM, userId, text: userText, isGroup }) } catch (e) { swallow(e, 'qq-server:bond-taste') }
       if (!isGroup) { try { bond.observe({ platform: EVT_PLATFORM, userId, text: userText }) } catch (e) { swallow(e, 'qq-server:bond-observe') } }

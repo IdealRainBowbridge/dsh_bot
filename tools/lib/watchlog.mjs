@@ -29,6 +29,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
+import { record as bondRehearse } from './bond-rehearse.mjs'
 import { writeJsonAtomic, readJsonSafe } from './atomic.mjs'
 
 const FILE = () => dataPath('brain', 'watch-log.json')
@@ -127,6 +128,8 @@ export function record(o = {}) {
   }
   j.rows.push(row)
   j.rows.sort((a, b) => Number(a.at) - Number(b.at))
+  // 再巩固（2026-11-03）：看到这个片名想起与谁的旧事 → bond 微刷新（想起即强化）
+  try { bondRehearse({ title: row.title, show: row.show, now: at }) } catch (e) { /* 旁路绝不打断 */ }
 
   // 剧目状态：最后看的时间、看到第几集、累计几集
   const s = j.shows[show] || { firstAt: at, seen: [], lastAt: 0, lastEp: null, episodes: 0 }

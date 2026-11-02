@@ -632,6 +632,9 @@ const ALLOWED_REVERSE = [
                                      // 因为"怎么想"本身就是脑的职责，而它只是个执行器。
   'tools/lib/reply-gate.mjs',        // 函数体内动态 import：判完接话时机顺手把情绪写进 affect，
                                      // 省掉「回复完再单独调一次判情绪」那次 LLM 往返
+  'tools/lib/bond.mjs',              // 关系器官的慢相结算要看她的睡眠节律（REM 门控）：
+                                     // "睡一觉就想通了"是字面机制。判断权（何时算睡）在脑，
+                                     // 器官本身在 lib —— 与 body.mjs 同一个方向的先例。
 ]
 
 function checkImportDirections(files) {

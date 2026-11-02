@@ -11,6 +11,18 @@ function arg(argv, name) { const i = argv.indexOf(name); return i >= 0 ? String(
 
 export function run(argv = []) {
   if (argv.includes('--stats')) { console.log(JSON.stringify({ ...roster.stats(), bond: bond.stats() })); return }
+  if (argv.includes('--signature')) {
+    // 她自己的话介绍「心里装着谁」（自我觉察桥：给它自己的 introspect/日记用）
+    const ties = roster.bondTies({ limit: 3 })
+    if (!ties.length) { console.log('（心里最近没有特别装着谁）'); return }
+    const parts = []
+    for (const t of ties) {
+      const f = bond.feel(t.platform, t.userId)
+      parts.push(`「${t.name || t.userId}」—— ${f.line}`)
+    }
+    console.log(parts.join('\n'))
+    return
+  }
   if (argv.includes('--bio')) {
     const who = arg(argv, '--bio') === '' ? arg(argv, '--who') : arg(argv, '--bio')
     if (!who) { console.error('✗ --bio 需要 --who <号>'); process.exit(2) }

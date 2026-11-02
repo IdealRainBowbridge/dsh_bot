@@ -20,6 +20,7 @@
 import fs from 'node:fs'
 import { dataPath, diaryPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
+import { updateJson } from './atomic.mjs'
 import { config } from './config.mjs'
 import { promiseOutcomePath } from './promise-executor.mjs'
 import * as watchlog from './watchlog.mjs'
@@ -35,6 +36,12 @@ function writeWake(o) {
   try { fs.writeFileSync(WAKE_FILE(), JSON.stringify(o, null, 1) + '\n') } catch (e) { swallow(e, 'webpush:writeWake') }
 }
 function hourSlot(h) { return h < 5 ? '深夜' : h < 8 ? '清早' : h < 11 ? '上午' : h < 14 ? '午饭点' : h < 18 ? '下午' : h < 20 ? '傍晚' : h < 23 ? '晚上' : '深夜' }
+function updateWake(fn) {
+  const W = WAKE_FILE()
+  const r = updateJson(W, (cur) => fn((cur && typeof cur === 'object') ? cur : {}), { fallback: {}, waitMs: 1500 })
+  if (!r.ok) swallow(new Error(r.error || 'updateWake failed'), 'webpush:updateWake')
+  return r
+}
 
 /** 由头 harvesting。返回 {kind, id, text} 或 null。id 用于 used 台账去重。 */
 function tryMotive(now) {
@@ -99,7 +106,9 @@ export function planProactive({ cfg, force = false, now = Date.now() } = {}) {
   let motive = queue.length ? queue[0] : null
 
   if (!motive) {
-    const quietH = Number(pc.quietHours ?? 8)
+    // 主动性结果塑形（2026-11-03）：接住多的时段兜底门槛更低（更愿意开口），吃闭门羹多的时段门槛更高
+    const aff = slotAffinity(now)
+    const quietH = Number(pc.quietHours ?? 8) / aff
     const quietDue = quietH > 0 && now - Number(st.lastAt || 0) >= quietH * 3600_000
     if (!force && !quietDue) return { ok: false, why: '由头没有、安静期未到' }
     // 该兜底了（或手动触发）：先找个由头；找不到才走「就是想说话」
@@ -128,6 +137,50 @@ export function planProactive({ cfg, force = false, now = Date.now() } = {}) {
 }
 
 /** 真发出去了才记：fired/lastAt/used。由 scheduler 或面板路由在 prompt 成功后调用。 */
+/** 发出后记一笔「这条在等回应」；主人下一条 QQ 私聊到达时由 outcome() 结账。 */
+export function pendingOutcome({ kind = '', now = Date.now() } = {}) {
+  try {
+    updateWake((st) => ({ ...st, pending: { at: now, kind: String(kind || '') } }))
+  } catch (e) { swallow(e, 'webpush:pendingOutcome') }
+}
+
+/**
+ * 结果学习：主人来话了 → 刚才那条主动消息有没有被接住。
+ * 30 分钟内回复 = 接住；更久 = 没接住。样本 ≥5 才开始漂时段（防迷信）。
+ * 漂移：接住多的时段 slot 微涨（slots 归一化到均值 1.0）。
+ */
+export function outcome({ replied = false, now = Date.now() } = {}) {
+  try {
+    let applied = false
+    updateWake((st) => {
+      const p = st.pending
+      if (!p || now - Number(p.at || 0) > 30 * 60_000) return { ...st, pending: null }
+      const slot = hourSlot(new Date(Number(p.at)).getHours())
+      const slots = { ...(st.slots || {}) }
+      slots[slot] = Number(slots[slot] || 0) + (replied ? 1 : -0.3)
+      const outcomes = Number(st.outcomes || 0) + 1
+      st.pending = null
+      applied = true
+      return { ...st, slots, outcomes }
+    })
+    return applied
+  } catch (e) { swallow(e, 'webpush:outcome'); return false }
+}
+
+/** 主动性结果塑形用：当前时段偏好（归一化）。 */
+export function slotAffinity(now = Date.now()) {
+  try {
+    const st = readWake()
+    if (Number(st.outcomes || 0) < 5) return 1   // 样本不足：不偏不倚
+    const slot = hourSlot(new Date(now).getHours())
+    const slots = st.slots || {}
+    const vals = Object.values(slots)
+    const mean = vals.reduce((a, b) => a + b, 0) / (vals.length || 1)
+    const v = Number(slots[slot] || 0)
+    return mean === 0 ? 1 : Math.max(0.3, Math.min(2.0, (v - mean) / Math.abs(mean || 1) + 1))
+  } catch (e) { return 1 }
+}
+
 export function markFired({ kind = '', motiveId = '', line = '', now = Date.now() } = {}) {
   const day = new Date(now).toLocaleDateString('sv-SE')   // 同上：本地日期
   const st = readWake()
@@ -144,5 +197,5 @@ export function markFired({ kind = '', motiveId = '', line = '', now = Date.now(
 /** 面板/自检用：当前状态一览。 */
 export function wakeState() {
   const st = readWake()
-  return { day: st.day || '', fired: Number(st.fired || 0), lastAt: Number(st.lastAt || 0) || null, lastType: st.lastType || '', lastLine: st.lastLine || '', queued: (st.queue || []).length }
+  return { day: st.day || '', fired: Number(st.fired || 0), lastAt: Number(st.lastAt || 0) || null, lastType: st.lastType || '', lastLine: st.lastLine || '', queued: (st.queue || []).length, outcomes: Number(st.outcomes || 0), slots: st.slots || {}, pending: !!st.pending }
 }

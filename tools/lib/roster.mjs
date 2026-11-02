@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
+import * as bond from './bond.mjs'
 import { config } from './config.mjs'
 
 /** 名册容量（config.roster.maxPeople 可调，硬上限 2000 防呆）。 */
@@ -109,6 +110,15 @@ export function note(platform, userId, text) {
   return { ok: true, person: p }
 }
 
+/** 关系嵌入：身体学语言的一段话，给记忆排序与签名展示用。主人/陌生人返回 0（无从加权）。 */
+export function affinity(platform, userId) {
+  const id = String(userId || '').trim()
+  if (!id || isOwner(platform, id)) return 0
+  const p = load().people[`${String(platform)}:${id}`]
+  if (!p) return 0
+  return Math.max(0, Math.min(1, Number(bond.bio(platform, id).oxy ?? 0)))
+}
+
 /** ownerLine 的「这是谁」注入行。空串 = 没有可说的（主人 / 从没打过照面）。 */
 export function audienceHint(platform, userId) {
   const id = String(userId || '').trim()
@@ -118,10 +128,21 @@ export function audienceHint(platform, userId) {
   const bits = []
   const call = String(p.alias || p.name || '').trim()
   if (call) bits.push(`他叫「${call}」`)
+  const bl = bond.feelLine(platform, id)
+  if (bl) bits.push(bl.replace(/^【我对他的感觉】/, ''))
   if (Number(p.meets || 0) > 0) bits.push(`你们聊过 ${p.meets} 句`)
   if (p.notes) bits.push(`你的印象：${p.notes}`)
   if (!bits.length) return `【这是谁】${String(platform)} 用户 ${id}，名字还不知道，你记得他。`
   return `【这是谁】${bits.join('，')}。${String(platform)} 号 ${id} 只是认人的编号，别拿数字当称呼。`
+}
+
+/** 挚爱节点：bond 里最亲近的几个人（给她的「最近谁在我心里」）。 */
+export function bondTies({ limit = 3 } = {}) {
+  const all = Object.values(load().people)
+    .filter((p) => Number(bond.bio(p.platform, p.userId).oxy ?? 0) >= 0.32)
+    .sort((a, b) => Number(bond.bio(b.platform, b.userId).oxy ?? 0) - Number(bond.bio(a.platform, a.userId).oxy ?? 0))
+    .slice(0, Math.max(1, Number(limit) || 3))
+  return all.map((p) => ({ platform: p.platform, userId: p.userId, name: String(p.alias || p.name || '').trim() }))
 }
 
 /** 名册一览（面板用）：最近见过的在前。 */

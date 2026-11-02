@@ -156,6 +156,17 @@ function affectTarget() {
   } catch { return null }
 }
 
+/** 社交事件轻推：外部影响小步走（±0.1~0.5），带锁合并写，不覆盖别的写入者。 */
+export function nudge(delta) {
+  const d = Math.max(-1.5, Math.min(1.5, Number(delta) || 0))
+  if (!d) return
+  const st = readState()
+  st.value = Math.max(0, Math.min(100, Number(st.value ?? 62) + d))
+  st.updatedAt = new Date().toISOString()
+  st.day = st.day || dayKey()
+  writeState(st)
+}
+
 /** mood.value 向 affect 的目标缓慢靠拢（每次最多 6 分，保留惯性）。 */
 export function reconcileAffect() {
   const t = affectTarget()
