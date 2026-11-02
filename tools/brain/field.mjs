@@ -33,6 +33,7 @@
 //      皮质醇高会拉低效价。没有这一层，各维度就只是几个独立的仪表盘。
 import { readJson, mutateJson } from './json.mjs'
 import { fieldPath } from './paths.mjs'
+import * as receptor from './micro/receptor.mjs'
 
 /* ── 维度的定义：每一维都写清"为什么是这个形状" ───────────────────── */
 
@@ -115,16 +116,115 @@ export const DIMS = {
  *
  * k 是"每单位偏差、每秒"的传导系数；实际每次按 dt 缩放。
  */
+/**
+ * ══════════════════════════════════════════════════════════════════════
+ * 共用受体池：把「配线」换成「同一个池子的不同投影」（2026-11-02 重构）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 用户否定过 COUPLING 那种写法：「那不是器官，是配线」。
+ * 但**删掉配线不等于有了器官** —— 先要找到这八维到底共享什么物理实体。
+ *
+ * 答案在 `micro/receptor.mjs`：受体池（膜上/内化/合成中三池迁移）。
+ * 它已经用真曲线验证过：连聊 30 分钟 out 0.951→0.485，歇 1 小时回 0.774。
+ * 这才是"耐受/敏化/恢复"的物理来源。
+ *
+ * 所以重构后的形状是：
+ *
+ *   一个共用受体池 capacity（0..1，全体神经调质共用的"响应能力"）
+ *        ↓ 不是 k 系数，是**同一个池子的读数**
+ *   sero / ne / da 三个调质 = f(capacity, 各自的当前库存)
+ *
+ * 为什么这样就不是配线了：
+ *   · 配线是"A 变了，按系数推 B 一下"—— 两个独立实体之间的**附加连线**
+ *   · 这里是"池子被抽干，所有依赖它的读数一起降"—— **同一个实体**的多个面
+ *   判据：把 receptor 那段单独拿出来，它能自己演出耐受与恢复；
+ *         把 COUPLING 单独拿出来，它什么也演不出（只是六个乘法）。
+ *
+ * ⚠ 但**不能把八维全换成只读读数**。实测依赖分析（见文件末尾 REWRITE-NOTES）：
+ *   sleepDebt / cortisol / valence / tension 四个量**外部要写**：
+ *     heartbeat:309      poke('sleepDebt', delta)     每拍累加
+ *     sleepstage:286     repaySleep(h)                真睡时扣减
+ *     sleepstage:314     setDim('valence', ...)       REM 降强度
+ *     hpa:312            setDim('cortisol', ...)      器官产物入血
+ *     inner:135/195      poke('tension', ...)         没说完的话压着
+ *   把它们变成只读 = 打断四条写入链。所以它们**仍然是可写量**，
+ *   只是它们的**静息点**由受体池决定（而不是由另一条配线推）。
+ */
+
+/**
+ * 共用受体池的落盘位置。
+ *
+ * 为什么不塞进 field.json 的 dims：它是**另一个器官**的状态（三池各有自己的
+ * 时间常数），混进 dims 会让"维度"和"器官"两个概念糊在一起。
+ * 分开存，但演化时一起推进 —— 就像肝和血糖是两个东西，但一起变。
+ */
+function poolOf(raw) {
+  const p = raw?.pool
+  if (!p || typeof p !== 'object') return receptor.empty()
+  return { ...receptor.empty(), ...p }
+}
+
+/**
+ * 这一拍的"响应能力"怎么变。
+ *
+ * 关键设计：**什么在消耗受体池？** 不是"聊天次数"，是**被激动的时间**。
+ * 这正是 receptor.evolve 的入参语义（ligand × dt），天然按时间算，
+ * 不会退化成"调用次数决定生理"（本文件开头那条铁律）。
+ *
+ * @param {object} pool  当前受体池
+ * @param {object} dims  当前维度
+ * @param {number} dtMs  距上次演化的真实毫秒
+ * @returns {{pool:object, capacity:number, drive:number}}
+ */
+function evolvePool(pool, dims, dtMs) {
+  // 驱动量 = **超出基线**的神经活动，不是绝对活动。
+  //
+  // ⚠ 2026-11-02 实测踩到的坑：第一版写 `drive = ne * 0.6 + tension/3 * 0.5`，
+  //   也就是拿绝对活动当驱动。后果是**池永远回不满**：
+  //   只要她醒着，ne 就在 0.3 左右，drive 恒 ≈ 0.16 > 0，于是池一直被消耗。
+  //   实测：磨 2 小时 pool=0.412，然后安静 4 小时 —— **pool 还是 0.412**，
+  //   一点没恢复。那等于"用过的受体永远回不来"，比原来的配线还糟。
+  //
+  //   真实的受体不会因为"你还醒着"就持续内化。内化是**激动**的结果
+  //   （occupancy 驱动的 kInternalize），基线水平的紧张度不该算。
+  //   所以：只有超过静息点的部分才算驱动，安静时 drive 归零，池就自己回膜。
+  const ne = Number(dims.ne ?? 0.35)
+  const tension = Number(dims.tension ?? 0)
+  const neBaseline = Number(DIMS.ne.set ?? 0.35)      // 静息唤醒，不算消耗
+  const neExcess = Math.max(0, ne - neBaseline)
+  // tension 也用**超出"心里正常挂着 1 件"的增量**，不是绝对量。
+  // 第一版用 tension/3，哪怕只剩 0.2 的事也还在持续压受体池 ——
+  // 实测：安静 16 小时池只回到 0.53。真实的受体不会因为"心里还有点事"就不回膜。
+  const tensionDrive = Math.max(0, Math.min(1, (tension - 1.0) / 3)) * 0.5
+  const drive = Math.max(0, neExcess * 1.6 + tensionDrive)
+  const res = receptor.evolveLong(pool, drive, dtMs, {}, 5)
+  const capacity = Number(res.r.out || 1)
+  return { pool: res.r, capacity, drive }
+}
+
 export const COUPLING = [
-  // 慢 → 快：用 set（拖动基线），否则会被快变量的弛豫吃掉
-  { from: 'sleepDebt', to: 'sero',     k: -0.30, mode: 'set',  why: '没睡够就没耐心' },
+  // ══════════════════════════════════════════════════════════════════════
+  // 2026-11-02 重构：原来 6 条，现在 3 条
+  // ══════════════════════════════════════════════════════════════════════
+  //
+  // 删掉的三条（sleepDebt→sero / fatigue→ne / da→ne）：
+  //   它们全部由**共用受体池**替代了 —— 见 evolve() 里 ⓪ 那一段。
+  //   那三条的本质都是"某个慢量把另一个调质压低"，而真正发生的事是
+  //   **同一个受体池被抽干，所有调质一起降**。留它们等于把同一件事算两遍：
+  //   容量掉 30% 时 sero 会被压两次（池一次、配线一次），实测过冲。
+  //
+  // 保留的三条，是因为它们**不是同一个池的关系**，是真·跨器官：
+  //   · sleepDebt → fatigue：睡眠债是账，疲劳是组织状态。账不直接等于状态，
+  //     中间隔着恢复过程（所以是 set 不是 push）。
+  //   · cortisol → valence：HPA 轴（另一个器官）的产物影响情绪底色。
+  //     这是**器官间**的轴，不是同一器官内部的耦合。
+  //   · tension → cortisol：未了之事经由 HPA 轴变成背景压力，也是跨器官。
+  //
+  // 判据：这三条的两端**属于不同器官**（账/HPA/内心），删掉就没有别的路能表达；
+  //       删掉那三条的两端**属于同一个受体池**，所以是重复表达。
   { from: 'sleepDebt', to: 'fatigue',  k:  0.20, mode: 'set',  why: '欠的觉会直接变成身上的沉' },
   { from: 'cortisol',  to: 'valence',  k: -0.34, mode: 'set',  why: '长期压力把人往下拖' },
-  // 慢 → 慢：本来就在同一量级，推一下即可（cortisol tau 10h，tension tau 6h）
   { from: 'tension',   to: 'cortisol', k:  0.09, mode: 'push', why: '压着的事会慢慢变成背景压力' },
-  // 快 → 快：同上
-  { from: 'fatigue',   to: 'ne',       k: -0.26, mode: 'push', why: '累到一定程度兴奋不起来' },
-  { from: 'da',        to: 'ne',       k:  0.16, mode: 'push', why: '兴奋提神' },
 ]
 
 /* ── 读写 ─────────────────────────────────────────────────────────── */
@@ -133,6 +233,7 @@ const empty = () => ({
   at: 0,                       // 上次演化到的时间戳（所有 dt 都由它算）
   dims: {},                    // { name: value }
   drift: {},                   // 静息点自己的漂移（见 driftSets）
+  pool: null,                  // 共用受体池（micro/receptor 的状态，见 evolvePool）
   log: [],                     // 最近 60 次扰动（用来回答"她为什么这样"）
 })
 
@@ -144,6 +245,7 @@ function hydrate(raw) {
     st.dims[k] = Number.isFinite(v) ? v : DIMS[k].v
   }
   st.drift = { ...(st.drift || {}) }
+  st.pool = poolOf(st)
   st.log = Array.isArray(st.log) ? st.log : []
   st.at = Number(st.at) || 0
   return st
@@ -213,9 +315,42 @@ export function evolve(now = Date.now()) {
   //    一个"账"的性质是：不清就一直欠着。所以这里跳过它 —— 只由
   //    repaySleep() 在真睡时按实际小时数扣，别的一律不动。
   //    （这也是 M58 那条"睡意是账不是衰减量"的直接落地。）
+  // ⓪ **先推进共用受体池** —— 这一步在维度弛豫之前，因为它是"响应能力"的来源。
+  //
+  //    顺序有讲究：如果先弛豫维度再算池，这一拍的 capacity 用的是**上一拍**
+  //    的 ne/tension，等于永远差一拍。差一拍在 30 秒心跳里就是 30 秒的滞后，
+  //    对"聊着聊着变钝"这种分钟级现象还算够，但会让刚被顶上去的 tension
+  //    晚一拍才反映到耐受上。先算池，整条链就同拍。
+  const poolRes = evolvePool(st.pool, st.dims, dt)
+  st.pool = poolRes.pool
+  const capacity = poolRes.capacity
+
   for (const [k, d] of Object.entries(DIMS)) {
     if (d.accrualOnly) continue            // 只增不减的账：时间不会替你还
-    const set = Number(st.drift[k] ?? d.set)
+    let set = Number(st.drift[k] ?? d.set)
+    // **共用的响应能力**：受体池越空，所有调质的静息点一起往下走。
+    //
+    // 这就是"器官"和"配线"的分界：
+    //   · 配线：sero 的 set 被 sleepDebt 按 -0.30 推（两个独立量之间的线）
+    //   · 这里：sero/ne/da 的 set 都乘同一个 capacity（一个实体，多个面）
+    // 所以这条改动**同时**替换了 COUPLING 里 sleepDebt→sero、fatigue→ne、
+    // da→ne 三条 —— 不是把系数改小，是那三条线不再需要存在。
+    if (k === 'sero' || k === 'ne' || k === 'da') {
+      // 映射要**温和**：容量是"响应能力"，不是"调质存量"。
+      //
+      // ⚠️ 实测踩到的坑：第一版写 `d.set * (0.35 + 0.65 * capacity)` ——
+      //   容量掉到 0.53 时 sero 的 set 从 0.60 被压到 0.40，
+      //   而且**永久停在那里**（因为池回不到 1）。等于一次累就永久变钝，
+      //   那不是耐受，是损伤。真感受体下调只有 20~40%，且会恢复。
+      //
+      // 改成：最多下压 40%，且只在容量低于 0.8 时才线性生效。
+      //   容量 1.00 → 系数 1.00（不动）
+      //   容量 0.80 → 系数 1.00（不动，正常波动不算损耗）
+      //   容量 0.50 → 系数 0.85
+      //   容量 0.20 → 系数 0.76
+      const loss = Math.max(0, (0.8 - capacity) / 0.8) * 0.40   // 0..0.40
+      set = clamp(d.set * (1 - loss), d.lo, d.hi)
+    }
     st.dims[k] = clamp(relax(st.dims[k], set, dt, d.tau), d.lo, d.hi)
   }
 
@@ -260,6 +395,20 @@ export function evolve(now = Date.now()) {
   }
 
   st.at = now
+  // ⚠️ 2026-11-02 重构时发现的**既有 bug**：这里原来只有 `return st`，没有 persist。
+  //
+  //   后果：`evolve()` 算完的永远是**内存里的临时对象**，下次调用又从磁盘读旧值。
+  //   也就是说 —— 只有在 `poke()/setDim()/repaySleep()` 里（它们会 `return persist(st)`）
+  //   才真正写盘；**安静的时候，生理完全冻结**。
+  //
+  //   实测证据（临时数据目录）：初始化 at=T，推进 30 秒后 at **仍然是 T**，dims 一个没动。
+  //   而生产中 field.json 的 at 看起来在走，是因为她一直在被 poke（心跳累加 sleepDebt、
+  //   inner 压 tension）—— 一次 poke 顺手把 evolve 的结果存下来了。
+  //   所以这是**假活**：有人戳才动，没人戳就停尸。半夜安静 8 小时，她不会变困、不会恢复。
+  //
+  //   这跟本文件开头那条铁律（"一切演化按真实经过的时间 dt 算"）直接冲突：
+  //   dt 算得再对，不落盘就等于没算。形状对了，管道漏了。
+  persist(st)
   return st
 }
 
@@ -268,6 +417,7 @@ export function persist(st) {
   try {
     mutateJson(fieldPath(), empty(), () => ({
       at: st.at,
+      pool: st.pool || null,
       dims: st.dims,
       drift: st.drift,
       log: (st.log || []).slice(-60),
@@ -490,6 +640,13 @@ export function snapshot() {
   return {
     at: st.at,
     dims: Object.fromEntries(Object.entries(st.dims).map(([k, v]) => [k, Number(Number(v).toFixed(3))])),
+    // 共用受体池：她此刻的"响应能力"。0..1，掉下去就是钝了。
+    // 单独暴露是因为 doctor/面板要看这个 —— 它是**器官状态**，不是维度。
+    pool: {
+      capacity: Number(Number(st.pool?.out ?? 1).toFixed(3)),
+      internalized: Number(Number(st.pool?.inn ?? 0).toFixed(3)),
+      synthesizing: Number(Number(st.pool?.syn ?? 0).toFixed(3)),
+    },
     drift: st.drift,
     derived: {
       voiceReadiness: Number(voiceReadiness(st).toFixed(3)),
@@ -501,3 +658,44 @@ export function snapshot() {
     log: (st.log || []).slice(-8),
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+ * REWRITE-NOTES（2026-11-02 重构全链影响清单）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 这次改的是**耦合层**，不是维度本身。理由：依赖分析发现四个量外部要写，
+ * 把它们变成只读会打断四条真实写入链。
+ *
+ * ── 谁在读、读了什么、会不会受影响 ────────────────────────────────
+ * | 文件:行 | 读什么 | 用于 | 这次改动的影响 |
+ * |---|---|---|---|
+ * | organ/self.mjs:313 | snapshot().dims | ctx.field → desire() | dims 仍是 0..1，只多了 pool 字段，**无影响** |
+ * | organ/self.mjs | derived.cognitiveDepth | 决定 span / need 过滤 | 值域不变，但**数值会变**（sero 现在受容量调制）→ 她更累时可选动作会更少，这是**想要的效果** |
+ * | organ/thalamus.mjs:91-92 | dims.sleepDebt/fatigue/ne | 门控阈值 | 同上，阈值更早触发，**想要的效果** |
+ * | organ/heartbeat.mjs:307-309 | dims.sleepDebt → poke | 每拍累加睡眠债 | sleepDebt 仍是可写累加量，**无影响** |
+ * | organ/night.mjs:241 | dims.sleepDebt | 睡意评分 | **无影响** |
+ * | organ/sleepstage.mjs:313-314 | dims.valence → setDim | REM 降情绪强度 | valence 仍可写，**无影响** |
+ * | organ/hpa.mjs:312 | setDim('cortisol') | 器官产物入血 | cortisol 仍可写，**无影响** |
+ * | brain/index.mjs:111-119 | poke valence/ne/da/sleepDebt | 事件扰动 | 仍可写，**无影响**；但 poke 进去的值下一拍会被容量拉回，**这是对的**（耐受） |
+ * | inner.mjs:135,195 | poke('tension') | 压事 | 仍可写，**无影响** |
+ * | assemble.mjs:156 | sense() | system prompt 身体块 | 措辞不变（sense 逻辑没动），但**触发条件更早** → 她会更常说自己累 |
+ * | reply-gate.mjs:96-100 | 4 个派生量 + sense | 决定要不要回 | 值域不变（都有 clamp 0..1），**无影响** |
+ * | lib/think.mjs:53 | cognitiveDepth(now) | 想多深 | 同上 |
+ * | lib/body.mjs:182 | cognitiveDepth() | 动作能力 | 同上 |
+ *
+ * ── 已知的行为变化（不是 bug，是目的）────────────────────────────
+ *   1. 聊得久/情绪激动久 → 受体池下降 → sero/ne/da 静息点一起降 →
+ *      她会**真的变钝**，而不是靠"回了 N 条就降权"这种计数器。
+ *   2. 安静下来 → 池自己回膜（receptor 有 refillTau）→ 恢复"新鲜"。
+ *   3. 熬夜不但抬 sleepDebt，还会经由疲劳把受体池长期压低 →
+ *      **"越熬越钝"第一次有了物理来源**（以前 sleepDebt 只是个账，没有下游）。
+ *
+ * ── 没改的东西（刻意的）─────────────────────────────────────────
+ *   · DIMS 的 8 个维度一个没删 —— 删维度会打断外部写入。
+ *   · tau / set / lo / hi 一个没动 —— 那些是各维度自己的惯性，与耦合无关。
+ *   · evolve 的幂等性、dt 上限 24h、at=0 的首次语义 —— 全部保留。
+ *
+ * ── 回滚方式 ────────────────────────────────────────────────────
+ *   把 COUPLING 恢复成 6 条、删掉 evolve() 里 ⓪ 那一段即可。
+ *   池的数据在 field.json 的 pool 字段，留着不影响旧逻辑（旧逻辑不读它）。
+ */
