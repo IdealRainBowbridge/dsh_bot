@@ -485,6 +485,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const beatFresh = beatAge !== null && beatAge <= 120;
 			const napcatQr = (status && status.napcatQr) || null;   // 网关在等扫码登录
 			const mood = (status && status.mood) || { value: 0, hunger: 0 };
+			const presence = (status && status.presence) || null;
 
 			return h("div", { className: "fy-panel" },
 
@@ -509,6 +510,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("div", { className: "fy-chip" },
 							h("span", { className: "fy-dot" + (schedulerOn ? "" : " off") }),
 							"生物钟 ", h("b", null, schedulerOn ? "运行中" : "停着")),
+						h("div", { className: "fy-chip" },
+														"QQ状态 ", h("b", null, presence ? (presence.why || "在线") : "—")),
 						h("div", { className: "fy-chip" }, "今日评论 ", h("b", null, (status && status.commentsToday) || 0), " 条"),
 						h("div", { className: "fy-chip" }, "今日分享 ",
 							h("b", null, (status && status.sharesToday) || 0), "/", (status && status.sharesMax) || 0),

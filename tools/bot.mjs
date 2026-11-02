@@ -24,7 +24,7 @@ const COMMANDS = {
   sleep: '睡眠：积累够了才睡（睡意>=66）。sleep check 看睡意 | sleep 直接睡 | sleep --force 强制。睡=整理记忆+三审（代码/脑/账本）+git归档，睡完自动醒',
   dream: '梦境：睡觉时做的梦（纯虚构，与真实记忆隔离）。dream list 看梦 | dream 直接做一个',
   nightwork: '睡眠维护的单个工序（独立进程）：nightwork tidy|review|optimize [--stamp ISO]。由 sleep 派活，也能单独重跑',
-  status: 'QQ在线状态：status dnd（勿扰）/online（在线）/away/busy/invisible ｜ status show 看当前。睡眠自动勿扰/在线，也能手动换',
+  status: 'QQ在线状态：status dnd（勿扰）/online（在线）/away/busy/invisible ｜ status show 看当前。睡着勿扰/醒后在线，平时身体自己调（累了忙碌/欠觉离开/亢奋Q我吧），也能手动换',
   'bili-me': '她的账号台：bili-me 看自己是谁（B站mid/等级/签名/QQ两号）| bili-me sign 看签名 | bili-me sign --set 文字 改签名（B站号的签名，归她管）',
   'bili-submit': 'B站自动投稿：bili-submit video.mp4 --title 标题 --tid 21 --tags a,b --desc 简介 [--cover 封面] [--dry]。preupload→分片→合并→提交全自动',
   'bili-del': '删除她自己的B站投稿：bili-del BV号 [--go]（默认干跑）。她自己清理测试稿/不满意的作品用',

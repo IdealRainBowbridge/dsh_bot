@@ -27,7 +27,8 @@ export async function run(argv = []) {
   }
   let pass = 0
   let fail = 0
-  for (const [name, input, secret] of CASES) {
+  for (const row of CASES) {
+    const [name, input, secret] = row
     const out = sanitizeText('selftest', input)
     if (secret) {
       if (String(out).includes(secret)) { fail++; console.error(`✗ ${name}：泄漏了（现在是：${out}）`) }

@@ -63,6 +63,7 @@ export const BEAT = {
   qzoneEveryBeats: 60,      // 30 分钟 ← 原 tryQzone 30min
   brainEveryBeats: 1,       // 30s  ← 脑编排：消费 inbox → episode / 意图补做 / 巩固判断
   noveltyEveryBeats: 10,    // 5 分钟 ← 探索感受器：扫最近的经历 → arousal（高了刺激 explore）
+  presenceEveryBeats: 10,  // 5 分钟 <- 存在感器官：身体状态翻译成 QQ 在线状态（organ/presence）
     // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但 heartbeat 从来没调过它。
     //
     // 故障是真的，两条路径要分开看：
@@ -153,6 +154,11 @@ export async function beat(now = Date.now()) {
     try { inner.fade(now) } catch (e) { swallow(e, 'beat:inner') }
     try { inner.settle(now) } catch (e) { swallow(e, 'beat:settle') }   // 没说完的话 → tension
     try { hpa.evolve(now) } catch (e) { swallow(e, 'beat:hpa') }
+        // 存在感器官（2026-11-03）：状态档是身体溢出来的表现。
+        // 放体征位不进决策 -- 换状态不是她"决定"做的事，是身体自己的脸色。
+        if (_beatCount % BEAT.presenceEveryBeats === 0 && ex.vitals?.presence) {
+          try { await ex.vitals.presence(now); out.vital.push('presence') } catch (e) { swallow(e, 'beat:vital:presence') }
+        }
     // 五条神经通路的恢复（2026-11-02 接上）。
     // 这一步以前**完全不存在** —— cell/neuron 是无状态的，没有落盘也没有推进，
     // 所以"社交聊多了会钝"在真实运行中从未发生过（只在测试里从 empty() 算过）。

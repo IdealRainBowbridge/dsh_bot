@@ -97,6 +97,11 @@ export async function bindBody(deps) {
       quotes: () => { try { void deps.warmQuoteIndex(40) } catch (e) { swallow(e, 'body:quotes') } },
       qzone: () => { try { void deps.tryQzone() } catch (e) { swallow(e, 'body:qzone') } },
       brain: () => { try { deps.brainTick() } catch (e) { swallow(e, 'body:brain') } },
+      presence: () => {
+        // 存在感执行器（2026-11-03）：判断在 organ/presence，执行在 status 命令的 --step。
+        // 独立进程跑（同 sleep 派活）：不钉心跳事件循环；换失败下一拍自然重算重试。
+        try { deps.spawn(process.execPath, [deps.botPath(), 'status', '--step'], { detached: true, stdio: 'ignore', windowsHide: true }).unref() } catch (e) { swallow(e, 'body:presence') }
+      },
       novelty: () => {
         // 探索的感受器（2026-11-02 晚）：每 10 拍（5 分钟）扫一次最近的经历，
         // arousal 越过门槛 → 刺激 explore 通路 —— 新奇是真的会让她坐不住。

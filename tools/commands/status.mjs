@@ -4,6 +4,7 @@
 // 触发：睡眠开始→勿扰；睡醒→在线。也能手动换。
 // 铁律：状态是她自己的事，随睡眠/情绪自动走，不用笨蛋老爸管。
 import fs from 'node:fs'
+import * as PRESENCE from '../brain/organ/presence.mjs'
 import { config } from '../lib/config.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { writeJsonAtomic } from '../lib/atomic.mjs'
@@ -38,12 +39,33 @@ export async function setOnline(key) {
   return { ok, code, name: NAMES[code] || String(code), resp: j }
 }
 
+// 存在感执行器（2026-11-03）：判断在 organ/presence（tick 只算不执行），执行住这里。
+// status 是 QQ 在线状态的唯一出口，睡眠（sleep.mjs）/身体（本函数）两条自动线都汇到
+// setOnline。成功才 mark() 落盘；失败不写「已换」，下一拍自然重算重试。
+export async function presenceStep(now = Date.now()) {
+  const r = PRESENCE.tick(now)
+  if (!r || !r.changed) return r
+  const res = await setOnline(r.key)
+  if (res && res.ok) {
+    PRESENCE.mark(r.key, r.why || '', now)
+    return { ...r, done: true }
+  }
+  return { ...r, done: false, error: JSON.stringify((res && res.resp) || (res && res.error) || '').slice(0, 80) }
+}
+
 export function currentStatus() {
   try { return JSON.parse(fs.readFileSync(STATE(), 'utf8')) } catch { return { status: 'online', code: 11 } }
 }
 
 export async function run(args) {
   const sub = args[0]
+  // --step：存在感器官走一拍（心跳 vitals.presence 每 5 分钟拉一次；也能手动跑）。
+  // 只在有得换时出声 —— 体征不吵。
+  if (sub === '--step') {
+    const r = await presenceStep()
+    if (r && r.done) console.log('[presence] ' + r.key + (r.why ? '（' + r.why + '）' : ''))
+    return
+  }
   if (!sub || sub === 'show') {
     const cur = currentStatus()
     console.log('当前状态：' + (NAMES[cur.code] || cur.status) + '（' + cur.code + '）')
