@@ -28,6 +28,8 @@ import * as llm from '../lib/llm.mjs'
 import { buildMessages, thinkingInstruction, addressesOwner } from '../lib/persona.mjs'
 import { gapText, mentionsDays, sanitizeDayClaims } from '../lib/timefix.mjs'
 import { splitSticker, pickSticker, FACE_FALLBACK, ensureSelfSticker, autoTag } from '../lib/stickers.mjs'
+import { makeQuoteBridge } from '../lib/qq-quote-bridge.mjs'
+import { makeStickerFollowup } from '../lib/qq-sticker-followup.mjs'
 import { synth } from '../lib/tts.mjs'
 import { parseEmotionTag, splitVoiceParts, emotionProfile, emotionMenu } from '../lib/emotion.mjs'
 import { sing } from '../lib/sing.mjs'
@@ -236,104 +238,21 @@ export async function run(argv = []) {
     return true
   }
 
-  // ── 引用索引预热（10-27）──────────────────────────────────────────────
+  // ── 引用索引预热 + 引用解析（2026-11-03 高压修缮：实现在 lib/qq-quote-bridge.mjs）──
   // get_msg 只认得还有缓存的消息（实测老消息直接回"消息不存在"），所以启动时和之后每 10 分钟
-  // 把主人私聊 / 已开群 的最近几十条拉一遍，id → 正文 全部登记。这样引用历史消息也能取到原文。
-  async function warmQuoteIndex(count = 40) {
-    const ownerQQ = String(config().owner?.qq || '')
-    const targets = []
-    if (ownerQQ) targets.push({ api: 'get_friend_msg_history', key: 'user_id', id: Number(ownerQQ) })
-    for (const gid of (QQ.allow_groups || [])) targets.push({ api: 'get_group_msg_history', key: 'group_id', id: Number(gid) })
-    let n = 0
-    for (const t of targets) {
-      const j = await callApi(t.api, { [t.key]: t.id, count }, 15000)
-      const msgs = j?.data?.messages
-      if (!Array.isArray(msgs)) continue
-      for (const m of msgs) {
-        const senderQQ = String(m?.sender?.user_id ?? '')
-        const who = senderQQ === String(selfIdCached) ? 'me' : (senderQQ === ownerQQ ? 'owner' : 'other')
-        const p = parseMessage(m?.message, selfIdCached)
-        const own = [p.text, ...p.marks.filter((x) => x !== '【引用回复了一条消息】')].filter(Boolean).join(' ')
-        if (!own) continue
-        quoteIndex.remember(m.message_id, {
-          text: own, who, at: Number(m.time) * 1000,
-          name: String(m?.sender?.card || m?.sender?.nickname || senderQQ),
-        })
-        n++
-      }
-    }
-    quoteIndex.save()
-    if (n) log(`[qq] 引用索引预热：${n} 条（${quoteIndex.size()} 条在手）`)
-  }
+  // 把主人私聊 / 已开群的最近几十条拉一遍，id → 正文 全部登记；解析时本地表 → get_msg → 再预热，
+  // 引用里的图片再走一次 VL。依赖显式注入，qq-server 只保留接线。
+  const quoteBridge = makeQuoteBridge({
+    callApi, config, log, selfId: () => selfIdCached, parseMessage,
+  })
+  const warmQuoteIndex = quoteBridge.warmQuoteIndex
+  const resolveQuote = quoteBridge.resolveQuote
 
-  // ── 引用消息解析（10-27）──────────────────────────────────────────────
-  // 本地表（她自己发过的、以及最近收到的）→ 没命中就问 NapCat get_msg。
-  // 引用里的图片再走一次 VL，免得"他引用了一张图"她只看到一句话。
-  async function resolveQuote(replyId, { selfId = '', userId = '', isGroup = false, groupId = '' } = {}) {
-    const ownerQQ = String(config().owner?.qq || '')
-    let rec = quoteIndex.get(replyId)
-    if (!rec) {
-      const j = await callApi('get_msg', { message_id: Number(replyId) || replyId }, 12000)
-      const data = j?.data || (j?.status === 'ok' ? j : null)
-      if (data) {
-        rec = quoteIndex.fromGetMsg(data, { selfQQ: selfId, ownerQQ, parseMessage })
-        if (rec) quoteIndex.remember(replyId, rec)
-      }
-    }
-    // 还是没有 → 可能是很久以前的消息：现场把最近历史再拉一遍（比"取不到"强）
-    if (!rec) {
-      await warmQuoteIndex(60)
-      rec = quoteIndex.get(replyId)
-    }
-    if (rec && config().qq?.quote?.seeImage !== false) {
-      // 被引用的是图片：取一次 VL 描述（失败就算了，别拖慢回复）
-      const url = /https?:\/\/[^\s"）)]+/.exec(rec.text)?.[0]
-      if (url && rec.who === 'me' && /【发了一张图片】|【图片】/.test(rec.text)) {
-        try {
-          const { visionOn, describeFrames } = await import('../lib/vision.mjs')
-          if (visionOn()) {
-            const dl = path.join(dataPath('qq-img'), `q-${Date.now()}.jpg`)
-            fs.mkdirSync(path.dirname(dl), { recursive: true })
-            const exe = fs.existsSync('C:/Windows/System32/curl.exe') ? 'C:/Windows/System32/curl.exe' : 'curl'
-            await execFileAsync(exe, ['-sS', '-L', '-m', '25', '-A', 'Mozilla/5.0', '-o', dl, url], { timeout: 30000, windowsHide: true })
-            if (fs.existsSync(dl) && fs.statSync(dl).size > 2000) {
-              const desc = await describeFrames([dl], { query: '这是他引用的一张图。一两句话说明图里是什么/什么梗/情绪。' })
-              if (desc) rec.text = `${rec.text}（图里是：${desc.slice(0, 100)}）`
-            }
-            try { fs.rmSync(dl, { force: true }) } catch (e) { swallow(e, 'qq-server:resolveQuote') }
-          }
-        } catch (e) { swallow(e, 'qq-server:resolveQuote') }
-      }
-    }
-    return quoteIndex.describe(rec, { selfQQ: selfId, ownerQQ })
-  }
-
-  // ── AI 表情包补发（10-25）：图库没有的标签 / 自制表情 → Pollinations 生成入库再补发 ──
-  // 异步跑（生成约 10~40s），不阻塞回复主线；同文案有缓存不重画；AI 失败退 PIL 文字贴纸。
-  const aiInflight = new Set()
-  async function aiStickerFollowup({ tag, caption, isGroup, groupId, userId }) {
-    const key = `${tag || ''}|${caption || ''}`
-    if (aiInflight.has(key)) return
-    aiInflight.add(key)
-    try {
-      let file = null
-      let desc = ''
-      if (tag && !pickSticker(tag)) { desc = `标签「${tag}」`; file = await generateStickerImage(tag, { tag }) }
-      if (!file && caption) { if (!desc) desc = `「${caption}」`; file = await generateStickerImage(caption) }
-      if (!file && caption) file = ensureSelfSticker(caption, config())   // AI 失败 → PIL 文字贴纸兜底
-      if (!file) { log(`[qq] AI 表情包没生成出来：${desc}（额度/代理/图床），这次不补发`); return }
-      const target = isGroup
-        ? { api: 'send_group_msg', key: 'group_id', id: Number(groupId) }
-        : { api: 'send_private_msg', key: 'user_id', id: Number(userId) }
-      await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000))   // 像人翻表情包的工夫
-      // 2026-11-02: 不再传容器内 file:// 路径（宿主 SnowLuma 读不到 → EACCES）。
-      // 转 base64 随请求体走，与文件系统无关。
-      const { onebotFileValue } = await import('../lib/onebot-file.mjs')
-      const ok = await send(target.api, { [target.key]: target.id, message: [{ type: 'image', data: { file: onebotFileValue(file) } }] })
-      if (ok) log(`[qq] 🎨 AI 表情包已入库补发：${desc} → ${path.basename(file)}`)
-    } catch (e) { log('[qq] AI 表情包补发异常：' + (e?.message ?? e)) }
-    finally { aiInflight.delete(key) }
-  }
+  // ── AI 表情包补发（10-25 → 2026-11-03 外迁 lib/qq-sticker-followup.mjs）──────
+  // 图库没有的标签 / 自制表情 → Pollinations 生成入库再补发；异步跑不阻塞回复主线。
+  const aiStickerFollowup = makeStickerFollowup({
+    send, config, log, pickSticker, generateStickerImage, ensureSelfSticker,
+  })
 
   const handle = async (evt) => {
     const EVT_PLATFORM = String(evt.__platform || 'qq')
@@ -889,7 +808,7 @@ export async function run(argv = []) {
         if (okImg) log(`[qq] 已发表情：${tag || caption || '?'}`)
       }
       // AI 表情包：生成入库 + 补发（异步，不占回复主线；干跑分支已在上面 return，走不到这）
-      if (aiWanted) void aiStickerFollowup({ tag, caption, isGroup, groupId, userId })
+      if (aiWanted) void aiStickerFollowup({ tag, caption, isGroup, groupId, userId, selfId: selfIdCached })
       memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', plain || out, { isGroup })
       // 自我账本: 她的嘴用了没认下的候选名 = 自我使用 (受体表达的上游)。旁路。
       try { selfcon.observeSelfUse(plain || out) } catch (e) { console.error('[selfcon] observeSelfUse:', e && e.message) }
