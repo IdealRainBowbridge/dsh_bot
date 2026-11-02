@@ -35,6 +35,8 @@ const TESTS = [
   'brain-store-test.mjs',     // store：锁/原子读改写/多进程无丢失
   'shard-test.mjs',            // 记忆分片：part2 能读回 / 不串台
   'memory-recall-test.mjs',
+  'roster-test.mjs',           // 人物名册：主人不入册/幂等建卡/称呼印象/满员淘汰（2026-11-03）
+  'webpush-test.mjs',          // webui 主动说话：开关/次数闸/由头去重/TTL（2026-11-03）
   'qq-human-test.mjs',
   'group-persona-test.mjs',
   'freedom-quota-test.mjs',
@@ -104,6 +106,7 @@ function cleanupNewTmp(before, ageMs = 120_000) {
   for (const name of after) {
     if (before.has(name)) continue
     if (!TEST_TMP_PREFIXES.some((p) => name.startsWith(p))) continue
+    if (name.startsWith('bot-node-')) continue   // 生产 runtime.mjs 的 spawn 目录，绝不清理（2026-11-03 护栏）
     // 2026-11-03 高压修缮：加年龄闸。以前"新增即垃圾"——并发跑 run-tests（她的 selfApply
     // 兜底 × 老爸这边）时，A 会把 B 正在用的目录当垃圾删掉（实测 video/atomic 批跑报
     // No such file / readJsonSafe=null）。只清已存在 ≥2 分钟的：测试残留够老，活跃目录都年轻。
