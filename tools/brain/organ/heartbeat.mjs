@@ -47,6 +47,7 @@ import * as self from './self.mjs'
 import * as night from './night.mjs'
 import * as thalamus from './thalamus.mjs'
 import * as hpa from './hpa.mjs'
+import * as neuron from '../cell/neuron.mjs'
 import * as sleepstage from './sleepstage.mjs'
 
 const MIN = 60_000
@@ -151,6 +152,11 @@ export async function beat(now = Date.now()) {
     try { inner.fade(now) } catch (e) { swallow(e, 'beat:inner') }
     try { inner.settle(now) } catch (e) { swallow(e, 'beat:settle') }   // 没说完的话 → tension
     try { hpa.evolve(now) } catch (e) { swallow(e, 'beat:hpa') }
+    // 五条神经通路的恢复（2026-11-02 接上）。
+    // 这一步以前**完全不存在** —— cell/neuron 是无状态的，没有落盘也没有推进，
+    // 所以"社交聊多了会钝"在真实运行中从未发生过（只在测试里从 empty() 算过）。
+    // 现在每拍按真实 dt 补突触池、回膜受体，她安静下来会自己恢复。
+    try { neuron.tick(now) } catch (e) { swallow(e, 'beat:neuron') }
     try { hpa.perfuse(now) } catch (e) { swallow(e, 'beat:perfuse') }   // 器官产物入血
 
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────

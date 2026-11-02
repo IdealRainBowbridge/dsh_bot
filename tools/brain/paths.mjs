@@ -81,3 +81,10 @@ export const sleepPath = () => path.join(metaDir(), 'sleep.json')
 export const anchorPath = () => path.join(metaDir(), 'anchor.json')
 export const nightWorkPath = () => path.join(metaDir(), 'night-work.json')
 export const selfStatePath = () => path.join(metaDir(), 'self-state.json')
+
+/* ── 2026-11-02：细胞层（五条通路的状态）───────────────────────────── */
+// 为什么单独一个文件而不是塞进 field.json：
+//   field 是"场"（连续量，按 dt 弛豫）；neuron 是"细胞"（五条独立通路，
+//   各有自己的突触池 + 受体池）。它们的演化规律不同，混在一起会让
+//   "场"和"细胞"两个概念糊掉。分开存，但每拍一起推进。
+export const neuronPath = () => path.join(metaDir(), 'neuron.json')

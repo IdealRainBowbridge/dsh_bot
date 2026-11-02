@@ -15,6 +15,7 @@
 // 拆出来之后：qq-server 只管收消息和发消息，身体的行为由这里接线。
 // 以后加微信/抖音通道，共用同一个 body，不会各自再长一套调度。
 import { swallow } from './swallow.mjs'
+import * as neuron from '../brain/cell/neuron.mjs'
 
 /**
  * 把 heartbeat 的决定接到具体能力上。
@@ -39,6 +40,34 @@ import { swallow } from './swallow.mjs'
 export async function bindBody(deps) {
   const HB = await import('../brain/organ/heartbeat.mjs')
   const NIGHT = await import('../brain/organ/night.mjs')
+
+  /**
+   * 告诉神经层"这件事真的发生了"（2026-11-02 接上）。
+   *
+   * 为什么必须在这里刺激、而不是在 decide() 里：
+   *   decide() 是"她想做什么"（意图），这里是"她做成了什么"（事实）。
+   *   只有真做了才该消耗递质/下调受体 —— 否则她想一下就把自己弄钝了，
+   *   等于"光想就让肌肉酸"，那是错的形状。
+   *
+   * 通路映射的依据（每条都想清楚才写）：
+   *   watch   → reward   看番/刷视频吃的是奖赏回路
+   *   browse  → explore  上网逛是探索
+   *   reply   → social   回话是社交
+   *   write   → explore  写东西是表达/创造，走探索（不是社交）
+   *   think   → 不刺激   想事情不消耗社交/奖赏池（它是"内部整理"，不是"对外交互"）
+   *   rest    → 不刺激   歇着本来就在恢复
+   *   sleep   → 不刺激   睡觉走 sleepstage 那条路
+   *
+   * ⚠ 刺激强度不写死 1：看番 2 小时和回一句话不该消耗同样的池子。
+   *   用 spanMin 归一（30 分钟 = 1 个"标准剂量"），再夹到 0.3~2。
+   */
+  const stimulate = (pathway, d) => {
+    try {
+      const span = Number(d?.spanMin || 30)
+      const strength = Math.max(0.3, Math.min(2, span / 30))
+      neuron.act(pathway, strength)
+    } catch (e) { swallow(e, 'body:stimulate') }
+  }
 
   // 把"决定"写进 focus（focus 仍是"她此刻在做什么"的唯一真相）
   // 2026-11-02 修：这里原来把**对象**传给 writeFocus(activity, min, note)，
@@ -88,6 +117,9 @@ export async function bindBody(deps) {
     },
 
     reply: async () => {
+      // 回话是社交：这里刺激 social 通路。
+      // 强度给固定 0.6（一次主动搭话，不是一段长对话；长对话的消耗在 qq-server 那边按轮次算）。
+      try { neuron.act('social', 0.6) } catch (e) { swallow(e, 'body:reply:stim') }
       try { await deps.tryProactive() } catch (e) { swallow(e, 'body:reply:proactive') }
       try { await deps.tryGroupChat() } catch (e) { swallow(e, 'body:reply:group') }
     },
@@ -105,9 +137,9 @@ export async function bindBody(deps) {
       } catch (e) { deps.setBusy(false); swallow(e, 'body:consolidate') }
     },
 
-    watch: async (d) => { await syncFocus('bilibili', d) },
-    browse: async (d) => { await syncFocus('web', d) },
-    rest: async (d) => { await syncFocus('rest', d) },
+    watch: async (d) => { await syncFocus('bilibili', d); stimulate('reward', d) },
+    browse: async (d) => { await syncFocus('web', d); stimulate('explore', d) },
+    rest: async (d) => { await syncFocus('rest', d) },   // 歇着不刺激：本来就在恢复
 
     // ════════════════════════════════════════════════════════════════
     // write / think —— 2026-11-02 补上执行体
@@ -132,6 +164,7 @@ export async function bindBody(deps) {
     write: async (d) => {
       try {
         await syncFocus('write', d)
+        stimulate('explore', d)
         const r = await composeAndWrite({ deps, d, book: 'private' })
         deps.log('[body] ✍️ 写了 ' + r.chars + ' 字到私人日记（' + r.why + '）')
       } catch (e) { swallow(e, 'body:write') }
@@ -144,6 +177,8 @@ export async function bindBody(deps) {
     think: async (d) => {
       try {
         await syncFocus('think', d)
+        // think 不刺激神经通路：它是"内部整理"，不消耗对外交互的池子
+
         const r = await composeThought({ deps, d })
         if (r.ok) deps.log('[body] 💭 想明白一件事：' + r.text.slice(0, 40))
       } catch (e) { swallow(e, 'body:think') }

@@ -57,6 +57,8 @@ import * as night from './night.mjs'
 import * as thalamus from './thalamus.mjs'
 import * as inner from '../inner.mjs'
 import * as hpa from './hpa.mjs'
+import * as neuron from '../cell/neuron.mjs'
+import { swallow } from '../../lib/swallow.mjs'
 
 const MIN = 60_000
 const HOUR = 3_600_000
@@ -127,19 +129,74 @@ export function desire(action, ctx) {
   const f = ctx.field
   const awake = 1 - 0.6 * f.sleepDebt - 0.5 * f.fatigue
   const brain = ctx.depth
+  // ── 五条通路的"此刻还能不能做"（2026-11-02 接上）───────────────
+  //
+  // 以前这里只看 field 的几个标量：watch 用 `f.da`、browse 用 `ctx.explore`
+  // （而 ctx.explore 其实就是 `f.da`）—— 两个不同的动作读的是**同一个数**。
+  // 而 cell/neuron 里明明有五条独立通路（social/reward/stress/explore/attach），
+  // 各有自己的突触池和受体池，却**一条都没参与决策**。
+  //
+  // 现在：每条通路给出 readiness（0..1，见 neuron.readiness）。
+  //   · reward  → 看番/刷视频       「还有没有兴致」
+  //   · explore → 上网逛            「还想不想看新东西」
+  //   · social  → 回话 / 想说话     「还说不说得动」
+  //   · stress  → 压低所有休闲意愿   「心里绷着就玩不进去」
+  //   · attach  → 主人来时的加成     「想不想黏他」
+  //
+  // 缺省 1：读不到神经状态时**不惩罚**任何动作（宁可当她还有劲，
+  // 也不要因为一个 IO 失败把她锁在"什么都不想做"）。
+  // tension 兜底：desire() 是导出的，外部调用时 ctx 可能没有这个字段。
+  // NaN 一旦进了返回值，`cands.sort((a,b)=>b.d-a.d)` 会把整张候选表排成随机顺序，
+  // 而 `filter(x => x.d > 0.08)` 对 NaN 恒 false → **所有动作都被过滤掉** →
+  // 永远落到 rest。这是"有值不报错"的典型：不崩，但她会一直什么都不想做。
+  const tension = Number.isFinite(ctx.tension) ? Number(ctx.tension) : 0
+  const nv = ctx.neuro || {}
+  const rw = Number.isFinite(nv.reward) ? nv.reward : 1
+  const ex = Number.isFinite(nv.explore) ? nv.explore : 1
+  const so = Number.isFinite(nv.social) ? nv.social : 1
+  const st = Number.isFinite(nv.stress) ? nv.stress : 1
+  const at = Number.isFinite(nv.attach) ? nv.attach : 1
+  // 应激高 = 玩不进去。
+  //
+  // ⚠ 第一版写成 `1.15 - max(0, st-0.5)*0.6` 再 clamp 到 1.15 ——
+  //   stress=0.5（正常）时 calm=**1.15**，等于"正常状态下把休闲意愿放大 15%"，
+  //   而 stress=0.5 本来就是静息水平，不该有任何加成。
+  //   实测：stress 从 0.5 降到 0.8 时 watch 从 0.80 掉到 0.68，
+  //   看起来"有效"，其实是先白送 15% 再扣回来。
+  //   正确形状：**静息时系数正好 1.00**，只在高于静息时才往下压。
+  //   静息阈值取 0.55（PATHWAYS.stress 的池满时输出 ≈ 1，但常态驱动下大约在 0.5~0.6）。
+  const STRESS_REST = 0.55
+  const calm = Math.max(0.35, Math.min(1, 1 - Math.max(0, st - STRESS_REST) * 1.1))
+
   switch (action) {
     case 'sleep': return ctx.sleepy.score / 100
     case 'consolidate': return Math.min(1, ctx.sleepy.score / 66) * 0.9   // 积压越多越想理
     case 'reply': return ctx.hasInterrupt ? 1 : 0                            // 有人等着才做
-    case 'watch': return Math.max(0, awake) * 0.85 + 0.15 * f.da
-    case 'browse': return Math.max(0, awake) * 0.7 + 0.2 * ctx.explore
-    case 'write': return Math.max(0, brain) * 0.8 + 0.2 * ctx.tension
-    case 'think': return Math.max(0, brain) * 0.5 + 0.35 * ctx.tension
+    // 看番：兴致（reward）× 清醒 × 心里不绷
+    case 'watch': return (Math.max(0, awake) * 0.6 + 0.4 * f.da) * (0.45 + 0.55 * rw) * calm
+    // 上网逛：探索（explore）单独一条通路，不再借用 da
+    case 'browse': return Math.max(0, awake) * 0.55 * (0.45 + 0.55 * ex) * calm + 0.15 * f.da
+    case 'write': return Math.max(0, brain) * 0.8 + 0.2 * tension
+    case 'think': return Math.max(0, brain) * 0.5 + 0.35 * tension
     // rest 原来写 fatigue*1.2 + debt*0.8 —— 稍累就顶到 1.00，把别的选项全压死，
     // 于是"什么都没干"成了默认。改成和其他项同一个量级：
     // 累到 0.85 时约 0.66，仍高于看番（0.15）但不会到天花板；
     // 只有真的快撑不住（两样都接近 1）才逼近 1。
-    case 'rest': return Math.min(1, f.fatigue * 0.55 + f.sleepDebt * 0.55)
+    // rest：累到做不动时该占上风。
+    //
+    // ⚠ 原来只看 field.fatigue/sleepDebt，**完全不看神经状态**。
+    //   实测：五条通路全掉到 0.3（做什么都没劲）时，
+    //   watch=0.494 / rest=0.165 —— 她还是会选看番，然后什么都做不出来。
+    //   这是"身体已经没电，但决策层不知道"。
+    //
+    // 现在：神经整体越疲惫，rest 越高。
+    //   用五条的**平均值**代表"整体还有多少劲"（不是最小值：
+    //   一条通路钝了不该让她整体躺平，那件事不做换一件就行）。
+    case 'rest': {
+      const avgNeuro = (rw + ex + so + st + at) / 5
+      const flat = Math.max(0, Math.min(1, 1 - avgNeuro))    // 0 = 全新鲜，1 = 全废
+      return Math.min(1, f.fatigue * 0.55 + f.sleepDebt * 0.55 + flat * 0.45)
+    }
     default: return 0
   }
 }
@@ -315,13 +372,27 @@ export async function decide(o = {}) {
     depth = snap.derived.cognitiveDepth
   } catch { }
   const sleepy = await night.assess(now)
+  // 五条通路的此刻可用度（2026-11-02 接上）。
+  //
+  // 读失败 → 全 1（不惩罚）。理由写在 desire() 里：宁可当她有劲，
+  // 也不要因为一次 IO 失败把她锁死在"什么都不想做"。
+  let neuro = null
+  try {
+    neuro = neuron.readiness(now)
+  } catch (e) { swallow(e, 'self:neuro') }
+
   const ctx = {
     field: f,
     depth,
     sleepy,
+    // tension 归一。注意 `|| 0` 对 NaN 不生效（NaN 是假值所以会走 0，这里是对的），
+    // 但 `desire()` 也可能被**外部**直接调用（测试、面板），那时 ctx 里没有 tension
+    // → `0.2 * undefined = NaN` → 整个意愿变成 NaN → 排序全乱。
+    // 所以 desire() 内部还要兜一道（见那边注释）。
     tension: Math.min(1, Number(f.tension || 0) / 2.5),
     explore: Math.min(1, Number(f.da || 0.5)),
     hasInterrupt: !!o.hasInterrupt,
+    neuro,                       // { social, reward, stress, explore, attach } 各 0..1
   }
 
   // ③ 三层否决式决策

@@ -34,6 +34,8 @@
 
 import * as syn from '../micro/synapse.mjs'
 import * as rec from '../micro/receptor.mjs'
+import { readJson, mutateJson } from '../json.mjs'
+import { neuronPath } from '../paths.mjs'
 
 /**
  * 她有哪几条通路，以及每条用多少"递质预算"。
@@ -182,4 +184,133 @@ export function survey(st) {
   const out = {}
   for (const k of Object.keys(PATHWAYS)) out[k] = read(st, k)
   return out
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 持久化 + 身体接口（2026-11-02 补）
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * 为什么必须补：这个文件原来**完全无状态** —— 没有 persist、没有 dataPath，
+ * 所有池子只活在内存里。这意味着：
+ *   · 进程一重启，五条通路全部回到"新鲜"
+ *   · 心跳每拍 `neuron....` 也没有任何东西可以推进
+ *   · 于是"社交聊多了会钝"这件事在真实运行中**从未发生过**
+ * （只有测试里跑过，因为测试是从 empty() 一路算下来的）
+ *
+ * 这和 field.mjs 那次 `evolve()` 不 persist 是同一类问题：
+ * **算得对，但存不住 = 等于没算**。
+ */
+
+/** 读盘（坏文件/首次运行 → 空状态，不抛）。 */
+export function load() {
+  const raw = readJson(neuronPath(), null)
+  if (!raw || typeof raw !== 'object' || !raw.paths) return empty()
+  const st = empty()
+  for (const k of Object.keys(PATHWAYS)) {
+    const p = raw.paths[k]
+    if (!p) continue
+    st.paths[k] = {
+      syn: { ...syn.empty(), ...(p.syn || {}) },
+      rec: { ...rec.empty(), ...(p.rec || {}) },
+      at: Number(p.at || 0),
+    }
+  }
+  st.at = Number(raw.at || 0)
+  return st
+}
+
+/** 落盘（原子写；失败不影响业务）。 */
+export function save(st) {
+  try {
+    mutateJson(neuronPath(), empty(), () => ({
+      at: Number(st?.at || 0),
+      paths: Object.fromEntries(
+        Object.entries(st?.paths || {}).map(([k, p]) => [k, {
+          syn: p.syn || null,
+          rec: p.rec || null,
+          at: Number(p?.at || 0),
+        }])
+      ),
+    }))
+  } catch { /* 存不进去不影响她 */ }
+  return st
+}
+
+/**
+ * 身体推进一拍：**所有通路按真实时间恢复**。
+ *
+ * 这是"她安静下来的那段时间"。必须由心跳每拍调用 —— 不调用就等于
+ * 她的突触池永远不补，聊一次就永久钝 1%。
+ *
+ * 幂等：dt<=0 时什么都不做（rest 内部已处理）。
+ *
+ * @returns {{advanced:number, at:number}} advanced = 实际推进的毫秒数
+ */
+export function tick(now = Date.now()) {
+  const st = load()
+  const last = Number(st.at || 0)
+  if (!last) {                       // 首次：只记时间，不演化（没有"上一次"可比）
+    st.at = now
+    save(st)
+    return { advanced: 0, at: now }
+  }
+  let dt = now - last
+  if (dt <= 0) return { advanced: 0, at: last }
+  // 上限 24h：机器睡三天回来不该一次性补三天（和 field 同一条规矩）
+  const capped = Math.min(dt, 24 * 3600_000)
+  const next = rest(st, capped)
+  next.at = now
+  save(next)
+  return { advanced: capped, at: now }
+}
+
+/**
+ * 被一件事刺激到。这是"她真的做了某个动作"时调用的入口。
+ *
+ * @param {string} pathway social|reward|stress|explore|attach
+ * @param {number} [strength=1]
+ * @returns {{ok:boolean, output?:number, why?:string}}
+ */
+export function act(pathway, strength = 1, now = Date.now()) {
+  const st = load()
+  // 先把它推进到此刻，否则池子还是上一次存的样子
+  const advanced = (() => {
+    const d = now - Number(st.at || 0)
+    if (!(d > 0)) return st
+    return rest(st, Math.min(d, 24 * 3600_000))
+  })()
+  const r = stimulate(advanced, pathway, strength)
+  r.st.at = now
+  save(r.st)
+  return { ok: true, output: Number(output(r.st, pathway)), released: r.released, why: r.why }
+}
+
+/**
+ * 给决策层（self.decide）看的**身体读数**。
+ *
+ * 这是这次接线的核心：以前 `desire()` 只看 field 的几个标量，
+ * 五条通路的独立状态**完全没参与**。
+ *
+ * 返回的是"这条通路现在还能不能支撑这件事"：
+ *   1.00 = 完全有劲，0.5 = 明显钝了，0.2 = 几乎做不动
+ *
+ * 为什么用 `output()`（driven × capacity）而不是单个 capacity：
+ * 池子空（刚说完一大段）和受体钝（聊了一整天）是两种不同的"做不动"，
+ * 但对她此刻"还想不想做/做不做得出"是同一件事。
+ */
+export function readiness(now = Date.now()) {
+  const st = load()
+  const d = now - Number(st.at || 0)
+  const s = d > 0 ? rest(st, Math.min(d, 24 * 3600_000)) : st
+  const out = {}
+  for (const k of Object.keys(PATHWAYS)) out[k] = Number(output(s, k).toFixed(3))
+  return out
+}
+
+/** 给面板/体检：五条通路的完整状态。 */
+export function stateNow(now = Date.now()) {
+  const st = load()
+  const d = now - Number(st.at || 0)
+  const s = d > 0 ? rest(st, Math.min(d, 24 * 3600_000)) : st
+  return survey(s)
 }
