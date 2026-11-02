@@ -24,6 +24,7 @@ import { hasPlaceholder, placeholderHint } from './normalize.mjs'
 import { gapText } from './timefix.mjs'
 import { readBrief } from './ledger.mjs'
 import { swallow } from './swallow.mjs'
+import * as watchlog from './watchlog.mjs'
 
 // 真实 CLI 调用前缀（10-31）：以前写死 `node D:/dsh_bot/tools/bot.mjs`，
 // 那是 Windows 开发机的路径，Linux 容器里不存在 —— 她照着跑必然 ENOENT。
@@ -299,6 +300,19 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
       if (lean) { parts.push('【此刻】' + lean); selfStateSaid = true }
     }
   } catch (e) { swallow(e, 'persona:selfState') }
+
+  // ── 她在 B站看了什么（2026-11-02）──────────────────────────────────────
+  // 用户原话：「看完后直接注入进记忆里并在上下文里注入进她在b站上看了什么」。
+  // 这个槽原来只接进了 brain/assemble，而 brain.mode 默认 shadow →
+  // 实际聊天走的是**这一条**装配路线，于是她永远看不见自己刚看了什么。
+  // 两条路线都要有，且必须调同一个 promptBlock()（不是各写一份）。
+  // 只给 QQ 私聊：群聊里念自己追的剧是泄露私事。
+  if (platform === 'qq' && !isGroup) {
+    try {
+      const wb = watchlog.promptBlock({ hours: Number(cfg.binge?.watchRecallHours ?? 72), maxShows: 2 })
+      if (wb) parts.push(wb)
+    } catch (e) { swallow(e, 'persona:watchlog') }
+  }
 
   // ── 锚（2026-11-02）──────────────────────────────────────────────────
   // 从**她自己真说过的话**里挑 4 句原样放进来，冻结不变。
