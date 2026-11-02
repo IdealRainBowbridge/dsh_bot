@@ -605,17 +605,43 @@ export async function browserAct(action, ...args) {
       const target = String(args[0] || '')
       if (!target) throw new Error('要告诉鱼点哪个：browser click @3 / click text=登录 / click ".选择器"')
       const t = parseTarget(target)
+      // 快照要在点击**前**拍（点击开新标签是同步立刻发生的，晚了就 diff 不到）
+      const beforeSet = new Set((await conn.cdp.send('Target.getTargets')).targetInfos.map((x) => x.targetId))
       let cr
       if (t.by === 'index') {
-        cr = await ev(`(() => { const c=(window.__feiyuElEls||[])[${t.n - 1}]; const el=c && c.el; if(!el) return {ok:false, why:'没这个编号（页面刷新过？重新 browser read 一次）', total:(window.__feiyuEls||[]).length}; if(!el.isConnected) return {ok:false, why:'这个元素已被页面刷掉了（SPA 换了内容）—— 重新 browser read 一次拿新编号'}; el.scrollIntoView({block:'center'}); const label=(window.__feiyuEls||[])[${t.n - 1}]?.label||''; el.click(); return {ok:true, label} })()`)
+        cr = await ev(`(() => { const c=(window.__feiyuElEls||[])[${t.n - 1}]; const el=c && c.el; if(!el) return {ok:false, why:'没这个编号（页面刷新过？target=_blank 链接改用 text= 或选择器定位）', total:(window.__feiyuElEls||[]).length}; if(!el.isConnected) return {ok:false, why:'这个元素已被页面刷掉了（SPA 换了内容）—— 重新 browser read 一次拿新编号'}; el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); return {ok:true, x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2), label:(window.__feiyuEls||[])[${t.n - 1}]?.label||''} })()`)
       } else if (t.by === 'text') {
-        cr = await ev(`(() => { const want=${JSON.stringify(t.text.toLowerCase())}; const els=[...document.querySelectorAll('a[href],button,[role=button],[role=link],[role=tab],input[type=submit],summary,[onclick],label,span[role],div[role=button]')]; const el=els.find((x)=>{const l=(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLowerCase(); return l&&(l===want||l.includes(want))}); if(!el) return {ok:false, why:'页面上没有写着「'+${JSON.stringify(t.text)}+'」的可点元素'}; el.scrollIntoView({block:'center'}); const label=(el.innerText||el.value||'').trim().slice(0,40); el.click(); return {ok:true, label} })()`)
+        cr = await ev(`(() => { const want=${JSON.stringify(t.text.toLowerCase())}; const els=[...document.querySelectorAll('a[href],button,[role=button],[role=link],[role=tab],input[type=submit],summary,[onclick],label,span[role],div[role=button]')]; const el=els.find((x)=>{const l=(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLowerCase(); return l&&(l===want||l.includes(want))}); if(!el) return {ok:false, why:'页面上没有写着「'+${JSON.stringify(t.text)}+'」的可点元素'}; el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); return {ok:true, x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2), label:(el.innerText||el.value||'').trim().slice(0,40)} })()`)
       } else {
-        cr = await ev(`(() => { const els=[...document.querySelectorAll(${JSON.stringify(t.selector)})]; const el=els[0]; if(!el) return {ok:false, why:'没找到元素（'+${JSON.stringify(t.selector)}+'）'}; el.scrollIntoView({block:'center'}); const label=(el.innerText||el.value||el.getAttribute('aria-label')||'').trim().slice(0,40); el.click(); return {ok:true, label} })()`)
+        cr = await ev(`(() => { const els=[...document.querySelectorAll(${JSON.stringify(t.selector)})]; const el=els[0]; if(!el) return {ok:false, why:'没找到元素（'+${JSON.stringify(t.selector)}+'）'}; el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); return {ok:true, x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2), label:(el.innerText||el.value||el.getAttribute('aria-label')||'').trim().slice(0,40)} })()`)
       }
       const v = cr.result?.value ?? {}
-      if (!v.ok) { note(target, '失败：' + (v.why || '').slice(0, 60)); throw new Error(v.why || '点击失败') }
+      if (!v.ok) { note(target, '失败：' + (v.justify || v.why || '').slice(0, 60)); throw new Error(v.why || '点击失败') }
+      // 真实坐标点击（Input.dispatchMouseEvent = 浏览器当作真人输入，target=_blank 的
+      // 新标签页默认行为会生效；el.click() 只派发页面内事件，新页开不出来 —— 冒烟实测抓到的坑）
+      const common = { x: v.x, y: v.y, clickCount: 1, pointerType: 'mouse' }
+      await conn.cdp.send('Input.dispatchMouseEvent', { ...common, type: 'mouseMoved' }, sessionId)
+      await conn.cdp.send('Input.dispatchMouseEvent', { ...common, type: 'mousePressed', button: 'left' }, sessionId)
+      await conn.cdp.send('Input.dispatchMouseEvent', { ...common, type: 'mouseReleased', button: 'left' }, sessionId)
+      // target=_blank 的链接会开新标签页（Bing/百度 SERP 都这样）——像真人一样跟过去，
+      // 不然她点了"成功"下一步读到的还是旧页（冒烟实测抓到的坑）
       await settle(conn, sessionId, 4000).catch(() => {})
+      try {
+        const { targetInfos } = await conn.cdp.send('Target.getTargets')
+        const fresh = targetInfos.find((x) => x.type === 'page' && !/^devtools:/.test(x.url) && !beforeSet.has(x.targetId))
+        if (fresh) {
+          const { sessionId: ns } = await conn.cdp.send('Target.attachToTarget', { targetId: fresh.targetId, flatten: true })
+          await conn.cdp.send('Page.enable', {}, ns)
+          await conn.cdp.send('Runtime.enable', {}, ns)
+          await conn.cdp.send('Network.enable', {}, ns)
+          await emulateDevice(conn, ns, curDevice || 'pc')
+          const st = readDaemon()
+          if (st) { st.current = { targetId: fresh.targetId, device: curDevice || 'pc', url: fresh.url, at: Date.now() }; writeDaemon(st) }
+          note(target, '新标签页打开 ' + fresh.url.slice(0, 50))
+          const els2 = await refreshEls()
+          return `点了「${v.label || target}」→ 在新标签页打开了\n${fmtEls(els2)}`
+        }
+      } catch (e) { swallow(e, 'browser:followTab') }
       const els = await refreshEls()
       note(target, '点了「' + (v.label || '') + '」')
       return `点了「${v.label || target}」${fmtEls(els)}`
@@ -659,7 +685,23 @@ export async function browserAct(action, ...args) {
     case 'back': {
       const h = await conn.cdp.send('Page.getNavigationHistory', {}, sessionId)
       const i = h.currentIndex
-      if (i <= 0) throw new Error('已经是最早一页了')
+      if (i <= 0) {
+        // 新标签页打开的页没有历史 —— 对她来说"回退"就是切回上一个标签页（真人就是这么干的）
+        const { targetInfos } = await conn.cdp.send('Target.getTargets')
+        const others = targetInfos.filter((x) => x.type === 'page' && !/^devtools:/.test(x.url) && x.targetId !== s.targetId)
+        if (others.length) {
+          const prev = others[others.length - 1]
+          const { sessionId: ps } = await conn.cdp.send('Target.attachToTarget', { targetId: prev.targetId, flatten: true })
+          await conn.cdp.send('Page.enable', {}, ps)
+          await conn.cdp.send('Runtime.enable', {}, ps)
+          await conn.cdp.send('Network.enable', {}, ps)
+          const st = readDaemon()
+          if (st) { st.current = { targetId: prev.targetId, device: curDevice || 'pc', url: prev.url, at: Date.now() }; writeDaemon(st) }
+          try { await conn.cdp.send('Target.closeTarget', { targetId: s.targetId }) } catch (e) { swallow(e, 'browser:backClose') }
+          return `这页是新的没历史 —— 已切回「${prev.title.slice(0, 30) || prev.url.slice(0, 40)}」（原页关了）`
+        }
+        throw new Error('已经是最早一页了')
+      }
       await conn.cdp.send('Page.navigateToHistoryEntry', { entryId: h.entries[i - 1].id }, sessionId)
       await settle(conn, sessionId, 5000).catch(() => {})
       const els = await refreshEls()
@@ -712,7 +754,8 @@ export async function browserShot(tag = '') {
 export async function browserStatus() {
   const d = await probeDaemon()
   if (!d) return { alive: false, note: '浏览器没在跑（要用时会自动拉起，闲置 10 分钟自动收摊）' }
-  const out = { alive: true, pid: d.pid, device: curDevice || '（还没定）', tabs: [] }
+  const st = readDaemon()
+  const out = { alive: true, pid: d.pid, device: st?.current?.device || '（还没定）', tabs: [] }
   try {
     const conn = await connect()
     const { targetInfos } = await conn.cdp.send('Target.getTargets')
