@@ -12,7 +12,18 @@
 //   ③ **过期要消失**：三天前看的剧不该一直占着 system 的预算。
 //      但她"记得看过"（memory 里那条）不该跟着丢 —— 这两件事分开管。
 import assert from 'node:assert'
-import * as W from '../tools/lib/watchlog.mjs'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
+// ⚠️ 隔离必须在 **import watchlog 之前**：它 import paths.mjs，dataDir 是导入时求值的常量。
+//    2026-11-02 踩过：这一行漏了，测试直接读写 /home/feiyu/.data/brain/watch-log.json，
+//    跑一次就把她的真实观看账本 reset() 清空了。
+//    paths.mjs 头注释里写着 10-27 的同类教训（把真记忆库写成两条假数据），我又犯了一次。
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-watchlog-'))
+process.env.BOT_DATA_DIR = TMP
+
+const W = await import('../tools/lib/watchlog.mjs')
 
 const now = Date.now()
 const H = 3600_000
@@ -98,4 +109,5 @@ assert.equal(r.ok, false, '没有剧名要拒绝')
 assert.equal(W.stats().rows, 0, '拒绝时不能留下半条记录')
 
 W.reset()
+try { fs.rmSync(TMP, { recursive: true, force: true }) } catch { /* ignore */ }
 console.log('✓ watchlog-test 全部通过（空账本/内容/没看懂不冒充/剧名归一/过期/排序/去重/拒绝）')
