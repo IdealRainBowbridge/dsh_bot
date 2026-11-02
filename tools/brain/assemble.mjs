@@ -27,6 +27,7 @@ import * as facts from './facts.mjs'
 import * as intents from './intents.mjs'
 import * as affect from './affect.mjs'
 import * as selfM from './self.mjs'
+import * as selfcon from './organ/selfcon.mjs'
 import * as field from './field.mjs'
 import * as anchor from './anchor.mjs'
 import * as schema from './schema.mjs'
@@ -77,7 +78,15 @@ function slotList(ctx) {
     if (t) list.push({ key, text: t, priority, keep })
   }
 
-  add('identity', [personaText(), identityLine(cfg, isGroup)].filter(Boolean).join('\n'), 1, { keep: true })
+  // ── identity 槽 v2（2026-11-03 自我账本改造, 设计稿 v1 三）──────────────
+  // 旧版只拼 personaText + identityLine —— 名字/形象是**配置断言**（"你是大肥鱼"）。
+  // 新版三层: 种属行(先验, 静态) + persona.md(她上一轮的自己) + selfcon 重建稿(账本第一人称)。
+  // identity 三件套退役不删字段; 她的名字/形象/腔调由 selfcon.json 长出来。
+  // 断线教训（anchor/梦/此刻三连）: 落地后必须 grep 调用方验证真的被读到。
+  const speciesLine = selfcon.SPECIES_LINE + ' ' + selfcon.BODY_FACTS
+  const selfconBlock = selfcon.block({ now })
+  add('identity', [speciesLine, personaText(), selfconBlock, identityLine(cfg, isGroup)]
+    .filter(Boolean).join('\n'), 1, { keep: true })
   if (platform === 'qq' || platform === 'wechat' || platform === 'douyin-dm' || isGroup) {
     add('audience', ownerLine(cfg, platform, userId, isGroup), 2, { keep: true })
   }

@@ -63,6 +63,7 @@ const TESTS = [
   'brain-isolation-test.mjs',
   'brain-meta-test.mjs',
   'brain-claim-test.mjs',
+  'selfcon-engine-test.mjs',  // 自我账本: seed/候选结算/影子/化学/重长 (2026-11-03)
   // ── v5 重构新增：新地基模块必须有测试，否则等于没写 ──────────────────────
   'platforms-test.mjs',        // 平台枚举 + 开关单一真相（回归：关一个不许杀另一个）
   'reply-context-test.mjs',    // 异步上下文隔离（回归：4 会话并发不串台）

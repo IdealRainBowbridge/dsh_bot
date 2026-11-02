@@ -353,6 +353,10 @@ export const DEFAULTS = {
     budget: { promptChars: 5650, consolidateCalls: 6, consolidateTokens: 40000 },
     recall: { weights: {} },        // 空 = 用 brain/recall.mjs 的校准值（10-29 量过：Recall@6 0.875）
     claim: { enabled: true },       // 声称-证据闸（只在 live 模式下真的改口）
+    selfcon: {                      // 自我账本（2026-11-03, 设计稿 v1）: 名字/形象/腔调由记忆生长
+      enabled: true,
+      shadow: true,                 // 影子期: REM 巩固只写日志不动账本, 观察 3 天后改 false 切真
+    },
     wechatIsolated: true,           // 微信独立代理：不写、不读、不进叙事（I7）
     task: { enabled: true, pollSec: 20, maxPerTick: 1 }, // 身体/工具协议：认领队列里的活
   },

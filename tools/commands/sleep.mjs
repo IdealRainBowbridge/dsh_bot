@@ -374,6 +374,29 @@ export async function sleepNow(opts = {}) {
     } catch (e) { dreamOut = { ok: false, why: String(e.message).slice(0, 80) }; console.log("[sleep] 💭 梦境通道失败：" + dreamOut.why) }
     mark("做梦", dreamOut)
   }
+
+  // ── 通道三: 自我账本结算（REM）—— 2026-11-03 设计稿 v1 四 ─────────────
+  // N3 修记忆 / REM 修自我模型: REM 的功能本来就是"把白天的事重过一遍,
+  // 更新对自己的模型"。输入 = 白天采集的候选/结合事件 + 记忆段。
+  // 影子模式（cfg.brain.selfcon.shadow）: 产出只写 selfcon-log.jsonl, 线上零变化。
+  // 切真 = 把 shadow 改 false。替考禁令: 时间戳一律用睡眠的 started, 不 new Date()。
+  if (!phases.some(p => p.name === "自我结算")) {
+    let selfOut = { ok: false, why: "跳过" }
+    try {
+      const cfg = config()
+      if (cfg.brain?.selfcon?.enabled === false) selfOut.why = "配置关着"
+      else {
+        const { consolidateSelf } = await import("../brain/organ/selfcon.mjs")
+        const r = consolidateSelf({
+          now: started,
+          shadow: cfg.brain?.selfcon?.shadow !== false,
+        })
+        selfOut = { ok: true, shadow: r.shadow, changes: r.changes.length, notes: r.notes.slice(0, 3) }
+        console.log("[sleep] 🐚 自我结算（" + (r.shadow ? "影子" : "真") + "）: 改动 " + r.changes.length + " 项" + (r.notes.length ? " · " + r.notes[0] : ""))
+      }
+    } catch (e) { selfOut = { ok: false, why: String(e && e.message || e).slice(0, 80) }; console.log("[sleep] 🐚 自我结算失败: " + selfOut.why) }
+    mark("自我结算", selfOut)
+  }
   /**
    * 归档代码：git 可用就提交；不可用就 tar.gz 快照（v5）。
    * 返回 { ok, via, file?, files?, bytes?, why?, error? } —— 调用方必须能看见失败。
