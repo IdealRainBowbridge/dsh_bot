@@ -93,6 +93,8 @@ const TEST_TMP_PREFIXES = [
   'bot-brain-cons-', 'bot-brain-', 'bot-group-', 'bot-', 'dsh-',
   'epdedup-', 'watchlog-', 'watchslot-', 'dupfp-', 'dupfp2-',
   'botcfg-', 'botmem-', 'bot-quota-', 'bot-focus-', 'bot-life-',
+  // 2026-11-03 清扫时实测泄漏的家族：测试目录清理钩子此前漏了这些前缀
+  'presence-', 'webpush-test-', 'roster-test-', 'org.chromium.Chromium.', 'ev-', 'dd-', 'fc-', 'frec-',
 ]
 function snapshotTmp() {
   const dir = os.tmpdir()
