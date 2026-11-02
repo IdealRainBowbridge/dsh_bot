@@ -60,6 +60,7 @@ import * as hpa from './hpa.mjs'
 import * as neuron from '../cell/neuron.mjs'
 import * as selfcon from './selfcon.mjs'
 import { swallow } from '../../lib/swallow.mjs'
+import * as llm from '../../lib/llm.mjs'
 
 const MIN = 60_000
 const HOUR = 3_600_000
@@ -129,6 +130,20 @@ function hydrate(raw) {
  *   · 歇着：疲劳越高越想歇
  *   · 整理：积压越多越想整理（这是"心里挂着事"）
  */
+// P0-2 (2026-11-03): is an LLM endpoint actually reachable right now?
+// write/think execute through the LLM (body.write -> chat). Offering them while
+// every endpoint is open-breaker or keyless means she would "decide to write"
+// and then nothing happens - the executor silently no-ops and the log looks
+// normal. Menu items the body cannot currently execute do not belong in the
+// menu (zero fake executor rule, M58: nothing outside the structure).
+function llmReachable() {
+  try {
+    // any open breaker on the chain = degraded; do not offer LLM-bound actions
+    if (llm.breakerSnapshot().some((b) => Number(b.openUntil) > Date.now())) return false
+    return !!llm.apiKey() // env key or config key; without one every call is a guaranteed 401
+  } catch (e) { return true } // probe failure must not lock the whole menu
+}
+
 export function desire(action, ctx) {
   const f = ctx.field
   const awake = 1 - 0.6 * f.sleepDebt - 0.5 * f.fatigue
@@ -411,6 +426,7 @@ export async function decide(o = {}) {
     explore: Math.min(1, Number(f.da || 0.5)),
     hasInterrupt: !!o.hasInterrupt,
     neuro,                       // { social, reward, stress, explore, attach } 各 0..1
+    llmOk: llmReachable(),       // P0-2: gateway reachable? (filters write/think out of the menu)
   }
 
   // ③ 三层否决式决策
@@ -434,6 +450,7 @@ export async function decide(o = {}) {
     const cands = Object.keys(ACTIONS)
       .filter((k) => k !== 'sleep' && k !== 'reply')
       .filter((k) => ACTIONS[k].need <= depth + 0.15)   // 精力不够就不在候选里（不是降权）
+      .filter((k) => ctx.llmOk !== false || (k !== 'write' && k !== 'think'))   // P0-2: no LLM-bound items while the executor is dark
       .map((k) => ({ k, d: desire(k, ctx) }))
       .filter((x) => x.d > 0.08)
       .sort((a, b) => b.d - a.d)
@@ -470,6 +487,7 @@ export async function decide(o = {}) {
       .filter((k) => k !== 'sleep' && k !== 'reply')
       .filter((k) => k !== 'introspect')                  // 照镜子是内部动作, 不进她嘴里的倾向清单     // 睡和回话不参与"想做"这一层
       .filter((k) => ACTIONS[k].need <= depth + 0.15)
+      .filter((k) => ctx.llmOk !== false || (k !== 'write' && k !== 'think'))   // P0-2: do not name what she cannot currently do
     lean = await leanOf({
       candidates: live.map((k) => ({ k, hint: HINTS[k] || ACTIONS[k].label })),
       ctx: { ...ctx, interrupted: ctx.hasInterrupt },
