@@ -178,11 +178,14 @@ export function consolidateSelf({ now = Date.now(), newSegments = [], chatFn = n
   // --- 1. 依恋的化学结算: 结合事件按小时窗口算密度, 饱和曲线升, 指数清除 ------------------
   if (book.name && typeof book.name.attachment === 'number') {
     const prev = book.name.attachment
+    // lastConsolidatedAt 为 0/缺 = seed 前的旧账本 -> 从 seededAt 起算 (衰减从出生开始, 不许回落成"一天前")
+    const last = Number(book.lastConsolidatedAt) > 0 ? Number(book.lastConsolidatedAt) : Number(book.seededAt || now - 86400_000)
+    const dtMs = Math.max(0, now - last)   // 时钟倒挂防御: dt<0 会让 exp 变成增益
     // 衰减总是发生 (清除与输入无关)
-    const decayed = prev * Math.exp(-((now - (book.lastConsolidatedAt || now - 86400_000)) / CHEM.ATTACH_TAU_MS))
+    const decayed = prev * Math.exp(-(dtMs / CHEM.ATTACH_TAU_MS))
     // 升: 窗口内的结合事件次数 -> Vmax * n / (Km + n)
     const winMs = CHEM.ATTACH_SAT_WIN_MS
-    const spanMs = Math.max(3600_000, now - (book.lastConsolidatedAt || now - 86400_000))
+    const spanMs = Math.max(3600_000, dtMs)
     const wins = Math.min(24, Math.round(spanMs / winMs))   // 一个结算周期最多算 24 个窗口
     const calls = Number(book.counters?.ownerCall || 0)
     const perWin = calls / Math.max(1, wins)
@@ -391,6 +394,9 @@ export function seedFrom({ name, nameGivenBy, nameFirstEvent, claims = [], voice
   }))
   book.seedPersonaMd = String(personaMd || '').slice(0, 8000)
   book.seededAt = at
+  // 必须同时设 lastConsolidatedAt: 结算的衰减公式拿它算 dt,
+  // 留 0 会被 falsy 回落成"一天前" -> 第一次结算白扣一天衰减量 (2026-11-03 实测 0.9->0.838)
+  book.lastConsolidatedAt = at
   save(book)
   log({ kind: 'seeded', name: name || null, claims: book.selfImage.length, voice: book.voice.length })
   return { ok: true }
