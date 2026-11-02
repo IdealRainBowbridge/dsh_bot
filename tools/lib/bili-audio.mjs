@@ -157,11 +157,6 @@ for d, ct in cands:
 if m is None:
     print(json.dumps({'error': 'no usable device', 'tries': errs}, ensure_ascii=False))
     sys.exit(2)
-# initial_prompt 不是可选项，是**必须项**：
-#   实测不给它，faster-whisper small 在 zh 上跑到一分钟左右就开始往繁体/港台腔漂
-#   （同一条视频从 00:30 的「我们开始上强度」变成 01:00 的「我們開始 上強度 藍塵與 AutoGEN」），
-#   而且会把「客服」听成「克服」、「看完」听成「悬完」——一旦漂过去就再也回不来。
-#   给一段简体书面中文当锚，整条稳定在简体普通话。附带的 task='transcribe' 明确不翻译。
 def run(vad):
     segs, info = m.transcribe(
         wav, language=(lang or 'zh'), task='transcribe', beam_size=1, vad_filter=vad,
@@ -171,6 +166,39 @@ def run(vad):
         condition_on_previous_text=False,
     )
     return segs, info
+
+# ── 繁转简（必须在转写之后强制做）─────────────────────────────────────
+#
+# 2026-11-02 实测：只要音频够长，faster-whisper small 的中文就**必然**往繁体漂，
+# initial_prompt 只能压住开头：
+#   2 分钟视频：漂移段 7 → 2（prompt 有效）
+#   53 分钟番剧：**整条 65.5% 的字是繁体**，24 个时间窗里 15 个繁体为主，
+#                而且简繁来回跳（00:00 简体 → 00:30 全繁体 → 02:30 又简体）
+# 再试"分块 + 把上一段末尾当 prompt 传下去"：只降到 55.6%，杯水车薪。
+# 结论：这不是 prompt 能解决的问题，是模型层面的不稳定性。
+#       → 转写后**无条件**做一次繁转简（opencc t2s），不依赖模型心情。
+# 用 **tw2s** 而不是 t2s：
+#   t2s 按大陆标准做「繁体→简体」，把「著」当正字保留（看著→看著、著急→著急）；
+#   但模型漂出来的其实是**港台用字**，得用 tw2s（台灣正體→简体）：
+#   看著→看着、著急→着急、乾脆→干脆。实测过，只有 tw2s 全部正确。
+#
+# 但 tw2s 有个反直觉的副作用：它按**台湾标准**输出，把「麼」转成「幺」
+#   （什么 → 什幺、怎么 → 怎幺），在大陆读起来是错字。
+# 而 t2s 又保留「著」（看著 不转成 看着）。两边都不完整。
+# 所以：**先 tw2s 再定向补一刀 幺→么**。实测组合后：
+#   那幺→那么  什么→什么  怎幺→怎么  看著→看着  著急→着急  乾脆→干脆
+import re as _re
+try:
+    import opencc
+    _cc = opencc.OpenCC('tw2s')
+except Exception:
+    _cc = None
+_YAO = _re.compile('幺')
+
+def to_simplified(t):
+    if not _cc or not t:
+        return t
+    return _YAO.sub('么', _cc.convert(t))
 
 # VAD 的致命失效（2026-11-02 实测）：
 #   纯音乐/音效密集的片子（鬼畜、MAD、纯 BGM 的番）里，VAD 会把整条判成"几乎没语音"，
@@ -196,7 +224,7 @@ out = []
 for s in segs:
     if cap > 0 and s.end > cap:
         break
-    t = s.text.strip()
+    t = to_simplified(s.text.strip())
     if t:
         out.append({'start': round(s.start, 2), 'end': round(s.end, 2), 'text': t})
 print(json.dumps({
