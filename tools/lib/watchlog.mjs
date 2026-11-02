@@ -145,15 +145,37 @@ export function record(o = {}) {
   return { ok: true, row }
 }
 
-/** 最近在看的几部（按最后观看时间倒序）。 */
-export function recentShows({ hours = RECENT_H, limit = 3, now = Date.now() } = {}) {
+/**
+ * 最近在看的几部（按最后观看时间倒序）。
+ *
+ * @param {boolean} [onlyReal=true] 只要"真看过"的（默认）。
+ *
+ * ⚠ 2026-11-02 实测踩到的设计错误：
+ *   `bili-watch` 在**材料不足**时也记一条 ok:false（via:"只有标题"）。
+ *   结果她刷 feed 几分钟就攒了 3 条"没看懂"，把唯一一条真看懂的挤出了
+ *   maxShows=2 的名额 —— 注入区块里全是「别当成看过了」，
+ *   于是问她"在干嘛呢"只能答"躺着刷视频"，明明刚看完一条有内容的。
+ *
+ *   **"没看懂"不是"在看"**。它该被记为一次尝试（防止她冒充看过），
+ *   但不该占用"我在看什么"的展示名额。
+ */
+export function recentShows({ hours = RECENT_H, limit = 3, now = Date.now(), onlyReal = true } = {}) {
   const j = load()
   const cutoff = now - Number(hours) * 3600_000
-  return Object.entries(j.shows)
-    .map(([name, s]) => ({ name, ...s }))
+  const all = Object.entries(j.shows).map(([name, s]) => ({ name, ...s }))
     .filter((s) => Number(s.lastAt || 0) >= cutoff)
-    .sort((a, b) => Number(b.lastAt) - Number(a.lastAt))
-    .slice(0, Math.max(1, Number(limit) || 3))
+  if (!onlyReal) {
+    return all.sort((a, b) => Number(b.lastAt) - Number(a.lastAt)).slice(0, Math.max(1, Number(limit) || 3))
+  }
+  // 真看过 = 至少有一条 ok 且 plot 非空
+  const rows = j.rows
+  const hasReal = (name) => rows.some((r) => r.show === name && r.ok !== false && String(r.plot || '').trim())
+  const real = all.filter((s) => hasReal(s.name))
+  if (real.length) return real.sort((a, b) => Number(b.lastAt) - Number(a.lastAt)).slice(0, Math.max(1, Number(limit) || 3))
+  // 一部真看过的都没有 → 返回空，让 promptBlock 走"只扫过"的单独说法。
+  // 不能退回全部：那样她会看到一堆「别当成看过了」，等于什么都聊不出来，
+  // 而这恰恰是 2026-11-02 实测暴露的问题（她只能答"躺着刷视频"）。
+  return []
 }
 
 /** 最近 N 条观看记录（升序取尾部）。 */
@@ -175,8 +197,17 @@ export function recentRows({ limit = 8, hours = RECENT_H, now = Date.now() } = {
  */
 export function promptBlock({ hours = RECENT_H, now = Date.now(), maxShows = 2 } = {}) {
   const shows = recentShows({ hours, limit: maxShows, now })
-  if (!shows.length) return ''
   const rows = recentRows({ hours, limit: 12, now })
+  if (!shows.length) {
+    // 一部真看懂的都没有，但确实点开过东西 → 说一句实话，而不是长篇"没看懂"
+    const tried = rows.filter((r) => r.ok === false)
+    if (!tried.length) return ''
+    const names = [...new Set(tried.map((r) => r.show))].slice(0, 2)
+    return '【我在B站看了什么】\n'
+      + `· 刚才划到过 ${names.map((n) => `《${n}》`).join('、')}，`
+      + '但都只扫到标题和简介，没真看进去。\n'
+      + '（所以这些算不上"看过"——他要问起来，就照实说只是划到了，没看明白。）'
+  }
 
   const ago = (t) => {
     const d = Math.max(0, now - Number(t || 0))
@@ -234,8 +265,18 @@ export function promptBlock({ hours = RECENT_H, now = Date.now(), maxShows = 2 }
   }
 
   return '【我在B站看了什么】\n' + lines.join('\n')
-    + '\n（这是我自己看过的东西，不是别人告诉我的。他问起时可以直接聊，'
-    + '但只聊我真看明白的部分；没看明白的照实说。）'
+    // ⚠ 2026-11-02 实测：原来这里只写"他问起时可以直接聊"，
+    //   结果问她"在干嘛呢"，她连答三次"躺着刷视频"，**一次都没提刚看的番**。
+    //   注入成功（system 里确实有这条）但模型不会主动用 ——
+    //   因为它把这段当"资料"而不是"我刚刚的经历"。
+    //
+    //   改法：① 明确说这是「刚刚发生的事」，② 明确说**被问到在干嘛/最近干啥
+    //   时应该顺口提一句**（给出触发条件，而不是等它自己想起来），
+    //   ③ 仍然保留"只聊看明白的部分"这条底线。
+    + '\n（这是我刚刚自己看过的，不是别人告诉我的，也不是任务。'
+    + '他问"在干嘛/最近看什么/有什么好玩的"的时候，顺口提一句我在看的这个就行——'
+    + '像人聊天那样自然带出来，不用报菜名。'
+    + '只聊我真看明白的部分；没看明白的照实说。）'
 }
 
 /** 清空（测试/重置用）。 */
