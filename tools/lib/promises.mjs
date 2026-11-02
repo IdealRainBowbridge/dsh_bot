@@ -14,6 +14,7 @@ import { dataPath } from './paths.mjs'
 import { updateJson } from './atomic.mjs'
 import { swallow } from './swallow.mjs'
 import * as brainIntents from '../brain/intents.mjs'
+import * as neuron from '../brain/cell/neuron.mjs'
 
 const FILE = dataPath('promises.json')
 
@@ -209,6 +210,16 @@ export function fail(id, why = '') {
     const mirror = brainIntents.all().find((x) => x.origin === `promise:${id}`)
     if (mirror) brainIntents.settle(mirror.id, { ok: false, reason: why || 'failed' })
   } catch {}
+  // 应激通路：**答应过的事没做到**（2026-11-02 接上）。
+  //
+  // 这是三个 stress 源里最重的一个（0.9），因为它是"对自己的信用亏欠"，
+  // 不是"被谁批评"。另外两个是外部纠正（群里叫错称呼 0.8 / 编天数 0.6），
+  // 这个是内部的 —— 没人骂她，是她自己知道没做到。
+  //
+  // 为什么挂在这里而不是各调用点：
+  //   `fail()` 是"一条承诺失败了"的唯一语义入口（CLI / binge / executor 都走它）。
+  //   挂在各调用点会漏，而且新加的调用点不会记得加。
+  try { neuron.act('stress', 0.9) } catch (e) { swallow(e, 'promises:stress') }
   return it
 }
 

@@ -695,6 +695,10 @@ export async function run(argv = []) {
       // 只拦群聊，私聊不受影响（私聊本来就该叫主人）。
       if (out && isGroup && String(userId) !== String(config().owner?.qq || '') && addressesOwner(out)) {
         log(`[qq] ⚠ 群里把「主人」叫给群友（QQ ${userId}）了：「${out.slice(0, 30)}」→ 让她重写`)
+        // 应激通路：这是**她自己搞砸了**（当着群里把群友叫成主人），
+        // 当场被纠正 —— 属于社交失误，最伤的一种。
+        // 注意方向：不是"用户让她有压力"，是"她做错了事"才有压力。
+        try { neuron.act('stress', 0.8) } catch (e) { swallow(e, 'qq:stress:addr') }
         try {
           const retry = messages.slice()
           retry[retry.length - 1] = {
@@ -718,6 +722,9 @@ export async function run(argv = []) {
       // 兜底：真间隔不到一天，话里还冒出"消失四天/好几天没影" → 先让她重写一次，再不行就地掰正
       if (out && ownerGapMs < 24 * 3600_000 && mentionsDays(out)) {
         log(`[qq] 回复里编了天数（真实间隔 ${gapTxt}）：「${out.slice(0, 30)}」→ 让她重写`)
+        // 应激通路：记错时间还说得笃定，被现实纠正。
+        // 比社交失误轻（0.6 vs 0.8）—— "我说的话不可靠" 是另一种压力。
+        try { neuron.act('stress', 0.6) } catch (e) { swallow(e, 'qq:stress:days') }
         try {
           const retry = messages.slice()
           retry[retry.length - 1] = {

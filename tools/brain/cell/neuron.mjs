@@ -36,6 +36,7 @@ import * as syn from '../micro/synapse.mjs'
 import * as rec from '../micro/receptor.mjs'
 import { readJson, mutateJson } from '../json.mjs'
 import { neuronPath } from '../paths.mjs'
+import * as fieldMod from '../field.mjs'
 
 /**
  * 她有哪几条通路，以及每条用多少"递质预算"。
@@ -272,6 +273,36 @@ export function tick(now = Date.now()) {
  * @returns {{ok:boolean, output?:number, why?:string}}
  */
 export function act(pathway, strength = 1, now = Date.now()) {
+  // ── 跨器官：stress 要**两条**时间常数（2026-11-02 补）────────────────
+  //
+  // 这个文件里的池子都是**突触级**（秒~分钟）。但"被挫折了"这件事
+  // 有两个完全不同的时间尺度：
+  //   ① 突触池耗竭（14 秒回满）→ "连续被批评时反应变钝"
+  //   ② 情绪余味（小时级）      → "被骂一句，一上午都闷"
+  //
+  // 实测：只做 ① 的话，5 次承诺失败后 stress=0，但**歇 15 分钟就回到 0.99** ——
+  // 那不叫"有压力"，那叫"根本没有压力"。
+  //
+  // 所以 stress 还要往 HPA 轴滴一点：cortisol 的 tau 是 10 小时，那才是余味。
+  // 用 setDim 而不是 poke：poke 会被下一拍的弛豫吃掉大半，
+  // setDim 是直接设定，能撑住。
+  // 幅度 0.06 × strength：一次普通挫折把 cortisol 抬 0.05 左右
+  // （基线 0.15 → 0.20，临床上是"轻微升高"的量级，不是"崩溃"）。
+  if (pathway === 'stress') {
+    try {
+      // ⚠ 必须是**同步**的。第一版写成 `import('../field.mjs').then(...)`，
+      //   实测：`act()` 返回后立刻读 cortisol 还是旧值，**300ms 后才涨**。
+      //   实际运行里没问题（下一拍心跳就读到了），但这是**隐式时序依赖** ——
+      //   任何"调用 act 之后马上检查状态"的代码（测试、面板、未来的调用方）
+      //   都会读到错的数。而且一旦某处依赖这个顺序，就是又一个"有值不报错"。
+      //
+      //   改成静态 import：field.mjs 不 import neuron（它只需要 receptor），
+      //   所以这里不会成环。
+      const cur = Number(fieldMod.snapshot().dims.cortisol || 0.15)
+      fieldMod.setDim('cortisol', Math.min(1, cur + 0.06 * Number(strength || 1)), { why: 'neuron:stress', now })
+    } catch { /* 推不进去不影响 stress 本身 */ }
+  }
+
   const st = load()
   // 先把它推进到此刻，否则池子还是上一次存的样子
   const advanced = (() => {
