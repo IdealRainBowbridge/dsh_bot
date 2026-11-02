@@ -378,7 +378,15 @@ export function currentStage(now = Date.now()) {
       //
       //    修法：用 share 现算 —— 和 accrual() 里完全同一套归一化
       //    （share 是"未归一化的比例"，除以该周期的总和再乘 92 分钟才是分钟数）。
-      const dur = Math.min(stageMin(s, col), cycLeft)
+      // N2 appears twice in CYCLE.stages but the share table counts it once
+      // (design comment: N2 is split evenly between its two slots). Without
+      // the split each 92-min cycle consumed ~122.8 min of elapsed time and
+      // the second N2 slot swallowed cycLeft, so REM was unreachable in
+      // real-time staging. Silent: accrual()/plan() aggregate by key and were
+      // fine -- only the live dispatch path (heartbeat REM jobs) never fired.
+      let dur = stageMin(s, col)
+      if (s === 'N2') dur = dur / 2
+      dur = Math.min(dur, cycLeft)
       if (dur <= 0) continue
       if (left < dur) { stage = s; break outer }   // 停在这里
       left -= dur
