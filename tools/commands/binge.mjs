@@ -207,6 +207,27 @@ async function watchOne(bvid, opt = {}) {
     }
   } catch {}
 
+  // ③.6 真的听一段声音（11-02，补上「音频识别 + 对齐观看帧」）：
+  // 画面告诉你"有谁、在做什么"，但**说不出来他们在说什么**。
+  // 字幕轨常常串片/只有 ED 歌词，弹幕只反映观众情绪 —— 声音是唯一能拿到"台词"的那一路。
+  // 转写自带时间码，取 40%/75% 两处（和抽帧同位置）对上号，
+  // 于是她知道"说到这句话的时候，画面里那个人在做什么"。
+  let hear = null
+  let dbgHear = ''
+  let whyNoHear = () => ''
+  try {
+    const BA = await import('../lib/bili-audio.mjs')
+    whyNoHear = BA.whyNoHear
+    const vcfg = config()
+    if (vcfg.vision?.bingeHear !== false && BA.asrReady()) {
+      hear = await BA.hearVideo(bvid, {
+        at: [0.40, 0.75],
+        maxMinutes: Number(vcfg.vision?.bingeHearMin ?? 12),
+        maxChars: Number(vcfg.vision?.bingeHearChars ?? 4000),
+      })
+    }
+  } catch (e) { hear = null; dbgHear = String(e?.message || e).slice(0, 80) }
+
   // 弹幕够多的时候**不用字幕轨**：番剧投稿的字幕轨串片率极高（实测本片字幕是"iPhone16 钢化膜测评"），
 // 拿它当剧情来源等于让她编。弹幕是观众当场打在现场的，反而最贴这一集。
   const useSubs = Boolean(material) && danmaku.length < 40
@@ -228,6 +249,16 @@ async function watchOne(bvid, opt = {}) {
             : (subs.length ? '\n\n（有字幕轨，但内容跟本片对不上，已忽略）' : '\n\n（这条没有字幕轨）'))
           + (danmaku.length ? `\n\n【弹幕 · 观众当场打的，主要材料】\n${danmaku.slice(0, 120).join(' / ').slice(0, 3800)}` : '')
            + (visionDesc ? `\n\n【画面 · 真抽帧看到的，不是猜的】${visionDesc}` : '')
+           + (hear?.text
+             ? `\n\n【台词 · 真听了音轨转写的，不是猜的】`
+               + (hear.sampled && hear.dur && hear.sampled < hear.dur - 5
+                 ? `（⚠️ 只转了开头 ${Math.round(hear.sampled / 60)} 分钟 / 全长 ${Math.round(hear.dur / 60)} 分钟，后面的没听）`
+                 : '')
+               + hear.text
+               + (hear.atPoints?.length
+                 ? `\n\n【声画对齐】${hear.atPoints.map((p) => `约 ${Math.round(p.ratio * 100)}% 处（${p.at}）画面那一带说的：${p.line || '（这一处没对上）'}`).join('；')}`
+                 : '')
+             : '')
           + (hot.length ? `\n\n【热评】${hot.map((x) => x.text).slice(0, 4).join(' / ')}` : '')
           + '\n\n只根据上面这些写，输出 JSON（**字符串里不要再用英文双引号包词，要强调就用「」**）：'
           + '{"understood":true|false,"plot":"这一集讲了什么（60~140字，只能用材料里出现过的人名/事件）；看不出来就 understood=false 且 plot 写「这条看不到剧情」",'
@@ -249,7 +280,9 @@ async function watchOne(bvid, opt = {}) {
         plot: String(j.plot || '').trim(),
         feel: String(j.feel || '').trim(),
         understood: j.understood !== false && !/看不到剧情/.test(String(j.plot || '')),
-        via: [useSubs ? '字幕轨' : '', danmaku.length ? `弹幕${danmaku.length}条` : '', hot.length ? '热评' : ''].filter(Boolean).join('+') || '只有简介',
+        via: [useSubs ? '字幕轨' : '', danmaku.length ? `弹幕${danmaku.length}条` : '',
+          hear?.text ? `台词${hear.segs}句` : '', hot.length ? '热评' : ''].filter(Boolean).join('+') || '只有简介',
+        whyNoHear: hear?.text ? '' : (dbgHear || whyNoHear()),
       }
     } else {
       take = { plot: '', feel: '', via: 'LLM 输出不是 JSON（已丢弃）', understood: false }

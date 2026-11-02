@@ -28,6 +28,7 @@ const TESTS = [
   'recall-push-test.mjs',
   'imggen-test.mjs',
   'vision-test.mjs',
+  'bili-audio-test.mjs',   // 音频/ASR：成稿合并 + 失败语义（不打网络）
   'ledger-test.mjs',
   'comment-engage-test.mjs',
   'reply-style-test.mjs',
