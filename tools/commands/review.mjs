@@ -6,6 +6,7 @@
 //   node bot.mjs review [--days 1]
 import fs from 'node:fs'
 import path from 'node:path'
+import { readTail } from '../lib/memory.mjs'
 import { dataPath, diaryPath, homePath } from '../lib/paths.mjs'
 import * as llm from '../lib/llm.mjs'
 import { config } from '../lib/config.mjs'
@@ -47,7 +48,8 @@ export async function run(argv = []) {
   const since = Date.now() - days * 86400_000
   const items = []
   try {
-    const lines = fs.readFileSync(dataPath('episodes.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
+    // 2026-11-02：复盘按天取，最多也就几百条 —— 读尾部 2000 行足够，别读整个文件
+  const lines = readTail(dataPath('episodes.jsonl'), 2000)
     for (const line of lines) {
       try {
         const r = JSON.parse(line)

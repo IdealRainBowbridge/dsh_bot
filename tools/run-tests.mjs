@@ -20,6 +20,8 @@ const TESTS = [
   'episode-dedup-test.mjs',   // 跨写者双写去重（2026-11-02）
   'watchlog-test.mjs',        // 看番账本：注入 / ok:false 标注 / 72h 边界（2026-11-02）
   'watch-slot-test.mjs',      // 槽位必须进实际聊天那条装配（shadow 模式也生效）
+  'tail-read-test.mjs',        // readTail：只读尾部 / 不返回半截行 / 边界
+  'shard-test.mjs',            // 记忆分片：part2 能读回 / 不串台
   'memory-recall-test.mjs',
   'qq-human-test.mjs',
   'group-persona-test.mjs',

@@ -31,7 +31,9 @@ export async function run(argv = []) {
       // 自动模式：从最近 24h 的 B站/抖音经历 + 情绪，让 LLM 写一条「潜水日志」动态
       const rows = []
       try {
-        const lines = (await import('node:fs')).readFileSync((await import('../lib/paths.mjs')).dataPath('episodes.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
+        // 2026-11-02：只要最近 24h 的，读尾部 800 行足够（原来读整个文件）
+        const { readTail } = await import('../lib/memory.mjs')
+        const lines = readTail((await import('../lib/paths.mjs')).dataPath('episodes.jsonl'), 800)
         const since = Date.now() - 86400_000
         for (const l of lines) { try { const r = JSON.parse(l); if (Number(r.ts ?? 0) >= since && ['bilibili', 'douyin'].includes(r.platform)) rows.push((r.platform === 'bilibili' ? 'B站' : '抖音') + '：' + String(r.summary || '').slice(0, 50)) } catch {} }
       } catch {}

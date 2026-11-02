@@ -29,6 +29,47 @@ const QQ_EP_FILE = dataPath('qq', 'episodes.jsonl')
 const WECHAT_EP_FILE = dataPath('wechat', 'episodes.jsonl')
 const LORE_FILE = dataPath('lore.json')
 
+/**
+ * 只读文件尾部的若干行（2026-11-02）。
+ *
+ * 为什么需要：全仓有多处「readFileSync 整个 episodes.jsonl，然后只看最后 3 条」。
+ * 文件小的时候无感；她跑一年后文件到 ~10MB，而 qq-server 那几处**在回复主链路上**，
+ * 等于每收一条消息就 parse 10MB。这是隐性 O(n²)，不是"文件有点大"那么简单。
+ *
+ * 做法：从文件末尾往前读最多 maxBytes 字节，丢掉可能被截断的第一行，
+ * 取最后 n 行。最坏代价是 maxBytes（默认 64KB），与文件总大小无关。
+ *
+ * @param {string} file
+ * @param {number} n 要最后几行
+ * @param {number} [maxBytes] 最多读多少字节（默认 64KB）
+ * @returns {string[]} 行（已 JSON.parse 的由调用方做）
+ */
+export function readTail(file, n, maxBytes = 64 * 1024) {
+  const out = []
+  let fd
+  try {
+    const st = fs.statSync(file)
+    const start = Math.max(0, st.size - maxBytes)
+    const len = st.size - start
+    if (len <= 0) return out
+    fd = fs.openSync(file, 'r')
+    const buf = Buffer.alloc(len)
+    fs.readSync(fd, buf, 0, len, start)
+    let text = buf.toString('utf8')
+    // 若不是从文件头开始读，第一行很可能是半截 —— 丢掉
+    if (start > 0) {
+      const nl = text.indexOf('\n')
+      text = nl >= 0 ? text.slice(nl + 1) : ''
+    }
+    const lines = text.split('\n').filter((x) => x.trim())
+    return lines.slice(-n)
+  } catch {
+    return out
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd) } catch { /* ignore */ } }
+  }
+}
+
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return fallback }
 }
@@ -208,20 +249,43 @@ function rotateIfBig(base) {
   } catch (e) { swallow(e, 'tools/lib/memory.mjs:153') }
 }
 
+/**
+ * 主文件当月最多留多少条（2026-11-02）。
+ *
+ * 为什么需要：原来的 rotateNow 只把"**不是本月**"的行搬走。
+ * 如果她这个月自己写了 >6MB（B站/抖音/上网每天都在记），主文件会永远停在 6MB 以上，
+ * 而且每次触发 rotateIfBig 都是白跑一遍：读全量 → 发现没东西可搬 → 重写同内容。
+ * 这既无上限、又是每天一次的无用功。
+ *
+ * 现在：本月行也按条数封顶，超出的搬到 `episodes-YYYY-MM-part2.jsonl`。
+ * 主文件永远 ≈ MONTH_KEEP 条，读取端的"全量读"也就有界了。
+ */
+const MONTH_KEEP = 4000
+
 function rotateNow(base) {
   {
     const lines = fs.readFileSync(base, 'utf8').split('\n').filter(Boolean)
     const now = new Date(), ymNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const keep = [], move = new Map()
+    const monthRows = []                     // 本月行，按原顺序暂存
     for (const line of lines) {
       let r = null
       try { r = JSON.parse(line) } catch (e) { swallow(e, 'tools/lib/memory.mjs:139') }
       const ts = Number(r?.ts) || 0
       const d = new Date(ts || Date.now())
       const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      if (!ts || ym === ymNow) { keep.push(line); continue }
+      if (!ts) { keep.push(line); continue }              // 没有时间戳的：不搬（可能是手写的）
+      if (ym === ymNow) { monthRows.push(line); continue }
       if (!move.has(ym)) move.set(ym, [])
       move.get(ym).push(line)
+    }
+    // 本月行：只留最近的 MONTH_KEEP 条，其余进 part2
+    if (monthRows.length > MONTH_KEEP) {
+      const overflow = monthRows.slice(0, monthRows.length - MONTH_KEEP)
+      keep.push(...monthRows.slice(-MONTH_KEEP))
+      move.set(ymNow + '-part2', overflow)
+    } else {
+      keep.push(...monthRows)
     }
     for (const [ym, rows] of move) {
       const target = path.join(path.dirname(base), `episodes-${ym}.jsonl`)
@@ -238,7 +302,8 @@ export function shardsOf(base) {
   const out = [base]
   try {
     for (const f of fs.readdirSync(dir)) {
-      if (/^episodes-\d{4}-\d{2}\.jsonl$/.test(f)) out.push(path.join(dir, f))
+      // 2026-11-02：加上 part2（当月超量分片），否则搬过去的行读不回来
+      if (/^episodes-\d{4}-\d{2}(-part2)?\.jsonl$/.test(f)) out.push(path.join(dir, f))
     }
   } catch (e) { swallow(e, 'tools/lib/memory.mjs:164') }
   return out

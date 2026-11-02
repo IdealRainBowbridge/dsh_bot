@@ -1202,7 +1202,8 @@ export async function run(argv = []) {
     // 同上：只认私聊。群里的"主人"发言不算"跟我说话"。
     const ownerChat = 'qq:' + ownerQQ
     try {
-      const line = fs.readFileSync(dataPath('qq', 'episodes.jsonl'), 'utf8').trim().split('\n')
+      // 2026-11-02：只读尾部 200 行。原来读整个文件，文件大了每条消息都要 parse 一遍。
+      const line = memory.readTail(dataPath('qq', 'episodes.jsonl'), 200)
       for (let i = line.length - 1; i >= 0; i--) {
         const r = JSON.parse(line[i])
         if (r && r.role === 'user' && String(r.chatId || '') === ownerChat
@@ -1266,7 +1267,8 @@ export async function run(argv = []) {
         // 情境摘要：最近记忆尾部 + 情绪 + 上次搭话
         let recentLine = ''
         try {
-          const rows = fs.readFileSync(dataPath('episodes.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
+          // 2026-11-02：只读尾部（只要最后 3 条，没必要读整个文件）
+          const rows = memory.readTail(dataPath('episodes.jsonl'), 60)
           const last = rows.slice(-3).map((l) => { try { const j = JSON.parse(l); return (j.role === 'assistant' ? '我说：' : '他说：') + String(j.summary || j.text || '').slice(0, 40) } catch { return '' } }).filter(Boolean)
           if (last.length) recentLine = last.join('；')
         } catch {}
@@ -1303,8 +1305,10 @@ export async function run(argv = []) {
       const moodNow = (() => { try { return JSON.parse(fs.readFileSync(dataPath('mood.json'), 'utf8')) } catch { return {} } })()
       const hooks = [`现在是${slot}${hour >= 11 && hour < 14 ? '（饭点，但**他已经说过吃了什么就别再问**）' : ''}`, `你的情绪值 ${Math.round(Number(moodNow.value) || 60)}（低于 40 就是低落）`]
       try {
-        const rows = fs.readFileSync(dataPath('episodes.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
-          .map((l) => JSON.parse(l)).filter((r) => Date.now() - (r.ts || 0) < 86400_000 && ['bilibili', 'douyin'].includes(r.platform))
+        // 2026-11-02：只读尾部 400 行（要找"今天在外面做了什么"，一天的量够）
+        const rows = memory.readTail(dataPath('episodes.jsonl'), 400)
+          .map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+          .filter((r) => Date.now() - (r.ts || 0) < 86400_000 && ['bilibili', 'douyin'].includes(r.platform))
         if (rows.length) hooks.push('今天在外面：' + rows.slice(-3).map((r) => String(r.summary || r.text || '').slice(0, 28)).join('；'))
       } catch {}
       // 主人事实（10-27）：他今天已经说过的事 —— 有了这段，她才不会一天问十次"吃了没"

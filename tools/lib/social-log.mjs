@@ -43,6 +43,29 @@ export function mentionsOwner(rec = {}, cfg = {}) {
  * 记一条。
  * @param {object} o {kind, bvid, title, to, text, extra, url, meta}
  */
+/** 单个流水文件的上限（8MB ≈ 一天几千条，够翻很久；两份合计最多 16MB）。 */
+const MAX_BYTES = 8 * 1024 * 1024
+
+/**
+ * 按大小轮转（2026-11-02）。
+ *
+ * 为什么需要：这个文件只增不减，而 read() 每次都读全量再逐行 parse。
+ * 单次 20KB 无感，但她每天刷几十条、跑一年就是 7MB —— 每次 social 命令 /
+ * selftest / 账本核对都要 parse 一遍。这是**隐性 O(n²)**。
+ *
+ * 轮转策略：超限时把主文件改名成 `.1`（覆盖旧 `.1`），新的从空开始。
+ * 只留一份旧的：够查"昨天/前天"，又保证总量有界。
+ */
+function rotateIfBig(file) {
+  try {
+    if (fs.statSync(file).size < MAX_BYTES) return false
+    fs.renameSync(file, file + '.1')      // POSIX 上 rename 会原子覆盖旧 .1
+    return true
+  } catch {
+    return false                          // 轮转失败不影响写入本身
+  }
+}
+
 export function append(o = {}) {
   try {
     const now = new Date()
@@ -63,6 +86,7 @@ export function append(o = {}) {
     rec.toOwner = mentionsOwner(rec, o.cfg || {})
     const f = LOG_FILE()
     fs.mkdirSync(dataPath(), { recursive: true })
+    rotateIfBig(f)                        // 2026-11-02：超 8MB 就轮转，别让它无限长
     fs.appendFileSync(f, JSON.stringify(rec) + '\n')
     return rec
   } catch {
@@ -74,8 +98,11 @@ export function append(o = {}) {
 export function read({ days = 1, since = 0, kind = '', onlySpeak = false, excludeOwner = false, cfg = {} } = {}) {
   const from = since || (days > 0 ? Date.now() - days * 86400_000 : 0)
   const out = []
+  // 2026-11-02：轮转后要两份一起读，否则跨轮转边界的那段会"消失"
   let raw = ''
-  try { raw = fs.readFileSync(LOG_FILE(), 'utf8') } catch { return out }
+  try { raw = fs.readFileSync(LOG_FILE() + '.1', 'utf8') } catch { /* 还没轮转过 */ }
+  try { raw += fs.readFileSync(LOG_FILE(), 'utf8') } catch { /* 主文件不存在 */ }
+  if (!raw) return out
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue
     try {
