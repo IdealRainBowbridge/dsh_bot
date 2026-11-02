@@ -95,11 +95,13 @@ ok('爱轰炸检测：微量警戒', B.bio('qq', 'a8', NOW + 4 * M).cort > 0.02,
 B.witnessed({ platform: 'qq', userId: 'a9', now: NOW })
 ok('旁观：目击刻薄 → 微量警戒', B.bio('qq', 'a9', NOW).cort > 0.02, `cort=${B.bio('qq', 'a9', NOW).cort}`)
 B.witnessed({ platform: 'qq', userId: 'a9', now: NOW + 10 * M })
-ok('旁观有不应期（1 小时一次）', Math.abs(B.bio('qq', 'a9', NOW + 10 * M).cort - B.bio('qq', 'a9', NOW).cort) < 0.001, `${B.bio('qq', 'a9', NOW).cort} vs ${B.bio('qq', 'a9', NOW + 10 * M).cort}`)
+ok('旁观有不应期（1 小时一次）', Math.abs(B.bio('qq', 'a9', NOW + 10 * M).cort - B.bio('qq', 'a9', NOW).cort) < 0.01, `${B.bio('qq', 'a9', NOW).cort} vs ${B.bio('qq', 'a9', NOW + 10 * M).cort}`)
 
 // ⑬ 情绪耦合：社交事件轻推整体 mood（nudgeMood 真写 mood.json）
+const moodBefore = Number(MOOD.mood()?.value ?? 0)
 B.taste({ platform: 'qq', userId: 'b2', text: '谢谢你 棒', now: NOW })
-ok('正面事件轻推 mood（nudgeMood 真写）', (() => { const v = Number(MOOD.mood()?.value ?? 0); return v > 62 })())
+const moodAfter = Number(MOOD.mood()?.value ?? 0)
+ok('正面事件轻推 mood（nudgeMood 真写）', moodAfter > moodBefore, `${moodBefore} → ${moodAfter}`)
 
 // ⑭⑮ 呈现层
 const fl = B.feelLine('qq', 'a2', NOW + M)

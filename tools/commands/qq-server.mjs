@@ -446,9 +446,6 @@ export async function run(argv = []) {
       const memText = quoteLine ? `${quoteLine} ${said}` : said
       // 名册登记（2026-11-03）：每条消息过一遍「这是谁」—— 幂等、旁路，失败不影响回复。
       try { roster.observe({ platform: EVT_PLATFORM, userId, name: display || String(evt.sender?.nickname || ''), isGroup }) } catch (e) { swallow(e, 'qq-server:roster') }
-      // bond 快相（2026-11-03 v2）：每条都过；群聊里他对别人刻薄 → 旁观警戒
-      try { bond.taste({ platform: EVT_PLATFORM, userId, text: userText, isGroup }) } catch (e) { swallow(e, 'qq-server:bond-taste') }
-      if (!isGroup) { try { bond.observe({ platform: EVT_PLATFORM, userId, text: userText }) } catch (e) { swallow(e, 'qq-server:bond-observe') } }
       if (isGroup && /(智障|傻逼|白痴|废物|蠢货|滚蛋|闭嘴|恶心|去死|脑残|低能|有病)/.test(userText) && !/对(我|你)|骂我|骂你/.test(userText)) {
         try { bond.witnessed({ platform: EVT_PLATFORM, userId }) } catch (e) { swallow(e, 'qq-server:bond-witness') }
       }

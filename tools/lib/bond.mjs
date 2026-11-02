@@ -151,11 +151,12 @@ function getPerson(key) {
   return readPeople().people[key] || null
 }
 
-/** 呈现层：第一人称感受语。 */
+/** 呈现层：第一人称感受语。tempNeg（快相待复核）也进感受 —— 杏仁核反应先于语言。 */
 function leaningOf(p) {
   const oxy = Number(p?.oxy || 0)
   const cort = Number(p?.cort || 0)
   if (cort >= 0.45) return '戒备'
+  if (p?.tempNeg && Date.now() - Number(p.tempNeg.at || 0) < TEMP_NEG_TTL) return '戒备'   // 待复核：先按不舒服处理，确认了就固化，误报了半小时后自己散
   if (oxy >= 0.32) return '亲近'
   if (oxy <= 0.04 && cort <= (BASELINE.cort + Number(p?.scar || 0) * 0.03 + 0.03)) return '淡'
   return '中性'
@@ -203,13 +204,14 @@ export function taste({ platform = 'qq', userId = '', text = '', isGroup = false
       p.lastNegAt = now
       nudgeMood(v)   // 被骂了心情变差（外部影响小步）
     } else {
-      // 爱轰炸：短窗口密集恭维 + 没什么历史 → 微量警戒
-      const bombs = Number(p.kinds?.warm?.n || 0)
-      const bombRecent = now - Number(p.kinds?.warm?.lastAt || 0) < LOVEBOMB_WINDOW
-      if (kind === 'warm' && bombs >= 3 && bombRecent && Number(p.meetsHint || p.exposure?.count || 0) < LOVEBOMB_MIN_HIST && p.oxy < 0.2) {
+      // 爱轰炸判定在增量之前：这是「来者」的模式，不是「事后」的状态
+      const warmCount = Number(p.kinds?.warm?.n || 0)
+      const warmRecent = now - Number(p.kinds?.warm?.lastAt || 0) < LOVEBOMB_WINDOW
+      const noBond = Number(p.exposure?.count || 0) < LOVEBOMB_MIN_HIST && warmCount < 6
+      const refractory = now - Number(p.lastNegAt || 0) < REFRACT_MS
+      if (kind === 'warm' && warmCount >= 3 && warmRecent && noBond && Number(p.oxy) < 0.32) {
         p.cort = Math.min(0.95, Number(p.cort) + 0.08)
       }
-      const refractory = now - Number(p.lastNegAt || 0) < REFRACT_MS
       if (!refractory && !risky) {
         const habit = Math.pow(0.8, Number(kc.n || 0) - 1)
         p.oxy = Math.min(OXY_MAX, Number(p.oxy) + v * 0.025 * habit * mod.pos)
@@ -296,7 +298,7 @@ export async function consolidate(key, { chat, now = Date.now() } = {}) {
       if (Math.abs(v) >= 2) p.cort = Math.min(0.95, 0.8 + Number(p.scar || 0) * 0.05)
       else p.cort = Math.min(0.95, Number(p.cort) + Math.abs(v) * 0.15 * (1 + Math.min(1.0, Number(p.scar) * 0.2)) * mod.neg)
       if (p.cort > 0.6) p.scar = Math.min(5, Number(p.scar) + 1)
-      if (v >= 2) p.oxy = Number(p.oxy) * 0.6
+      if (Math.abs(v) >= 2) p.oxy = Number(p.oxy) * 0.6
       p.lastNegAt = now
       p.tempNeg = null
       applied = 'confirmed-neg'
