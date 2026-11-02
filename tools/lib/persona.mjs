@@ -25,6 +25,7 @@ import { gapText } from './timefix.mjs'
 import { readBrief } from './ledger.mjs'
 import { swallow } from './swallow.mjs'
 import * as watchlog from './watchlog.mjs'
+import * as roster from './roster.mjs'
 
 // 真实 CLI 调用前缀（10-31）：以前写死 `node D:/dsh_bot/tools/bot.mjs`，
 // 那是 Windows 开发机的路径，Linux 容器里不存在 —— 她照着跑必然 ENOENT。
@@ -179,8 +180,11 @@ export function ownerLine(cfg, platform, userId, isGroup = false) {
       : ''
     return `【对方是${OT}本人】就是那个叫${OT}的家伙。${noNumber}`
       + `叫他${call}。亲近他：可以主动撒娇、汇报今天做了什么、惦记他吃饭没；不用客套，但别黏到烦人。`
+    + (roster.audienceHint(platform, userId) ? `\n${roster.audienceHint(platform, userId)}` : '')
   }
+  const rosterHint = roster.audienceHint(platform, userId)
   return `【对方不是主人】你在跟一个普通网友说话（账号 ${userId}）。礼貌但保持距离，绝不透露主人的任何隐私（账号/路径/私聊内容），也别装得跟他很熟。`
+    + (rosterHint ? `\n${rosterHint}` : '')
 }
 
 /**
