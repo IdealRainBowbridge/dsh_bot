@@ -1,5 +1,5 @@
 {
-  "name": "dsh-feiyu",
+  "name": "dsh_bot",
   "version": "0.4.0",
   "description": "大肥鱼·私享版：一只养在本机的陪伴角色 —— B站自主刷视频写日记、QQ 秒回（语音/表情/主动搭话）、微信替主人回消息、抖音自主观看+评论区经营+私信陪聊。四平台共用同一套人格/情绪/记忆（统一时序回忆、时间常驻、占位符归一、我是谁快照、原文可检索），完全自由+自定唤醒+每日回顾让她自己过日子。所有外发默认关闭，每一项都有独立开关与额度。",
   "keywords": [
@@ -70,5 +70,9 @@
     "testedAgainst": "@deepseek-ai/dsh@0.2.1-rc.2",
     "note": "插件用的是 DSH 内部服务（webServer/connection/sessionController/permissionPresets）。升级 DSH 后请跑 node tools/feiyu.mjs diagnose —— 契约不满足会在那里报出来。"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "author": "idealrainbowbridge",
+  "contributors": [
+    "idealrainbowbridge"
+  ]
 }

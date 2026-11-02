@@ -16,7 +16,8 @@ const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-emo-test-'))
 process.env.DSH_HOME = sandbox
 process.env.USERPROFILE = sandbox
 process.env.HOME = sandbox
-process.env.FEIYU_HOME = path.join(sandbox, '.feiyu-ai')
+process.env.FEIYU_HOME = path.join(sandbox, '.data')
+// 注：这个变量是测试自己约定的，路径名跟随数据目录改名
 
 const E = await import('../tools/lib/emotion.mjs')
 const tts = await import('../tools/lib/tts.mjs')
@@ -98,12 +99,12 @@ ok('没建情绪库时只有配置那一段', () => {
   assert.equal(pool[0].from, 'config')
 })
 ok('情绪段优先，但只给一条 —— 音色不在句内轮换（10-27 拍板）', () => {
-  const dir = path.join(sandbox, '.feiyu-ai', 'voice-emo', 'angry')
+  const dir = path.join(sandbox, '.data', 'voice-emo', 'angry')
   fs.mkdirSync(dir, { recursive: true })
   const wav = path.join(dir, 'ref.wav')
   fs.writeFileSync(wav, 'x')
   fs.writeFileSync(path.join(dir, 'ref.txt'), '你怎么又不吃饭啊！', 'utf8')
-  const man = path.join(sandbox, '.feiyu-ai', 'voice-emo', 'manifest.json')
+  const man = path.join(sandbox, '.data', 'voice-emo', 'manifest.json')
   fs.writeFileSync(man, JSON.stringify({ angry: { wav, text: '你怎么又不吃饭啊！', sd: 4.8, rng: 14.6 } }), 'utf8')
   const pool = tts.refPool('angry', { ref_audio_path: 'X:/default.wav', prompt_text: '乙' })
   // 两条参考段都读不出时长（体检不可能过）→ 也只会拿回一条，不再"情绪段 + 默认段"一起上

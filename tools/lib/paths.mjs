@@ -4,6 +4,7 @@
 // 两个 home 的语义（与 bili-whale 一致，避免分叉）：
 //   · DSH_HOME  —— DSH 的根（配置、会话、night 状态）
 //   · HOME      —— 用户主目录（凭据、账本、记忆、情绪等"随人走"的东西放 ~/.feiyu-ai）
+import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -31,7 +32,35 @@ const __DEBUG = process.env.FEIYU_DEBUG === '1' || process.env.FEIYU_DEBUG === '
 if (__DEBUG && !process.env.FEIYU_DATA_DIR) {
   throw new Error('FEIYU_DEBUG 已开启，但没设 FEIYU_DATA_DIR —— 拒绝用真实记忆库跑调试（会污染她的记忆）。请设一个临时目录。')
 }
-export const dataDir = process.env.FEIYU_DATA_DIR ? path.resolve(process.env.FEIYU_DATA_DIR) : homePath('.feiyu-ai')
+/**
+ * 数据目录 —— 2026-11-02 改名 .feiyu-ai → .data
+ *
+ * ⚠️ 兼容规则（**不是临时补丁，是长期策略**）：
+ *   新目录 .data 优先；老的 .feiyu-ai 如果还在就继续用。
+ *   理由：这次改名动了 1.1G 的真实记忆，如果哪天回滚或者有人从旧备份恢复，
+ *   程序**不应该因为找不到目录就当成第一次运行**（那会重新生出一套空记忆，
+ *   看起来一切正常，实际她的过去全丢了）。宁可连老目录，也不能认错"我是新的"。
+ *
+ * 环境变量 FEIYU_DATA_DIR 仍然最优先（测试隔离要用它）。
+ * 名字保留 FEIYU_ 前缀不改 —— 那是**测试已经写死的约定**，
+ * 改它要动所有 test/*.mjs，收益为零。
+ */
+const _dataCandidates = () => {
+  const out = []
+  if (process.env.FEIYU_DATA_DIR) out.push(path.resolve(process.env.FEIYU_DATA_DIR))
+  out.push(homePath('.data'))
+  out.push(homePath('.feiyu-ai'))     // 旧目录兜底
+  return out
+}
+
+export const dataDir = (() => {
+  const cands = _dataCandidates()
+  if (process.env.FEIYU_DATA_DIR) return cands[0]
+  for (const d of cands) {
+    try { if (fs.existsSync(d)) return d } catch { }
+  }
+  return cands[0]                      // 都不存在 → 用新的
+})()
 export const dataPath = (...parts) => path.join(dataDir, ...parts)
 
 /** 凭据（与配置分离；0600；永不回显）。 */
