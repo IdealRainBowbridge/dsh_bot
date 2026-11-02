@@ -128,13 +128,13 @@ await scenario({
       const r = await get(p)
       ok('无 token 访问 ' + p + ' → 401', r.code === 401, '实际 ' + r.code)
     }
-    const r2 = await get('/task', { 'X-Feiyu-Token': 'tok-smoke' })
+    const r2 = await get('/task', { 'X-Bot-Token': 'tok-smoke' })
     ok('带正确 token → 200', r2.code === 200, '实际 ' + r2.code)
-    const r3 = await get('/task', { 'X-Feiyu-Token': 'wrong' })
+    const r3 = await get('/task', { 'X-Bot-Token': 'wrong' })
     ok('token 错 → 401', r3.code === 401, '实际 ' + r3.code)
 
     // 出站必须显式给 platform
-    const r4 = await get('/outbound', { 'X-Feiyu-Token': 'tok-smoke' })
+    const r4 = await get('/outbound', { 'X-Bot-Token': 'tok-smoke' })
     ok('/outbound 不带 platform → 400（不许取走所有平台的）', r4.code === 400, '实际 ' + r4.code)
   },
 })

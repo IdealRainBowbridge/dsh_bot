@@ -64,7 +64,7 @@ function same(a, b) {
   try { return crypto.timingSafeEqual(ba, bb) } catch { return false }
 }
 
-/** 从请求里取调用方 token：Authorization: Bearer / X-Feiyu-Token / ?token= */
+/** 从请求里取调用方 token：Authorization: Bearer / X-Bot-Token / ?token= */
 function presented(req) {
   const auth = String(req?.headers?.authorization || '')
   if (/^Bearer\s+/i.test(auth)) return auth.replace(/^Bearer\s+/i, '').trim()

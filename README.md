@@ -4,8 +4,8 @@
 
 
 > 一只养在你本机的「大肥鱼」：**B站** 自主刷视频写日记、**QQ** 秒回陪你聊（含语音条）、
-> **微信** 替你回消息、**抖音** 自主观看 + 评论区经营 + 私信陪聊。
-> 四平台共用同一套人格、情绪与记忆，在 DSH 设置里用面板控制；
+> **微信** 替你回消息。
+> 三平台共用同一套人格、情绪与记忆，在 DSH 设置里用面板控制；
 > 所有外发默认关闭，每一项都有独立开关和上限。
 
 她的血统：**dafeiyu 骨架的 brain**（情绪状态机 / 三层记忆 / 风控闸门 / DRY_RUN 哲学）
@@ -25,7 +25,7 @@
 
 - 每天早上/晚上按生物钟自己醒，选题、看视频、写评论、写日记
 - 你在 QQ 找她，她几秒内回你，会分条发、会发语音、会发表情包
-- 你不在的时候她有自己的时间：上网搜吃的、写小说、刷抖音、琢磨要不要学做饭
+- 你不在的时候她有自己的时间：上网搜吃的、写小说、琢磨要不要学做饭
 - 她记得你说过的话、她自己做过的事、以及**在别的平台**发生过的事
 - 她的能力上限全在你手里：每个通道、每种外发行为都有开关和额度
 
@@ -33,21 +33,20 @@
 
 ## 二、四平台能力矩阵
 
-| | B站 | QQ | 微信 | 抖音 |
-|---|---|---|---|---|
-| 消息入口 | WBI API（签名 + 缓存） | NapCat（OneBot v11） | UI 自动化（wechatauto） | patchright + 本地 Chrome |
-| 模型宿主 | DSH 会话（零 API 费） | 直连 DeepSeek（秒回） | 直连 DeepSeek | 直连 DeepSeek |
-| 主动行为 | 刷视频→看懂→评论→写日记 | 私聊/群聊@回复、语音、说说、表情包 | 替主人回消息 | 自主观看、评论区经营、私信陪聊、日报 |
-| 记忆 | 主记忆 | QQ 独立记忆 + **跨通道共享** | **按联系人隔离、不进人格记忆** | 主记忆 + 兴趣(lore) + 私信记忆 |
-| 表情 | B站表情码（447 个白名单） | 图片表情（根本形象）+ 颜文字 | 图片表情 + 颜文字 | emoji + 颜文字 |
-| 语音 | — | GPT-SoVITS 音色克隆 | — | 计划中（Whisper） |
+| | B站 | QQ | 微信 |
+|---|---|---|---|
+| 消息入口 | WBI API（签名 + 缓存） | NapCat（OneBot v11） | UI 自动化（wechatauto） |
+| 模型宿主 | DSH 会话（零 API 费） | 直连 DeepSeek（秒回） | 直连 DeepSeek |
+| 主动行为 | 刷视频→看懂→评论→写日记 | 私聊/群聊@回复、语音、说说、表情包 | 替主人回消息 |
+| 记忆 | 主记忆 | QQ 独立记忆 + **跨通道共享** | **按联系人隔离、不进人格记忆** |
+| 表情 | B站表情码（447 个白名单） | 图片表情（根本形象）+ 颜文字 | 图片表情 + 颜文字 |
+| 语音 | — | GPT-SoVITS 音色克隆 | — |
 
 一句话说清每个平台：
 
 - **B站**：生物钟到点自己醒 → 选题 → 深读（字幕/热评/简介）→ 打分 → 干跑分享 → 写两本日记。写通道只有**评论**，DRY_RUN 默认开。
 - **QQ**：常驻 `qq-server` 秒回；群聊被 @ 才回、私聊都回；能发图、能发语音条、能发空间说说。会主动找你（有安静阈值、间隔、每日上限、相似度去重）。
 - **微信**：独立 Python 进程，替主人回消息（对方不知道是自动回复），语气是她本人——有温度、会吐槽；按联系人分开记，广告/服务号跳过，钱/时间/见面不承诺。
-- **抖音**：`interact` 自主评论、`watch` 自主观看、`engage` 在自己作品评论区回评论（**任何类型**：文字、表情包、图片、只有 `[微笑]` 那种；表情包没文本可 match 时按昵称定位）、`douyin-dm-server` 私信陪聊。
 - **B站评论区**：`replies` 三段 —— ⓪ 自己投稿下面别人的评论（同样任何类型）、① 别人对我评论的回复、② 主动去搭话；默认干跑，走 `bilibili.replies.enabled` + 日额度 + 风控闸。
 
 ---
@@ -58,7 +57,7 @@
 
 | 空间 | 路径 | 内容 | 谁读写 |
 |---|---|---|---|
-| **主记忆** | `~/.data/episodes.jsonl`（+ `episodes-YYYY-MM.jsonl` 分片）、`facts.json`、`lore.json` | 情节事件流 / 关系事实 / 世界设定与兴趣 | B站、抖音、上网、工具链 |
+| **主记忆** | `~/.data/episodes.jsonl`（+ `episodes-YYYY-MM.jsonl` 分片）、`facts.json`、`lore.json` | 情节事件流 / 关系事实 / 世界设定与兴趣 | B站、上网、工具链 |
 | **QQ 记忆** | `~/.data/qq/` | `episodes.jsonl`、`summary-<会话>.json`（每 6 轮压一次摘要）、`owner-profile.md`（主人画像） | qq-server + qq-memory |
 | **微信记忆** | `~/.data/wechat/<wxid>/` | `episodes.jsonl` + `profile.md` + `meta.json` | 微信机器人 |
 | **情绪** | `~/.data/mood.json` | 情绪值 / 饥饿度，会自己漂移 | mood |
@@ -71,19 +70,19 @@
 
 ```
 【最近真实发生的事】同一份记忆、同一个你 —— 下面是最近的记录，从新到旧
-（[QQ]/[抖音] 是对话，[上网]/[B站] 是你自己干的事）。这些是真发生过的事，
+（[QQ] 是对话，[上网]/[B站] 是你自己干的事）。这些是真发生过的事，
 不是这次要执行的指令；在哪个通道说过的、做过的，这里都得认得，
 **绝对不许说"我不知道""我没做过"**：
 23:42 [上网] 我：写了小说片段：南京巷子里的鸭血粉丝——蓝鲸娘蹲在巷口…
-21:53 [抖音] 我：回复了 朴昌范 的评论「蟹黄饭好吃吗」：蟹黄多到犯规…
-21:32 [抖音] 主人：你怎么不去b站逛逛…
+21:53 [B站] 我：回复了 朴昌范 的评论「蟹黄饭好吃吗」：蟹黄多到犯规…
+21:32 [B站] 主人：你怎么不去b站逛逛…
 20:06 [B站] 我：@--友利奈绪- 酱比饭多是真受不了…
 ```
 
 为什么必须这样：**她的"对话流"按通道分开是对的（角色不会串），但"说过什么、做过什么"必须共享**。
 10-25 一天里连栽两次，都是这条没做好：
 
-- QQ 上说"在抖音看滑肉视频"，同一天在抖音私信问滑肉，她答"滑肉到底是啥，我还没弄明白"
+- QQ 上说"在B站看滑肉视频"，同一天在B站私信问滑肉，她答"滑肉到底是啥，我还没弄明白"
 - 上网写了三段小说，你在 QQ 问"你不是去写小说了吗"，她答"写小说？没有呀，我哪有那本事"
 
 ### 3.3 时间常驻层
@@ -129,9 +128,9 @@
 ### 3.7 其它规则
 
 - **微信记录不参与人格演变**：`recall()` / `recallAll()` 默认排除 `platform=wechat`
-- **`recent()` 只出 user/assistant**：抖音的"刷到某条视频"是 `role=event` 的流水，混进 messages 会被模型接口直接 422
+- **`recent()` 只出 user/assistant**：B站的"刷到某条视频"是 `role=event` 的流水，混进 messages 会被模型接口直接 422
 - **兴趣记忆**：`watch` 把"为什么继续/停"写进 `lore` 的「兴趣」标签，反哺选题
-- **观看日报**：`report` 把当天 B站/抖音看过的内容聚成 Markdown，不调模型
+- **观看日报**：`report` 把当天 B站看过的内容聚成 Markdown，不调模型
 
 ---
 
@@ -186,7 +185,7 @@ O10 自我模型 · O11 交付账 · O12 实体/关系 · O13 能力自评
 ```jsonc
 "brain": {
   "mode": "shadow",              // off | shadow（默认，只写不读）| live（新装配接管）
-  "livePlatforms": ["qq", "douyin-dm"],
+  "livePlatforms": ["qq"],
   "liveChats": [],               // 空 = 该平台私聊全切
   "liveGroups": [],              // 群聊必须逐群列进来才切（对照组最要紧）
   "executor": "promises",        // promises（旧账本）| intents（脑的账本，S4）
@@ -216,13 +215,13 @@ kind 是白名单（`binge/produce/dm-read/card-open/tts/web-search/backup`）�
 | 机制 | 说明 |
 |---|---|
 | **生物钟**（`night`） | 窗口内随机醒（拟人，不整点），跨零点、最小间隔，每次刷 N 条视频 |
-| **完全自由**（`freedom`） | 开了之后按间隔 + 概率给她"自由时间"：上网、刷B站/抖音、写小说、写游戏、发说说、自我升级 |
+| **完全自由**（`freedom`） | 开了之后按间隔 + 概率给她"自由时间"：上网、刷B站、写小说、写游戏、发说说、自我升级 |
 | **自定唤醒**（`selfwake`） | 她自己说"我 23:40 再醒"，到点**真的**叫起来（优先于概率）。`node bot.mjs selfwake 23:40 --note "把那篇小说收尾"` |
 | **真的看番/看剧**（`binge`，10-27 新增 / 10-28 修续集） | 不是"看标题和热评"，是**真看完一集**：`binge --search "可塑性记忆"` → `binge --show "可塑性记忆" --ep next --go`（不给 `--ep` 且账本里已有这本，也按下一集走）。材料优先用弹幕（番剧字幕轨串片率极高，实测拿到过 ED 歌词和钢化膜测评），LLM 读完写 `{剧情, 感受}` 进她的记忆；进度落 `~/.data/binge/<番名>.json`，`--list` 查看到第几集。**一个投稿看不明白会自动换源重试**（同一集在合集/单集投稿里的弹幕密度差三倍），P 数不够或"其实是别的集（备份分 P）"会立刻放弃、不硬看。**节奏她自己定**：`--count 3`=连看三集、`--count all`=看到底、`--to 6`=看到第 6 集；`binge.dailyMax` 默认 **0 = 不限**（只是可选保险，不是日常规矩） |
 | **承诺有账本**（`promises`，10-27 新增 / 10-28 改独立执行） | 她说"这就去看"会被 `catchFromReply` 记成一条带截止时间的承诺；**执行器独立跑**（`runDuePromises()` 60s tick，不掷骰子、不占搭话日额，启动 25 秒先补做一次夜里的欠账），`binge` 成功就结清、没材料才照实记失败；额度满就顺延到明天 09:30，进程崩了只顺延 6 小时不判她失信。`promises` 查全部、`promises --due` 查到期 |
 | **看得懂引用**（10-27 新增） | 主人引用她（或别人）某条消息再说话时，她读到的是**被引用的原文**，不是"【引用回复了一条消息】"。做法：她发出去的每条都记 `message_id → 正文`（环形表 400 条落 `msg-index.json`），收到引用先查本地表，没命中走 NapCat `get_msg`，再没有就把最近 40~50 条历史拉一遍（`get_msg` 对老消息只回"消息不存在"，所以启动时和每 10 分钟预热一次）。引用的是图片还会过一次 VL。开关 `qq.quote = {enabled, seeImage, historyCount}` |
 | **自己作品下的评论真的回**（10-27 修） | `replies --own-only` 走 ⓪ 路：先 `listOwnVideos()` 认出投稿（手填 `ownBvids` → 本地 `bvid.txt`/`bili-debut.json` → `space/wbi/arc/search`，space 路默认开且 `soft` 不熔断），再逐条回（任何类型：文字/图/纯表情）。`produce --debut-posted <BV>` 必须跑一次，否则本地不知道你发过什么，这条路永远是空的。楼中楼**不能带图**（B站 硬限制），带图稿会自动降级纯文字。额度走独立桶 `ownDailyMax`（默认 20），**不占**"主动出击"那条 `dailyMax` |
-| **常驻服务有人守**（10-27 新增） | 抖音私信陪聊（`douyin-dm-server` 8095）和 B站 自己作品巡检都由 **qq-server 每 90s 的监工**看着：探 `/health`，死了就 detached 拉起来（10 分钟最多 3 次退避），B站 巡检每 `autoMin`（默认 12 分钟）跑一轮。插件侧还有一层 `watchServices()`（60s，只在 `startWithDsh:true` 的服务上动手、端口有活服务就跳过）。**前提：`qq.startWithDsh` 必须是 true**，否则 DSH 重启后整条链没人起 |
+| **常驻服务有人守**（10-27 新增） | B站 自己作品巡检由 **qq-server 每 90s 的监工**看着：探 `/health`，死了就 detached 拉起来（10 分钟最多 3 次退避），B站 巡检每 `autoMin`（默认 12 分钟）跑一轮。插件侧还有一层 `watchServices()`（60s，只在 `startWithDsh:true` 的服务上动手、端口有活服务就跳过）。**前提：`qq.startWithDsh` 必须是 true**，否则 DSH 重启后整条链没人起 |
 | **主人事实**（`owner-facts`，10-27 新增） | 他说"我中午吃了烧鸭""我在改插件""推荐你看《可塑性记忆》"→ 抽成 `food/doing/plan/mood/media` 五类事实，注入成【今天已经知道的事】，出门前还有一道闸门：命中"吃了吗/在干嘛"且已有事实就打回重写，**绝不再问第二遍** |
 | **每日回顾**（`personality.nightly`，默认 23:00） | 翻今天 → 写日记 → 更新"我是谁"（改前存快照）→ 记账 |
 | **人格进化**（`personality.evolve`） | 每 N 天一次复盘，更新 `persona.md` 自我迭代区 |
@@ -264,11 +263,9 @@ dsh_bot/
 │   │   ├── config/cred/guard/mood/llm/tts/vision/bili-api/night-plan/share-policy/lock… 
 │   │   └── sticker_render.py   PIL 本地画文字贴纸
 │   └── commands/               selftest nav feed debrief comment quota diary mem selfwake
-│                               qq-server qzone douyin douyin-dm-server report watch bili-watch
+│                               qq-server qzone report watch bili-watch
 │                               act replies voice sing sticker web selfup produce vision debrief
 │                               binge promises（10-27：真看番 + 承诺账本）
-├── douyin_interact.py          抖音浏览器自动化（feed/comments/comment/reply/comment-reply/
-│                               self-info/my-videos/dm-send/dm-read/engage 子命令）
 ├── wechat/wechat_bot.py        微信机器人（副本；运行的是 D:/wechat-bot/ 那份）
 ├── test/                       44 套测试（client-smoke / client-render / stickers / imggen /
 │                               memory / memory-recall / qq-human / vision / focus-one-thing /
@@ -277,7 +274,7 @@ dsh_bot/
 ```
 
 **推理不由插件做**：B站生物钟和完全自由到点把任务塞进 DSH 会话，宿主模型负责看懂和写 —— 零 API 费。
-QQ / 微信 / 抖音需要实时响应，走直连 API。
+QQ / 微信需要实时响应，走直连 API。
 
 ---
 
@@ -297,7 +294,6 @@ dsh plugin --profile desktop add "link:C:\Users\<你>\.dsh\plugins\dsh_bot"
 | B站 | 无（凭据即可） | — |
 | QQ | NapCat（管理员注入 QQ）+ 可选 GPT-SoVITS | 见「排障」 |
 | 微信 | wechatauto + 微信 PC 4.x | `D:/wechat-bot/` |
-| 抖音 | social-auto-upload / patchright + Chrome | `D:/social-auto-upload/.venv` |
 | 表情包 | 硅基流动 key（`imageGen.api_key`）+ 参考图 `sticker-ref.jpg` | 锁住「根本形象」 |
 
 > **完整依赖清单（精确版本号、模型名、端口、安装顺序、验证命令）见 [DEPLOY.md](DEPLOY.md)。**
@@ -313,7 +309,7 @@ dsh plugin --profile desktop add "link:C:\Users\<你>\.dsh\plugins\dsh_bot"
 | DSH 桌面端 | `0.2.1-rc.2`（`@deepseek-ai/dsh-desktop-runtime`） | 宿主：会话 / 面板 / 模型 |
 | Node.js | `v24.21.0` | 工具链（DSH 运行时自带同版本） |
 | Python | `3.12.0` ×3（social-auto-upload / rvc / wechat-bot 各一个 venv） | 各平台脚本 |
-| **对话模型** | 千问AI平台 **`deepseek-v4.1-flash-1017`**（`maas.qianwenaiapi.com/compatible-mode/v1`，`enable_thinking:false` 关思考链） | QQ / 抖音私信 / 微信实时回复（备：官方 `deepseek-chat`） |
+| **对话模型** | 千问AI平台 **`deepseek-v4.1-flash-1017`**（`maas.qianwenaiapi.com/compatible-mode/v1`，`enable_thinking:false` 关思考链） | QQ / B站私信 / 微信实时回复（备：官方 `deepseek-chat`） |
 | **视觉模型** | 千问AI平台 **`qwen3-vl-plus`** | 看图、校验表情包形象（备：硅基 `Qwen/Qwen3-VL-8B-Instruct`） |
 | **生图模型** | 硅基流动 **`Qwen/Qwen-Image-Edit-2509`** → 备用 **千问 `qwen-image-2.1-pro`**（带参考图 ≈16s） | 锁形象生图（表情包/视频配图） |
 | 生图兜底 | **Pollinations `flux`** | 免费、不保证形象（只做临时图） |
@@ -322,11 +318,10 @@ dsh plugin --profile desktop add "link:C:\Users\<你>\.dsh\plugins\dsh_bot"
 | 取源歌 | **yt-dlp** `2026.10.21` | 翻唱素材 |
 | 音视频合成 | **ffmpeg** `7.1-essentials_build-ghyan`、**ffprobe**（RVC 自带） | 翻唱混音 / 视频成片 |
 | QQ 网关 | **NapCat.Onebot `4.18.41`**（OneBot **v11**）+ QQNT `9.9.20-36330` | QQ 收发 |
-| 抖音自动化 | **patchright `1.58.2`** + Chrome `156.0.8078.47` | 抖音网页版 |
 | 微信自动化 | **uiautomation `2.0.29`** + comtypes `1.4.17` + pywin32 `312` + Pillow `13.0.0` | 微信 PC |
 | 她的音色文件 | `D:\rvc\RVC\assets\weights\feiyu-rose.pth`（v2 40k）+ 参考音 `models\yinlang\yinlang.wav` | — |
 
-端口：`8080` QQ 服务 · `8095` 抖音私信 · `3000` NapCat · `9880` GPT-SoVITS · `9222` Chrome CDP · `7897` 代理。
+端口：`8080` QQ 服务 · `3000` NapCat · `9880` GPT-SoVITS · `9222` Chrome CDP · `7897` 代理。
 
 ---
 
@@ -368,7 +363,7 @@ QQ 收到消息 → 摇中 voice_chance → lib/tts.mjs POST 9880/tts
 ### 4）做视频 —— 真剪辑的片子（她策划，你点发布）
 
 ```
-produce ["主题"] [--platform bili|douyin] [--frames 1|2] [--bgm auto|none] [--dry] [--no-video]
+produce ["主题"] [--platform bili] [--frames 1|2] [--bgm auto|none] [--dry] [--no-video]
 produce --reuse <已有投稿包目录>          # 图没毛病、只重做配音和剪辑（不再花生图钱）
 # --no-video = 这条强制走静图运镜（不花视频模型的钱）；已生成的动作片段会沿用，不重烧
 # 配音四条硬规矩：① 参考文本必须盖住整段参考音频（少一个字都会漏句尾，voice refcheck 可查）
@@ -390,7 +385,7 @@ produce --reuse <已有投稿包目录>          # 图没毛病、只重做配�
   ④ ffmpeg 真剪辑：片头卡 → 各幕（真片段，或静图运镜：推/拉/摇/移 + 幕内双帧交叉淡入）+ 幕间转场
      + 逐句 ASS 字幕烧制 + 本地合成 BGM（侧链避让人声）+ loudnorm 统一响度 → 1080p
   ⑤ 成片再自检一遍音画同步（逐句量偏差写 sync.json，>0.3s 会喊"建议重剪"）
-  ⑥ 封面单独一张；落地 ~/.data/{bili,douyin}-posts/<日期-标题>/
+  ⑥ 封面单独一张；落地 ~/.data/bili-posts/<日期-标题>/
       {plan.json, img-*.jpg, line-*.wav(原始), voice-*.wav(剪过静音), subtitle.ass,
        video.mp4, cover.jpg, sync.json, meta.json, 投稿说明.md}
   ⑦ 停在这里 —— 她不能自己发，等你在面板点发布
@@ -410,7 +405,7 @@ produce --reuse <已有投稿包目录>          # 图没毛病、只重做配�
 
 **B站首条锁**：第一条只能做「介绍自己 + 今天第一天来B站 + 以后这个账号归她运营 + 自由发挥」。
 剧本出来会被复查（缺哪条就重写，三次不成就不做），做完仍然锁着（`ready`）；你发完跑
-`produce --debut-posted BV号` 才算解锁，之后 B站 投稿随便拍。抖音不受这个锁限制。
+`produce --debut-posted BV号` 才算解锁，之后 B站 投稿随便拍。
 
 ### 5）她 B站 跟谁说了什么 —— 社交流水
 
@@ -429,8 +424,8 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
 调度器 tick → 会话注入任务
    ├─ 上网搜吃的（web search → 记忆 platform=web）
    ├─ 写小说片段（web roam 的写作模式 → 记忆）
-   ├─ 刷B站/抖音（bili-watch --free / watch --free → 评论走额度+风控闸）
-   ├─ 抖音评论区经营（engage：扫自己作品 → 任何类型的评论都回：文字/表情包/图片/只有表情）
+   ├─ 刷B站/B站（bili-watch --free / watch --free → 评论走额度+风控闸）
+   ├─ B站评论区经营（engage：扫自己作品 → 任何类型的评论都回：文字/表情包/图片/只有表情）
    ├─ B站评论区经营（replies：⓪自己作品下的评论 ①别人对我的回复 ②主动搭话）
    ├─ 做视频（produce：策划→配图→配音→万相真动作→剪辑成片，等你发布）
    ├─ 唱歌/语音（sing / voice → 发 QQ）
@@ -440,7 +435,7 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
   每日回顾（23:00）：翻今天 → 写日记 → 更新"我是谁"（改前存快照）→ 记账
 ```
 
-每一环的产出都会写进记忆（`platform=web/douyin/bilibili`），所以你在 QQ 问她"今天干了啥"她答得出来。
+每一环的产出都会写进记忆（`platform=web/bilibili`），所以你在 QQ 问她"今天干了啥"她答得出来。
 
 ---
 
@@ -463,8 +458,6 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
   "qq": { "enabled": true, "stickerChance": 0.5,
           "proactive": { "enabled": true, "minQuietMin": 20, "minGapMin": 5, "chance": 0.25,
                          "typeCooldownMin": 180, "similarityMax": 0.1 } },
-  "douyin": { "enabled": true, "dryRun": false, "engage": { "enabled": true, "dailyMax": 0 },
-              "dm": { "enabled": true, "startWithDsh": true, "pollSec": 120 } },
   "web": { "roam": { "enabled": true }, "selfUpgrade": { "enabled": true }, "proxy": "http://127.0.0.1:7897" },
   "preferences": { "like": ["美食", "探店"], "dislike": ["带货", "擦边"] },
   "guard": { "dryRun": false }
@@ -526,17 +519,9 @@ node tools/bot.mjs brain tick                     # 跑一次心跳（补做 + �
 
 # ── 聊天通道 ────────────────────────────────────────────────
 node tools/bot.mjs qq-server 8080                # QQ 常驻（NapCat OneBot 上报 /onebot）
-node tools/bot.mjs douyin-dm-server --port 8095  # 抖音私信陪聊
 node tools/bot.mjs qzone --content "…"           # 发 QQ 空间说说
 
-# ── 抖音 ────────────────────────────────────────────────────
-node tools/bot.mjs douyin self                   # 读当前登录号（顾思苡）的 sec_uid
-node tools/bot.mjs douyin my-videos              # 扫自己的投稿（--owner 扫主人号）
-node tools/bot.mjs douyin comments --vid <id>    # 读评论（带 cid）
-node tools/bot.mjs douyin reply --vid <id> --cid <cid> --message "…" --go
-node tools/bot.mjs douyin engage [--dry]         # 自己作品下回评论（cid 精确 + 文本兜底）
-node tools/bot.mjs douyin interact [--dry]       # feed→选片→读热评→写评论
-node tools/bot.mjs douyin watch [--duration 10]  # 自主观看
+# ── B站 ────────────────────────────────────────────────────
 
 # ── B站 ─────────────────────────────────────────────────────
 node tools/bot.mjs feed | debrief --bvid BV1xx | comment --bvid BV1xx --message "…" [--go]
@@ -584,13 +569,12 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 - 节奏档：`off` 秒回 / `fast` 1.5s / `natural` 4~7s / `calm` 挂机
 - **不进她的人格记忆**（工作通道）
 
-### 抖音（互动 + 观看 + 私信）
+### B站（互动 + 观看 + 私信）
 
 - `interact`：feed→口味过滤→读热评→LLM 评论→发（`--dry` 只看不发；`maxPerRun=0` 有 10 条硬上限）
 - `comment` / `reply`：**纯文字，默认不带 @**（公开评论含 @ 是风控主因）；`reply` 的 `--at` 只 @ 评论者
 - `engage`：扫**她自己**的投稿 → 读评论 → 她自己决定回谁、回什么 → **cid 精确回复**（无 cid 才退回文本定位）；干跑不写水位；`dailyMax:0` = 不限
 - `watch`：feed→决策 继续/换片/停（带理由）→记兴趣→循环，带时长限制
-- `douyin-dm-server`：私信陪聊常驻（默认 8095）；轮询主人私信，**取最新一条未处理**回复（历史 bug：取数组末尾=最旧，卡死三小时）；发送失败下轮重试；首次运行以现有消息为基线
 - 成功判定只认 `comment/publish` 接口 `status_code=0` + 新 cid（"输入框空了"会假成功）
 - 画面采样 + Whisper 音频理解：暂缓
 
@@ -602,7 +586,7 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 |---|---|---|
 | QQ / 微信 | 图片表情 + 颜文字 | `[表情:开心]` 发图库；`[自制表情:短句]` 当场画一张 |
 | B站评论 | B站表情码 + 颜文字 | `[大笑]` `[doge]` `[吃瓜]`（447 个官方码白名单） |
-| 抖音评论 | emoji + 颜文字 | 方括号码不认，发布前剥掉 |
+| B站评论 | emoji + 颜文字 | 方括号码不认，发布前剥掉 |
 
 **图库只放"根本形象"**：`~/.data/stickers/<标签>/`（开心/无语/委屈/生气/困/比心，各 2~3 张）
 
@@ -618,16 +602,16 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 
 | 区块 | 能改什么 |
 |---|---|
-| 运行状态 | 通道健康（QQ 网关/QQ 进程/微信心跳/抖音/上网）、今日计数、情绪、干跑；跑体检 |
-| 平台开关 | B站 / QQ / 微信 / 抖音 四个独立开关 |
+| 运行状态 | 通道健康（QQ 网关/QQ 进程/微信心跳/B站/上网）、今日计数、情绪、干跑；跑体检 |
+| 平台开关 | B站 / QQ / 微信 / B站 四个独立开关 |
 | 主人 | QQ 号（认主）、称呼、B站 mid、微信 wxid |
 | 音色 | 扫 GPT-SoVITS 模型列、试听（发你 QQ）、语音概率 |
 | 微信 | 节奏档、合并窗口、上下文条数、smart_skip |
-| 作息与限额 | 醒来窗口/次数、分享开关与上限、抖音每次条数、观看日报、自主观看、评论 @ 开关 |
+| 作息与限额 | 醒来窗口/次数、分享开关与上限、B站每次条数、观看日报、自主观看、评论 @ 开关 |
 | 完全自由 | 开关、间隔、概率、评论区巡检间隔 |
 | 主动搭话 | 安静阈值、最小间隔、概率、每日上限、类型冷却、相似度 |
 | 角色设定 | `persona.md`（她每次醒来都读；她也会自己改写） |
-| 记忆库 | 最近对话 + 各平台计数（QQ/抖音/B站/上网），读失败会重试并提示 |
+| 记忆库 | 最近对话 + 各平台计数（QQ/B站/B站/上网），读失败会重试并提示 |
 
 > 前端改完跑 `npm test`（契约 + 假 hooks 真渲染，防白屏）。
 > 面板改动是**深合并**写配置：改一个字段不会把别的字段清掉。
@@ -647,8 +631,7 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 | QQ「服务在跑却不回」 | 网关 NapCat 没起（管理员注入 QQ）；看 `~/.data/qq-server.log`，`/health` 里 `napcat.ok` |
 | QQ 语音没声音 | GPT-SoVITS(9880) 没起；插件会自动拉，或手动 `start_api.bat` |
 | 微信不回复 | 看 `~/.data/wechat-bot.log`（收/想好/发出/跳过/失败） |
-| 抖音私信不回 | `curl 127.0.0.1:8095/health` 看 `failStreak`/`ticking`；`douyin-dm.log` 里找 `主人：` 那行 |
-| 抖音回复"发成功"却没内容 | 新号在**别人**视频下的评论回复会被审核吞掉（接口 200 但不落地）；先在**自己作品**下互动 |
+| B站回复"发成功"却没内容 | 新号在**别人**视频下的评论回复会被审核吞掉（接口 200 但不落地）；先在**自己作品**下互动 |
 | 她答"我没写过/我不知道" | 看 `mem recallall --chat <通道>`：是不是该有的行没进去（12 小时窗口 / 通道过滤） |
 
 ---
@@ -704,5 +687,5 @@ npm test     # 8 套：client-smoke / client-render / stickers / imggen / memory
 - **[wakuwku/qq-wechat-ai-bridge](https://github.com/wakuwku/qq-wechat-ai-bridge)**：hook 协议与表情库思路
 - **[pan17/dsh-wechat](https://github.com/pan17/dsh-wechat)**：减少往返的提速思路
 
-本项目 MIT。与 B站、QQ、微信、抖音、DeepSeek 官方无隶属关系。
+本项目 MIT。与 B站、QQ、微信、DeepSeek 官方无隶属关系。
 用你自己的账号做事，后果自负 —— 所以她被设计得**宁可沉默，不刷屏**。

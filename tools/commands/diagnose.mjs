@@ -144,9 +144,9 @@ export async function run(argv = []) {
 
   // 4) LLM 通道：链有几级、有没有被熔断的、推理模型是否配错
   let llmMod = null
-  try { llmMod = await import('../lib/llm.mjs') } catch {}
+  try { llmMod = await import('../lib/llm.mjs') } catch (e) { swallow(e, 'diagnose:run') }
   if (llmMod) {
-    try { items.push(ok('LLM 通道', llmMod.describe())) } catch {}
+    try { items.push(ok('LLM 通道', llmMod.describe())) } catch (e) { swallow(e, 'diagnose:run') }
     try {
       const snap = llmMod.breakerSnapshot()
       const open = snap.filter((x) => x.openUntil)
@@ -159,7 +159,7 @@ export async function run(argv = []) {
       } else {
         items.push(ok('通道熔断', '无（所有通道健康）'))
       }
-    } catch {}
+    } catch (e) { swallow(e, 'diagnose:run') }
     // 推理模型配成"非推理"会在 max_tokens 小时返回空正文 —— 提前点出来
     try {
       const cfg2 = config()
@@ -171,7 +171,7 @@ export async function run(argv = []) {
       if (risky.length) {
         items.push(warn('推理模型未声明', risky.map((x) => x.model).join('、') + ' —— 看起来是推理型，建议显式写 reasoning:true（否则 max_tokens 小时会返回空正文）'))
       } else items.push(ok('推理模型声明', '链上模型都不需要特殊处理'))
-    } catch {}
+    } catch (e) { swallow(e, 'diagnose:run') }
   }
   const directLog = dataPath('llm-usage.jsonl')
   items.push(fs.existsSync(directLog)
@@ -279,7 +279,7 @@ export async function run(argv = []) {
   try {
     const { execFileSync } = await import('node:child_process')
     let hasGit = false
-    try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 5000 }); hasGit = true } catch {}
+    try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 5000 }); hasGit = true } catch (e) { swallow(e, 'diagnose:best-effort') }
     const tarMod = await import('../lib/tar.mjs')
     items.push(ok('代码归档', hasGit ? 'git 可用（睡眠第三阶段走 git 提交）' : '容器内无 git → 睡眠归档自动走内置 tar.gz（' + (typeof tarMod.tarGzDir === 'function' ? '已就绪' : '模块缺失') + '）'))
   } catch (e) { items.push(warn('代码归档', '检查失败：' + e.message)) }
@@ -321,4 +321,12 @@ export async function run(argv = []) {
   }
   const bads = items.filter((x) => x.ok === false)
   console.log('\n' + (bads.length ? '✗ ' + bads.length + ' 项要处理' : '✓ 没有发现静默失效') + '\n')
+}
+
+// ── CLI 直跑入口 ──────────────────────────────────────────────────────────
+// 之前没有这段：node tools/commands/diagnose.mjs 静默什么都不输出（exit 0），
+// 体检只能靠 DSH 面板跑 —— 排障时等于没有体检。DSH 命令加载器 import 本文件时
+// argv[1] 不是本文件，不会触发；手工 CLI 才会真正跑到 run()。
+if (process.argv[1] && import.meta.url === 'file://' + fs.realpathSync(process.argv[1])) {
+  await run(process.argv.slice(2))
 }

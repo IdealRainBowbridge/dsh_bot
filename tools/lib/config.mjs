@@ -66,7 +66,13 @@ export const DEFAULTS = {
   diary: { push: false },
   // 梦境（睡觉时做的梦，纯虚构、与真实记忆隔离）。v5 补进 DEFAULTS：
   // 代码里 persona.mjs / sleep.mjs 都在读 cfg.dream.*，但默认值里没有 → 老报"配置多出"。
-  dream: { enabled: true, mentionChance: 0.3 },
+  dream: { enabled: true, mentionChance: 0.3 },  dream: { enabled: true, mentionChance: 0.3 },
+  // 内置浏览器（2026-11-02）：chromium + 纯 Node CDP 驱动，电脑/手机双身份，JS 页面也能读正文。
+  browser: {
+    chromiumBin: 'chromium',            // Debian 官方包；Windows 侧改成本机 chrome.exe 全路径
+    proxy: 'http://172.17.0.1:7890',    // 容器里走宿主 Clash；不需要就置空
+    allowPrivate: [],                   // SSRF 防护例外名单：允许访问的内网主机名
+  },
   // 打小报告（看完好视频 → QQ 汇报给主人）。bili-watch / share-queue / tattle 都会读。
   tattle: { enabled: true, dailyMax: 3, minScore: 15 },
   // 自主探索（wander）：自己产生念头并执行。v5 补进 DEFAULTS。
@@ -159,7 +165,7 @@ export const DEFAULTS = {
     // 缺省必须是显式 false —— undefined 会让"没配"和"配了 false"分不出来。
     startWithDsh: false,
     // v5 入口鉴权：空 = 只接受本机回环（跨容器/局域网一律 401）；
-    // 填了值就强制校验（Authorization: Bearer / X-Feiyu-Token / ?token=）。
+    // 填了值就强制校验（Authorization: Bearer / X-Bot-Token / ?token=）。
     // 想给微信桥或外部脚本调用，就在这里发一个 token，别把服务裸奔在 0.0.0.0 上。
     inboundToken: '',
     napcat_http: 'http://127.0.0.1:3000',   // OneBot HTTP 服务器地址（SnowLuma/NapCat 的 WebUI 里配置）

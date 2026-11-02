@@ -1,6 +1,6 @@
 // produce —— 她的视频生产管线（第 17 轮升级：静图+旁白 → 真剪辑的片子）。
 //
-//   node bot.mjs produce ["主题"] [--platform bili|douyin] [--frames 1|2] [--bgm auto|none|<wav>] [--dry] [--no-video]
+//   node bot.mjs produce ["主题"] [--platform bili] [--frames 1|2] [--bgm auto|none|<wav>] [--dry] [--no-video]
 //   node bot.mjs produce --debut-posted [BV号]      # 首条发出去了，解锁
 //   node bot.mjs produce --debut                     # 看首条锁的状态
 //
@@ -26,6 +26,7 @@ import { dataPath } from '../lib/paths.mjs'
 import * as debut from '../lib/debut.mjs'
 import * as V from '../lib/video.mjs'
 import * as W from '../lib/wanvid.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const BRAND = '大肥鱼 · 一条住在主人电脑里的蓝鲸鱼娘'
 
@@ -88,7 +89,7 @@ export async function synthChecked(line, out, { log = console.log, emotion = '' 
     for (const f of fs.readdirSync(path.dirname(out))) {
       if (!f.startsWith(path.basename(out) + '.')) continue
       if (f === path.basename(out)) continue
-      try { fs.rmSync(path.join(path.dirname(out), f), { force: true }) } catch {}
+      try { fs.rmSync(path.join(path.dirname(out), f), { force: true }) } catch (e) { swallow(e, 'produce:finalize') }
     }
     return out
   }
@@ -209,20 +210,20 @@ export async function tuneRegister(scenes, { log = console.log, span = 1.2, hnrM
         const s = scoreWavs([{ path: tmp, chars: speakChars(sc.line), fidelity: true }])[0] || {}
         const st = Number(s.st)
         const hn = Number(s.hnr)
-        if (!j.ok || !Number.isFinite(st)) { try { fs.rmSync(tmp, { force: true }) } catch {} ; continue }
+        if (!j.ok || !Number.isFinite(st)) { try { fs.rmSync(tmp, { force: true }) } catch (e) { swallow(e, 'produce:rank') } ; continue }
         const better = rank(st, hn) < rank(bestSt, bestHnr) - 0.05 && !(Number.isFinite(hn) && hn < 1.0)
         if (better) {
-          if (best !== out) { try { fs.rmSync(best, { force: true }) } catch {} }
+          if (best !== out) { try { fs.rmSync(best, { force: true }) } catch (e) { swallow(e, 'produce:rank') } }
           best = tmp
           bestSt = st
           bestHnr = hn
-        } else { try { fs.rmSync(tmp, { force: true }) } catch {} }
+        } else { try { fs.rmSync(tmp, { force: true }) } catch (e) { swallow(e, 'produce:rank') } }
         if (Math.abs(bestSt - anchor) <= span && !(Number.isFinite(bestHnr) && bestHnr < hnrMin)) break
       } catch (e) { log(`      ✗ 重念失败：${String(e.message).slice(0, 40)}`) }
     }
     if (best !== out) {
       fs.copyFileSync(best, out)
-      try { fs.rmSync(best, { force: true }) } catch {}
+      try { fs.rmSync(best, { force: true }) } catch (e) { swallow(e, 'produce:rank') }
       const sp = V.speechSpan(out)
       sc.voiceDur = Math.max(0.2, sp.off - sp.on)
       sc.rate = +(speakChars(sc.line) / sc.voiceDur).toFixed(2)
@@ -418,7 +419,7 @@ export async function run(argv = []) {
     // 把 bvid 落到投稿包里（10-27）：`replies` 回自己作品评论时靠它认投稿，
     // 不用去啃 space 接口（那条路第一次试就吃 412 熔断）。
     if (bvid && s?.dir) {
-      try { fs.writeFileSync(path.join(s.dir, 'bvid.txt'), bvid) } catch {}
+      try { fs.writeFileSync(path.join(s.dir, 'bvid.txt'), bvid) } catch (e) { swallow(e, 'produce:run') }
     }
     console.log(`🔓 首条已发布${bvid ? `（${bvid}）` : ''} —— produce 从此自由，想剪什么剪什么`)
     if (bvid) console.log(`   已记进投稿包：replies 会自动回这条下面别人的评论（任何类型）`)
@@ -426,7 +427,7 @@ export async function run(argv = []) {
     try {
       const { emit } = await import('../brain/event.mjs')
       emit({ proc: 'produce', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant', text: '首条投稿已发布并解锁：' + (bvid || '(无BV)'), act: 'action' })
-    } catch {}
+    } catch (e) { swallow(e, 'produce:run') }
     void s
     return
   }
@@ -681,17 +682,17 @@ export async function run(argv = []) {
             const mem2 = await import('../lib/memory.mjs')
             mem2.remember('bilibili', 'bilibili:self', '40048138', 'assistant',
               '投稿成功：' + meta.title + ' BV' + result.bvid, { kind: 'post' })
-          } catch {}
+          } catch (e) { swallow(e, 'produce:best-effort') }
           try {
             const { sendOwnerQQ } = await import('../lib/notify.mjs')
             await sendOwnerQQ('投稿了！《' + meta.title + '》 https://www.bilibili.com/video/' + result.bvid)
-          } catch {}
+          } catch (e) { swallow(e, 'produce:best-effort') }
         } else {
           console.log('投稿失败：' + result.why)
           try {
             const { sendOwnerQQ } = await import('../lib/notify.mjs')
             await sendOwnerQQ('投稿失败：' + meta.title + ' ' + (result.why || '').slice(0, 100) + ' 投稿包在 ' + dir)
-          } catch {}
+          } catch (e) { swallow(e, 'produce:best-effort') }
         }
       } catch (e) { console.log('投稿异常：' + e.message) }
     }
@@ -703,11 +704,11 @@ export async function run(argv = []) {
     console.log('🔒 首条投稿包已就绪：发布之后跑 `bot produce --debut-posted BV号` 才解锁（在那之前只能继续做自我介绍）')
   }
 
-  try { fs.writeFileSync(capFile, JSON.stringify({ day: dayKey, count: (capState.day === dayKey ? Number(capState.count) : 0) + 1 })) } catch {}
+  try { fs.writeFileSync(capFile, JSON.stringify({ day: dayKey, count: (capState.day === dayKey ? Number(capState.count) : 0) + 1 })) } catch (e) { swallow(e, 'produce:best-effort') }
   try {
     const { spawn } = await import('node:child_process')
     spawn('powershell.exe', ['-NoProfile', '-Command', `Start-Process explorer.exe "${dir}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
-  } catch {}
+  } catch (e) { swallow(e, 'produce:best-effort') }
   console.log(`📦 投稿包：${dir}`)
   console.log(`   《${title}》${meta.durationSec}s · ${meta.resolution} · ${meta.sizeMB}MB · ${scenes.length} 幕`
     + (anim.count ? ` · 真动作 ${anim.count} 幕（估 ${anim.cost.toFixed(2)} 元）` : ' · 静图运镜'))

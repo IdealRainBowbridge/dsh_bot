@@ -39,7 +39,7 @@ assert.equal(inboundTokenOk(req({ ip: '172.17.0.2' }), cfg('')).reason, 'non-loo
 assert.equal(inboundTokenOk(req({ ip: '127.0.0.1' }), cfg('s3cret')).ok, false, '配了 token 就必须带')
 assert.equal(inboundTokenOk(req({ ip: '127.0.0.1', auth: 'Bearer s3cret' }), cfg('s3cret')).ok, true)
 assert.equal(inboundTokenOk(req({ ip: '127.0.0.1', auth: 'Bearer wrong' }), cfg('s3cret')).ok, false)
-assert.equal(inboundTokenOk(req({ ip: '127.0.0.1', token: 's3cret' }), cfg('s3cret')).ok, true, 'X-Feiyu-Token 也行')
+assert.equal(inboundTokenOk(req({ ip: '127.0.0.1', token: 's3cret' }), cfg('s3cret')).ok, true, 'X-Bot-Token 也行')
 assert.equal(inboundTokenOk(req({ ip: '127.0.0.1', url: '/inbound?token=s3cret' }), cfg('s3cret')).ok, true, '查询参数也行')
 assert.equal(inboundTokenOk(req({ ip: '172.17.0.2', auth: 'Bearer s3cret' }), cfg('s3cret')).ok, true, '配了 token 就可以跨机（显式开放）')
 assert.equal(inboundTokenOk(req({ ip: '172.17.0.2', auth: 'Bearer s3cret2' }), cfg('s3cret')).ok, false)
