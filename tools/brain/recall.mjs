@@ -200,7 +200,16 @@ export function bundle({ platform = 'qq', chatId = '', userId = '', userText = '
     if (byText.length) return byText
     return facts.active(now).filter((f) => f.s === 'owner').slice(-4)
   })()
-  return { lines, ids, ep: found.items, facts: factRows, intents: intents.due(now), chars: lines.join('\n').length }
+  // __all：全部可见的 episode（给 memchannel 的"自由浮现"用）
+  //
+  // 为什么单独给一份：召回是"按话题挑"，自由浮现是"不论话题挑"，
+  // 两者要看的池子不一样。用 `__` 前缀标明它是内部字段，
+  // 不是给提示词用的（不会拼进 lines）。
+  const all = (() => {
+    try { return allEpisodes().filter((x) => allowedFor(x, audience)) } catch { return [] }
+  })()
+
+  return { lines, ids, ep: found.items, __all: all, facts: factRows, intents: intents.due(now), chars: lines.join('\n').length }
 }
 
 /** 记一次检索（调参与复盘用，可旋删）。 */

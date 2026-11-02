@@ -37,6 +37,7 @@
 // "这条为什么相关""该怎么讲给她听"是**编排层的判断**，不是检索的职责。
 // 混在一起，以后调召回质量就分不清是检索错了还是加工错了。
 import { swallow } from '../lib/swallow.mjs'
+import { strengths, touchStrength } from './episode.mjs'
 
 const HOUR = 3_600_000
 
@@ -181,13 +182,151 @@ export function process({ bundle = {}, userText = '', now = Date.now(), valence 
     return { ep: first, times: gr.length, spanH: (Number(sorted[sorted.length - 1].at) - Number(first.at)) / HOUR }
   })
 
-  // ② 按"有没有理由"重排：说不出为什么想起的，排后面
+  // ══════════════════════════════════════════════════════════════════════
+  // ② 排列顺序：从"文件列表"改成"人的想起顺序"
+  // ══════════════════════════════════════════════════════════════════════
+  // 用户的要求：「她不是 AI 这件事我不否认，所以是**完全能回忆起来**，
+  //              只是回忆的**更像人**。」
+  //
+  // 所以这里不碰"能不能想起来"（永远想得起来），只改"想起来的形状"。
+  //
+  // 改前只有两条排序规则：有理由的优先，其次按时间新→旧。
+  // 那是**文件列表顺序**，不是回忆的顺序。三个不像人的地方：
+  //
+  //   ① **没有链式**：想起 A，A 才带出 B。
+  //      人才是"想起那天下雨 → 因为那天你说累了 → 你那天还说没吃饭"。
+  //      文件列表里 B 和 A 没有关系，只是恰好都在前 5 条。
+  //   ② **事实领先于情绪**：先想起"他说过累"，再想起当时的感受。
+  //      人是反的 —— 先胸口一紧，然后才想起"哦，是他那句话说重了"。
+  //   ③ **用过的不会更顺**：道理上常用的事该一想起就来，
+  //      但 `touchStrength` 全仓零调用，`strength.json` 从来没生成过，
+  //      所以 `w: { hits: 0.06 }` 那一项永远是 0。
+  //
+  // 现在按这三条重排。**排序不改变"有几条"，只改变"先想起哪条、为什么连着想起"。**
   const withWhy = picked.map((p) => ({ ...p, why: whyNow(p.ep, ctx) }))
-  withWhy.sort((a, b) => {
-    const aw = a.why ? 1 : 0, bw = b.why ? 1 : 0
-    if (aw !== bw) return bw - aw
-    return Number(b.ep.at) - Number(a.ep.at)
-  })
+
+  // ③-a 强度：用过的更容易冒出来（修第七次"建好没接"）
+  let STR = {}
+  try { STR = strengths() } catch { }
+
+  // ③-b 情绪领先：此刻情绪越强，越把"情绪接近的"往前放
+  const curV = Number(ctx.valence || 0)
+  const emoLead = Math.min(1, Math.abs(curV) / 0.5)     // 0~1，情绪平淡时不起作用
+
+  const score = (it) => {
+    const ep = it.ep
+    let v = 0
+    // 有理由的优先（他现在提到 > 还悬着 > 情绪对上 > 没理由）
+    v += it.why ? 2.0 : 0
+    if (it.why === '他刚说到这个') v += 1.5
+    if (it.why === '这事还悬着') v += 0.8
+    // 用过的更顺
+    const hit = STR[ep.id]
+    v += Math.min(1.2, Number(hit?.strength || 0) / 2.5) * 0.9
+    // 情绪领先：此刻低落时，先想起低落的那些
+    if (emoLead > 0) {
+      const ev = Number(ep.feel?.valence || 0)
+      v += emoLead * (1 - Math.abs(ev - curV) / 2) * 1.4
+    }
+    // 新鲜度只做很小的一点（不然全排成最近几分钟）
+    const h = (ctx.now - Number(ep.at || ctx.now)) / HOUR
+    v += Math.exp(-h / 36) * 0.35
+    return v
+  }
+
+  withWhy.sort((a, b) => score(b) - score(a))
+
+  // ③-c 链式：相邻两条如果"叫得上关系"，把关系写进理由里
+  //
+  // 这一条不是为了好看 —— 它是"想起一件事带出另一件"的代码形状。
+  // 判据用**共享实体/同一时段/同一情绪**，都是人联想时真会用的线索。
+  // ⚠️ 2026-11-02：第一版有一条坑 —— **同一条理由会连着用三次**。
+  //    实测输出：
+  //      「……就在那前后的事」
+  //      「……就在那前后的事」
+  //      「……就在那前后的事」
+  //    因为"2 小时内"这个判据在低数据量下几乎总成立（37 条全在同一天凌晨）。
+  //    读起来像模板刷屏，而不像回忆。
+  //
+  //    修：① 同一条理由最多连用一次，用过就换下一档判据
+  //        ② 判据按"信息量"排序：共享具体名词（最具体）> 情绪同向 > 同时段（最粗）
+  //        ③ 实在没有新理由，就**不给理由**（空着比重复像人）
+  const usedLinks = new Set()
+  for (let i = 1; i < withWhy.length; i++) {
+    const a = withWhy[i - 1].ep
+    const b = withWhy[i].ep
+    if (withWhy[i].why === '他刚说到这个') continue      // 已经有更强的理由了，别覆盖
+    const link = chainReason(a, b, usedLinks)
+    if (link) {
+      withWhy[i].why = link
+      usedLinks.add(link)
+    } else {
+      withWhy[i].why = ''      // 不给理由，比给一句重复的像人
+    }
+  }
+
+  // ④ 记一笔"被用过"（这样它下次更容易冒出来）
+  try {
+    touchStrength(withWhy.slice(0, 6).map((x) => x.ep.id), { delta: 0.12, now: ctx.now })
+  } catch { }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ⑤ 自由浮现：**不由话题决定，由此刻的状态决定**
+  // ══════════════════════════════════════════════════════════════════════
+  // 用户那句话："她完全能回忆起来，只是回忆得**更像人**"。
+  //
+  // 人回忆最不像检索的一点是：**话题决定不了想起什么。**
+  // 你问图片，我可能突然想起三年前一个下雨天 —— 跟图片毫无关系，
+  // 但它就是冒出来了。生理依据是海马的索引按**情绪和情境**建，不按关键词。
+  //
+  // 所以这里在"按话题召回"之外，再走一条独立的：
+  //   在全部记忆里挑一条**跟这句话无关、但跟此刻状态有关的**。
+  // 三个来源（各占一部分概率）：
+  //   · 情绪闪回：此刻心里堵 → 捞最堵的那几条之一
+  //   · 时间联想：这个点（同小时）常发生的事
+  //   · 纯偶然：随机一条真事（这一条最没道理，也最像人）
+  //
+  // **但要标明它从哪来** —— 检索到的说"你问的这个"，闪回的说"突然想起来"，
+  // 纯偶然的**什么都不说**（人也不会说"我也不知道为什么想起这个"）。
+  const freeLine = (() => {
+    try {
+      // 已经在列表里的就别重复了
+      const shown = new Set(withWhy.slice(0, limit).map((x) => x.ep.id))
+      const all = Array.isArray(bundle.__all) ? bundle.__all : null   // 有全量就用，没有就跳过
+      if (!all || !all.length) return null
+
+      const r = Math.random()
+      let pick = null
+      let why = ''
+
+      if (r < 0.40 && Math.abs(curV) > 0.25) {
+        // 情绪闪回
+        const same = all.filter((x) => !shown.has(x.id) && Math.sign(Number(x.feel?.valence || 0)) === Math.sign(curV))
+        if (same.length) {
+          same.sort((a, b) => Math.abs(Number(b.feel?.valence || 0)) - Math.abs(Number(a.feel?.valence || 0)))
+          pick = same[0]
+          why = '突然想起来的，跟这句没关系'
+        }
+      } else if (r < 0.70) {
+        // 时间联想：同一个钟点发生过的事
+        const hod = new Date(ctx.now).getHours()
+        const same = all.filter((x) => !shown.has(x.id) && new Date(Number(x.at || 0)).getHours() === hod)
+        if (same.length) {
+          pick = same[Math.floor(Math.random() * same.length)]
+          why = '这个点总会想起'
+        }
+      }
+
+      if (!pick) {
+        // 纯偶然：什么都不说
+        const pool = all.filter((x) => !shown.has(x.id) && (x.gist || x.quote))
+        if (pool.length) pick = pool[Math.floor(Math.random() * pool.length)]
+        why = ''
+      }
+      if (!pick) return null
+      return { ep: pick, why: why || '也不知道为什么想起来的' }
+    } catch { return null }
+  })()
 
   // ③ 渲染。合并过的要说出"不止一次"，那是记忆里很真实的一种形状。
   const used = withWhy.slice(0, limit)
@@ -203,6 +342,16 @@ export function process({ bundle = {}, userText = '', now = Date.now(), valence 
     const tail = why ? '  —— ' + why : ''
     lines.push(head + ' ' + body.slice(0, 70) + repeat + tail + '  ‹' + ep.id + '›')
     ids.push(ep.id)
+  }
+
+  // 自由浮现那条放**最后** —— 人的话头也是"对了，还有件事"这样吊在末尾的。
+  if (freeLine) {
+    const body = String(freeLine.ep.gist || freeLine.ep.quote || '').replace(/\s+/g, ' ').trim()
+    if (body && body.length > 3) {
+      lines.push(relTime(freeLine.ep.at, now) + ' ' + body.slice(0, 70)
+        + '（' + freeLine.why + '）  ‹' + freeLine.ep.id + '›')
+      ids.push(freeLine.ep.id)
+    }
   }
 
   return { lines, ids, merged, dropped: items.length - used.length }
@@ -231,4 +380,97 @@ function relTime(at, now) {
   if (days <= 1) return '昨天' + part
   if (days < 7) return days + ' 天前的' + part
   return '有一阵子了'
+}
+
+/**
+ * 两条记忆之间"人会不会连着想起" —— 能连上就给一句理由，连不上返回 ''。
+ *
+ * 这是"想起一件事带出另一件"的代码形状。
+ * 判据用的是**人真会用的联想线索**，不是语义相似度：
+ *   · 同一件事的人（都在说他）
+ *   · 同一时间段（都是那天凌晨）
+ *   · 情绪同向（都是难过的）
+ *   · 共享具体名词（都提到"加班""饭"）
+ *
+ * 为什么不用 embedding 相似度：那会把"两句话说的是同一类事"误判成"连着想起"。
+ * 人联想靠的是**当时的情境**，不是话题分类。
+ */
+function chainReason(a, b, used = new Set()) {
+  if (!a || !b) return ''
+  const ta = String(a.gist || '')
+  const tb = String(b.gist || '')
+
+  // 按**信息量从高到低**试，且同一条理由不用第二次。
+  // 顺序很重要：先试最具体的（共享名词），最后才试最粗的（同时段）。
+  const cands = []
+
+  // ① 共享具体名词 → 最具体，最像"由这件事想到那件事"
+  try {
+    const na = new Set(nouns(ta))
+    const nb = nouns(tb)
+    const shared = nb.filter((w) => na.has(w))
+    if (shared.length) cands.push('后来也提到过「' + shared[0] + '」')
+  } catch { }
+
+  // ② 情绪同向且都强
+  const va = Number(a.feel?.valence || 0)
+  const vb = Number(b.feel?.valence || 0)
+  if (Math.abs(va) > 0.3 && Math.abs(vb) > 0.3 && Math.sign(va) === Math.sign(vb)) {
+    cands.push(va > 0 ? '那阵子心情都不错' : '那阵子都差不多这样')
+  }
+
+  // ③ 同一时段（2 小时内）→ 最粗，放最后
+  const dtH = Math.abs(Number(a.at) - Number(b.at)) / HOUR
+  if (dtH <= 2 && dtH > 0) cands.push('就在那前后的事')
+
+  for (const c of cands) if (!used.has(c)) return c
+  return ''
+}
+
+/**
+ * 抽"能当联想线索"的词 —— 跳过说话人标签、语气词、时间虚词。
+ *
+ * ⚠️ 2026-11-02：第一版没排除**说话人标签**，于是输出了
+ *    「后来也提到过「主人」」—— 主人不是名词，是"谁在说话"。
+ *    这类错的共同点：它是一条**格式信息**，不是内容。
+ *    类似的还有"他说""我说""【他发来""QQ 标记"。
+ *
+ *    判断口径：这个词**能不能作为一件事的宾语**。
+ *    "提到过主人" 语法通但没信息（每句都有主人）；
+ *    "提到过加班" 才是线索。
+ */
+function nouns(t) {
+  const STOP = new Set([
+    // 时间/指代虚词
+    '今天', '刚才', '现在', '这个', '那个', '什么', '怎么', '就是', '还是',
+    '可以', '不要', '没有', '已经', '应该', '所以', '但是', '而且', '然后',
+    // 说话人标签（这些是格式，不是内容）
+    '主人', '他说', '我说', '说的', '他发', '发来', '发了', '标记', '表情',
+    '语气', '图片', '一张', '的他', '的她',
+  ])
+  const out = []
+  const zh = String(t || '')
+    // 先把格式性的括号说明整段去掉（【他发来一张图片（我直接看到了原图）】这类）
+    .replace(/【[^】]*】/g, ' ')
+    .replace(/[（(][^）)]*[）)]/g, ' ')
+    .replace(/[^\u4e00-\u9fa5]/g, '')
+  // ⚠️ 2026-11-02：bigram 在中文专有名词上会**切碎**。
+  //    实测输出「后来也提到过**「人今」**」—— 那是"主人今天"被切成"人今"。
+  //    bigram 对检索是够用的（两字就能命中），但对**展示**完全不能用：
+  //    她读到"提到过人今"会觉得这系统坏了。
+  //
+  //    改用**不切词的整段候选**：按标点和虚词切成短语，取 2~6 字的短段。
+  //    这不需要分词器 —— 中文里"被虚词隔开的一段"通常就是一个词或短语。
+  const CHUNKS = zh
+    .replace(/[的了着过是在和与及或而但就都也很太最更再又还只不没别很]/g, '|')
+    .split('|')
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 2 && x.length <= 6)
+
+  for (const c of CHUNKS) {
+    if (STOP.has(c)) continue
+    out.push(c)
+  }
+  // 长一点的也留原样（4~6 字更像一个完整说法）
+  return out
 }
