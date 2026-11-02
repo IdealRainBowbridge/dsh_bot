@@ -13,6 +13,7 @@
 //
 // 需要：chromium（apt 装）+ Node ≥ 22.4（自带全局 WebSocket，太老会提示）。
 import fs from 'node:fs'
+import { sanitizeText } from './sanitize.mjs'
 import path from 'node:path'
 import dns from 'node:dns/promises'
 import net from 'node:net'
@@ -660,10 +661,12 @@ export async function browserAct(action, ...args) {
       }
       const v = tr.result?.value ?? {}
       if (!v.ok) { note(target, '失败：' + (v.why || '').slice(0, 60)); throw new Error(v.why || '定位输入框失败') }
-      await conn.cdp.send('Input.insertText', { text }, sessionId)
+      const outText = sanitizeText('browser-type', text)   // 出站硬脱敏（2026-11-03）：打进网页的字先过过滤器
+      if (outText !== text) note(target, '已脱敏：有内容没往网页带出去')
+      await conn.cdp.send('Input.insertText', { text: outText }, sessionId)
       await ev(`document.activeElement.dispatchEvent(new Event('input', {bubbles:true})); document.activeElement.dispatchEvent(new Event('change', {bubbles:true})); true`)
-      note(target, '输入 ' + text.length + ' 字')
-      return `已输入 ${text.length} 个字（还没提交，要发送就 browser enter，或 click 提交按钮）`
+      note(target, '输入 ' + outText.length + ' 字')
+      return `已输入 ${outText.length} 个字（还没提交，要发送就 browser enter，或 click 提交按钮）`
     }
     case 'enter': {
       await ev(`(() => { const el=document.activeElement; if(el && el.form && el.form.requestSubmit) { el.form.requestSubmit(); return true } if(el) el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); return true })()`)

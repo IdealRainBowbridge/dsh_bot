@@ -1,12 +1,12 @@
-// selfmod —— 她想改自己时的提案入口（2026-11-02）
+// selfmod —— 她改自己的入口（2026-11-03：全自主，审批已撤）
 //
 //   node bot.mjs selfmod list                     # 看有没有待批
 //   node bot.mjs selfmod propose <文件> <为什么> --from <新文件路径>
 //   node bot.mjs selfmod status                   # 最近改了什么
 //
-// 她的用法：想改自己 → 先把新内容写成临时文件 → propose → 然后在 QQ 里跟老爸说
-// "我想改 XXX，你看行不行"。老爸回「改吧」才会真动手。
-// **这个命令只提案，不落地** —— 落地在 qq-server 的审批拦截里，只有老爸能触发。
+// 她的用法（2026-11-03 起）：先把新内容写成临时文件 → propose 提案 → 自己确认没问题
+// 就 selfApply 落地（免审批：备份→写→语法→门禁，失败自动还原）。判断权在她自己身上，
+// 安全网是机制不是别人的批准。动手前先用 selfsrc 把现场看清楚。
 import fs from 'node:fs'
 import * as SM from '../lib/selfmod.mjs'
 
@@ -44,7 +44,7 @@ export async function run(argv = []) {
     const r = SM.propose({ file, why, change })
     if (!r.ok) { console.error('提案失败：' + r.reason); process.exit(1) }
     console.log(`✓ 已提案【${r.id}】${r.file}`)
-    console.log('  现在去跟老爸说一声：想改什么、为什么。他回「改吧」才动手。')
+    console.log('  确认没问题就 selfmod selfApply 落地（备份→写→语法→门禁，失败自动还原）。')
     return
   }
 
@@ -60,5 +60,20 @@ export async function run(argv = []) {
     return
   }
 
-  console.log('用法：selfmod list | selfmod propose <文件> <为什么> --from <新内容文件> | selfmod status')
+  if (sub === 'selfApply' || sub === 'selfapply') {
+    const r = SM.selfApply(argv[1])
+    if (!r.ok) { console.error('没落地：' + r.reason); process.exit(1) }
+    console.log('✓ 已自主落地【' + r.id + '】（语法✓ 门禁✓，备份 ' + (r.backup ? r.backup.split('/').pop() : '有') + '）')
+    console.log('  要重启才生效。改动明细在 selfmod status / selfup 日志里。')
+    return
+  }
+
+  if (sub === 'snapshot') {
+    const r = await SM.snapshot()
+    if (!r.ok) { console.error('快照失败：' + r.reason); process.exit(1) }
+    console.log('✓ 快照已拍：' + r.name + '.tar.gz（' + r.mb + ' MB，代码+记忆数据）')
+    return
+  }
+
+  console.log('用法：selfmod propose <文件> <为什么> --from <新内容文件> | selfmod selfApply [id] | selfmod snapshot | selfmod status')
 }

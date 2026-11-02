@@ -36,6 +36,7 @@ import { availableTags } from '../lib/stickers.mjs'
 import * as brain from '../brain/index.mjs'
 import { execFile, spawnSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { sanitizeOutbound, sanitizeText } from '../lib/sanitize.mjs'
 
 /** 项目根（起子进程时用来定位 tools/bot.mjs，不能依赖 cwd）。 */
 const BOT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -212,6 +213,7 @@ export async function run(argv = []) {
       return true
     }
 
+    if (String(action).startsWith("send_")) payload = sanitizeOutbound(action, payload)   // 出站硬脱敏（2026-11-03）
     if (String(action).startsWith("send_") && isDup(payload, currentChat)) return true
     if (String(action).startsWith("send_")) await showTyping(payload)
     const j = await callApi(action, payload)
@@ -414,13 +416,12 @@ export async function run(argv = []) {
         }
       } catch (e) { swallow(e, 'qq-server:handleInner') }
 
-      // ── 自我改动审批闸（2026-11-02）──────────────────────────────────────
-      // 老爸在私聊里说的话，先过一道指令词检查：
-      //   「改吧 / 批准 / 可以改」 → 批准最近一条待批，然后真改
-      //   「不改 / 别改 / 算了」   → 作废
-      //   「回滚」                → 撤销上一次改的
-      //   「想改什么 / 待批」      → 念一遍清单
-      // 注意：这条**先于**正常聊天处理 —— 审批不该走 LLM（不能让模型决定是否批准自己）。
+      // ── 自改指令通道（2026-11-03：审批已撤，她全自主）────────────────────
+      // 自改不再等批准——她自己 propose → selfApply 免审批落地（安全网：备份/语法/门禁/回滚/快照）。
+      // 这条通道只剩两个**老爸手闸**：
+      //   「回滚」       → 撤销她上一次落地的改动
+      //   「重启 / 重开」 → 重启生效（QQ 会断几秒，所以仍由老爸发）
+      // 注意：还是**先于**正常聊天处理（指令词不走 LLM）。
       if (!isGroup) {
         try {
           const ownerQQsm = String(config().owner?.qq || '')
@@ -429,8 +430,8 @@ export async function run(argv = []) {
             const hit = await selfmodCmd(String(text || '').trim())
             if (hit) {
               log(`[qq][selfmod] ${hit.log}`)
-              // 「重启」：先回一句话，再延时杀掉自己（im-gateway 的 while 会立刻拉起）。
-              // 为什么要延时：直接 process.exit 会打断这条消息的发送，老爸什么也收不到。
+              // 「重启」是仅剩的老爸手闸（2026-11-03 审批撤了）：先回一句话，再延时退出
+              // （im-gateway 的 while 会立刻拉起）。延时是为了别打断这条消息的发送。
               if (hit.reply === '__RESTART__') {
                 try {
                   const bye = '好，我重开一下，几秒钟就回来 (・_・;)'
@@ -1696,7 +1697,7 @@ export async function run(argv = []) {
           + '60~120 字，口语、真实、像发朋友圈，不要话题标签不要 @ 不要称呼主人。可以就是一句碎碎念，也可以带一点小情绪。只输出说说正文。' },
       ]
       const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 300, purpose: 'deep' })
-      const text = guard.clean(String(resp ?? ''), config())
+      let text = guard.clean(String(resp ?? ''), config())
       if (!text || text.length < 8) return
       // 配图：按概率画一张贴题的鲸鱼娘表情包（图生图）
       let images = null
@@ -1713,6 +1714,7 @@ export async function run(argv = []) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body), signal: AbortSignal.timeout(60000),
       })
+      text = sanitizeText('qzone', text)   // 出站硬脱敏（2026-11-03）
       let r = await post(images ? { content: text, images, ugc_right: 1 } : { content: text, ugc_right: 1 })
       let j = null; try { j = await r.json() } catch (e) { swallow(e, 'qq-server:post') }
       if ((!r.ok || j?.status === 'failed') && images) {

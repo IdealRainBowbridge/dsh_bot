@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { config } from '../lib/config.mjs'
 import * as llm from '../lib/llm.mjs'
+import { sanitizeText } from '../lib/sanitize.mjs'
 import { dataPath, homePath, WORK_DIR } from '../lib/paths.mjs'
 import { acquire } from '../lib/lock.mjs'
 import { swallow } from '../lib/swallow.mjs'
@@ -60,6 +61,7 @@ function htmlToText(html) {
 
 /** 搜索三级链：RSS(curl) → 内置浏览器开 SERP → DDG(curl)。RSS 被封/改版时浏览器层能过风控。 */
 export async function searchSmart(kw) {
+  kw = sanitizeText('search', kw)   // 出站硬脱敏（2026-11-03）：搜什么词也出得去
   let results = searchWeb(kw)
   if (results.length) return results
   try {
@@ -78,6 +80,7 @@ export async function searchSmart(kw) {
 
 /** 搜索：Bing 国内直连优先，0 结果/失败走 DDG（代理）。返回 [{title, url, snippet}] */
 export function searchWeb(kw) {
+  kw = sanitizeText('search', kw)   // 出站硬脱敏（2026-11-03）
   const results = []
   try {
     // ✗ 别加 &count=15（10-27 实测）：带上这个参数，cn.bing.com 会返回一批**跟关键词完全无关**

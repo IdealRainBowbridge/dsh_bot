@@ -1,17 +1,18 @@
-// selfmod —— 她在 QQ 里改自己的审批闸（2026-11-02）
+// selfmod —— 她改自己的安全网（2026-11-03：审批撤了，她全自主）
 //
 // 用户要求：能在 QQ 里叫她改自己；选的是「先备案：她说想改 XXX，老爸回'改吧'才真动手」，
 // 范围「全部都能改（含 QQ 通路/记忆/账本）」——所以安全网必须厚，不能靠她自己自觉。
 //
 // 流程（一条提案的生命周期）：
 //   propose()  她提一个改动 → 落盘 pending，同时 QQ 里说一句"我想改 XXX，你看行不行"
-//   approve()  老爸回「改吧」→ 绑定到最近那条 pending → 才开始真改
+//   selfApply() 2026-11-03 起：审批撤了，提案直接落地（备份→写→语法→门禁→失败还原）
+//   approve()  （已退役）原「老爸回改吧才动手」的批准入口，保留但不再用
 //   apply()    备份 → 写文件 → node --check → check.mjs → 测试
 //              任一失败 → 自动用备份还原（不留半成品）
 //   reject()   老爸说"不改" → 提案作废
 //
 // 红线（写死在代码里，不靠提示词）：
-//   ① 没有 approved 状态绝不写文件
+//   ①（2026-11-03 撤销）审批闸已拆：selfApply 免审批落地；安全网=备份+语法+门禁+回滚+宿主定时git+整容器快照
 //   ② 每次写前强制备份（selfup backup 独立目录）
 //   ③ 写后必须 node --check 通过，否则立即回滚
 //   ④ **绝不自动重启** —— 重启会让 QQ 断线，必须老爸点头
@@ -236,6 +237,90 @@ export function apply(id) {
 
   return { ok: true, id: item.id, checks, backup: bk.dir, needRestart: true }
 }
+
+/**
+ * 全自主落地（2026-11-03 口径：审批撤了，她完全自主）。
+ * 安全网从"等批准"换成"改不坏"：
+ *   备份失败不写 → 语法不过自动还原 → 门禁不过自动还原 → 宿主定时 git 留痕 → 整容器快照兜底。
+ * 与 apply 的唯一差别：不需要 approved 状态，pending 里最近的提案直接落地。
+ */
+export function selfApply(id) {
+  const s = readState()
+  const item = id ? s.pending.find((x) => x.id === id) : s.pending[0]
+  if (!item) return { ok: false, reason: '没有可落地的提案（先用 selfmod propose 提案）' }
+
+  const file = safeResolve(item.file)
+  if (!file) return { ok: false, reason: '路径非法' }
+
+  // ① 备份（失败就不改）
+  let bk
+  try { bk = backup(file) } catch (e) { return { ok: false, reason: '备份失败，不敢改：' + e.message } }
+
+  // ② 写文件
+  const before = fs.readFileSync(file, 'utf8')
+  try { fs.writeFileSync(file, item.change) }
+  catch (e) {
+    try { fs.writeFileSync(file, before) } catch { }
+    return { ok: false, reason: '写文件失败：' + e.message }
+  }
+
+  const checks = { syntax: false, gate: false }
+
+  // ③ 语法检查（不过 → 立即还原）
+  try {
+    execFileSync(process.execPath, ['--check', file], { timeout: 30000, stdio: 'pipe' })
+    checks.syntax = true
+  } catch (e) {
+    fs.writeFileSync(file, before)
+    return { ok: false, reason: '语法检查没过，已还原：' + String(e.stderr || e.message).slice(0, 200), rolledBack: true }
+  }
+
+  // ④ 项目门禁（只跑 check.mjs；全量测试太慢，兜底交给宿主定时 git + 快照）
+  try {
+    const out = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'check.mjs')], { timeout: 120000, stdio: 'pipe', cwd: ROOT })
+    checks.gate = /门禁通过/.test(String(out))
+    if (!checks.gate) {
+      fs.writeFileSync(file, before)
+      return { ok: false, reason: '门禁没过，已还原：' + String(out).slice(-300), rolledBack: true }
+    }
+  } catch (e) {
+    fs.writeFileSync(file, before)
+    return { ok: false, reason: '门禁跑挂，已还原：' + String(e.stderr || e.message).slice(0, 300), rolledBack: true }
+  }
+
+  // ⑤ 记账 + 手术日志
+  s.pending = s.pending.filter((x) => x.id !== item.id)
+  s.history.unshift({ ...item, abs: undefined, state: 'applied-self', appliedAt: Date.now(), backup: bk.dir, checks })
+  s.history = s.history.slice(0, 50)
+  writeState(s)
+  try {
+    execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
+      `【${item.id}】自主改 ${item.file}：${item.why}（语法✓ 门禁✓，备份 ${path.basename(bk.dir)}）`],
+      { timeout: 20000, stdio: 'pipe', cwd: ROOT })
+  } catch (e) { swallow(e, 'selfmod:selfApply-log') }
+
+  return { ok: true, id: item.id, checks, backup: bk.dir, needRestart: true }
+}
+
+/** 整容器快照（2026-11-03）：代码+记忆数据打成一份包，放 data/snapshots/。她自己也能拍。 */
+export async function snapshot() {
+  const { execFile } = await import('node:child_process')
+  const dir = dataPath('snapshots')
+  fs.mkdirSync(dir, { recursive: true })
+  const name = 'self-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const out = path.join(dir, name + '.tar.gz')
+  const dataRoot = path.dirname(dataPath('x'))            // 容器内 /home/feiyu
+  const args = ['-czf', out,
+    '--exclude', 'node_modules', '--exclude', '.git', '--exclude', '.data/snapshots',
+    '-C', path.dirname(ROOT), path.basename(ROOT),
+    '-C', dataRoot, '.data']
+  await new Promise((res, rej) => {
+    execFile('tar', args, { timeout: 240000 }, (err) => (err ? rej(err) : res()))
+  })
+  const mb = (fs.statSync(out).size / 1048576).toFixed(1)
+  return { ok: true, name, mb }
+}
+
 
 /** 一键回滚（老爸说"回滚"时用）。 */
 export function rollback(id) {
