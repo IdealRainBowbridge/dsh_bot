@@ -58,6 +58,7 @@ const COMMANDS = {
   social: 'B站社交流水：social [--days 3] [--kind 回评] [--invisible] [--md] [--push]（她今天跟谁说了什么，重点是不 @ 主人的那些）',
   vision: '视觉理解：status（看配置）| probe --image <图>（多模态描述，等视觉 key 点亮）',
   selfwake: '她自己定下次几点醒：selfwake 23:40 [--note "…"]｜--show｜--clear',
+  selfcon: '自我账本：selfcon show 看她认下的自己 ｜ selfcon introspect 照一次镜子（白天只采集，结算归睡眠）',
   mind: '统一自主规划：mind（看当前计划）| mind now（立刻重新决定接下来做什么）| mind history（决策流水）',
   focus: '她决定"接下来这一段时间干什么"：focus web|bilibili|binge --min 25 ｜focus rest --min 40 ｜focus off ｜focus（看现在在干什么）',
   binge: '看番/看剧（真的看完一集）：binge --search "番名" | binge --show "番名" --ep 2 --go | binge --bvid BV1xx --go | binge --list',

@@ -88,6 +88,12 @@ async function seeds(now = Date.now()) {
     }
   } catch (e) { swallow(e, 'tools/commands/dream.mjs:seeds:eps') }
   try {
+    // 自我议题的渗漏 (批二): 白天没算完的自我账, 夜里以梦出现 (REM 对自我相关加工激活)。
+    // 只给素材, 纯度抽签仍归 pickSeeds 的四种纯度 -- 不强制入梦。
+    const selfcon = await import('../brain/organ/selfcon.mjs')
+    for (const s of selfcon.dreamSeeds(now).slice(0, 2)) pool.push(s)
+  } catch (e) { swallow(e, 'tools/commands/dream.mjs:selfcon') }
+  try {
     const lore = JSON.parse(fs.readFileSync(dataPath('lore.json'), 'utf8'))
     for (const l of (lore || []).slice(-6)) pool.push(String(l.text).slice(0, 50))
   } catch (e) { swallow(e, 'tools/commands/dream.mjs:36') }

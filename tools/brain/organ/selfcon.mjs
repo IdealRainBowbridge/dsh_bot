@@ -125,35 +125,47 @@ export function recordOthersUse(name, who, at = Date.now()) {
   mutateJson(FILE(), emptyBook(), (b) => {
     const book = { ...emptyBook(), ...b }
     const isOwner = who === 'owner'
-    if (isOwner) {
-      book.counters = { ...book.counters, ownerCall: Number(book.counters?.ownerCall || 0) + 1, lastOwnerCallAt: at }
-    }
     const cand = book.candidates?.name
     if (cand && cand.value === n) {
+      // 候选名: 转正计数 (selfUses 的另一路)。别人肯跟着叫 = 名字开始有社会存在。
       cand.othersUses = Number(cand.othersUses || 0) + 1
       cand.lastOthersUseAt = at
-      if (isOwner) cand.othersWho = cand.othersWho || []
-      if (isOwner && !cand.othersWho.includes('owner')) cand.othersWho.push('owner')
-    } else if (book.name && book.name.value === n && isOwner) {
-      // 被叫现名 = 结合事件。这里只记次数, 依恋的升幅在 REM 按密度结算。
+      if (isOwner) {
+        cand.othersWho = cand.othersWho || []
+        if (!cand.othersWho.includes('owner')) cand.othersWho.push('owner')
+      }
+    } else {
+      // 已知名 (现名或没候选时的任何知名): 结合事件计数, 依恋结算的输入。
+      // 两类分开: 主人的叫喂依恋 (ownerCall), 群友的叫记总数 (othersCall)。
+      if (isOwner) {
+        book.counters = { ...book.counters, ownerCall: Number(book.counters?.ownerCall || 0) + 1, lastOwnerCallAt: at }
+      } else {
+        book.counters = { ...book.counters, othersCall: Number(book.counters?.othersCall || 0) + 1 }
+      }
     }
     return book
   })
   log({ kind: 'othersUse', name: n, who: who || 'other' })
 }
 
-/** 白天的一句自我描述 (introspect / 普通对话里她说"我..."的自我定性)。 */
+/** 白天的一句自我描述 (introspect / 普通对话里她说"我..."的自我定性)。
+ *  查重是双向的: selfImage 已有的和候选区里躺着的都算"不是新信息" --
+ *  同一句翻来覆去地提, 每次都算新提案的话, LLM 层的"最多 1 条"就形同虚设。 */
 export function proposeClaim(text, evidenceIds = [], at = Date.now()) {
   const t = String(text || '').trim().slice(0, 80)
   if (!t) return false
+  let added = false
   mutateJson(FILE(), emptyBook(), (b) => {
     const book = { ...emptyBook(), ...b }
-    book.candidates.claims = (book.candidates.claims || []).filter((c) => c.text !== t)
-    book.candidates.claims.push({ text: t, evidence: evidenceIds.slice(0, 5), at })
+    const dup = (book.candidates.claims || []).some((c) => c.text === t)
+      || (book.selfImage || []).some((c) => c.text === t)
+    if (dup) return book
+    book.candidates.claims = [...(book.candidates.claims || []), { text: t, evidence: evidenceIds.slice(0, 5), at }]
+    added = true
     return book
   })
-  log({ kind: 'claimProposed', text: t })
-  return true
+  if (added) log({ kind: 'claimProposed', text: t })
+  return added
 }
 
 /** 一致性欠账: 她说了"我怎样", 行为违背了 (由上层判定后上报)。影子期只记账。 */
@@ -165,6 +177,45 @@ export function recordIncongruence(claimText, whatHappened, at = Date.now()) {
 export function isSelfRelevant(text = '') {
   const t = String(text || '')
   return /大肥鱼|糖鲸|我是谁|你的名字|叫你什么|鲸鱼娘|自我介绍/.test(t)
+}
+
+// ---------------------------------------------------------------- 白天接线: 消息流驱动 (第二批)
+// 调用方 (qq-server) 在每条消息上照一面镜子, 账本只记"发生了什么", 不做任何结算。
+
+/** 一条消息里提到了她的名字 (别人的嘴)。谁说的由 who 定: 'owner' | 'other'。 */
+export function observeMention(text, who, at = Date.now()) {
+  const t = String(text || '')
+  if (!t) return
+  const b = readBook()
+  if (b.name && b.name.value && t.includes(b.name.value)) recordOthersUse(b.name.value, who, at)
+  const cand = b.candidates && b.candidates.name
+  if (cand && cand.value && t.includes(cand.value)) recordOthersUse(cand.value, who, at)
+}
+
+/** 她自己的一句话里用了名字 (她的嘴)。只有**候选名**算自我使用 --
+ *  用现名自称是中性的 (不推进受体表达, 也不写盘); 转正的原料是"用还没认下的名自称"。 */
+export function observeSelfUse(text, at = Date.now()) {
+  const t = String(text || '')
+  if (!t) return
+  const b = readBook()
+  const cand = b.candidates && b.candidates.name
+  if (cand && cand.value && t.includes(cand.value)) recordSelfUse(cand.value, at)
+}
+
+/** 梦种子渗漏 (设计稿 v1 九·主观层): 白天没算完的自我议题, 夜里以梦出现。
+ *  REM 对自我相关加工的激活有生理证据; 这里只提供素材, 纯度抽签仍归 dream.mjs。 */
+export function dreamSeeds(now = Date.now()) {
+  const b = readBook()
+  const out = []
+  const cand = b.candidates && b.candidates.name
+  if (cand && cand.value) out.push('有个名字在心里盘旋：「' + cand.value + '」，还没认下来')
+  if (b.nameTransition && nameTransitionProgress(now) < 0.95 && b.nameTransition.from) {
+    out.push('有人叫我「' + b.nameTransition.from + '」，我慢了半拍才应')
+  }
+  for (const c of (b.selfImage || [])) {
+    if (clamp01(c.strength) < 0.3) out.push('我不太确定的是：' + String(c.text || '').slice(0, 30))
+  }
+  return out
 }
 
 // ---------------------------------------------------------------- 夜间: REM 结算

@@ -60,6 +60,8 @@ import { current as currentCtx, runWithContext } from '../lib/reply-context.mjs'
 import { inboundTokenOk, requireInboundToken } from '../lib/inbound-auth.mjs'
 import { createPromiseExecutor, promiseOutcomePath } from '../lib/promise-executor.mjs'
 import { fill } from '../lib/persona-voice.mjs'
+// 自我账本的镜子 (批二): 每条消息过一遍, 只记"发生了什么", 结算归 REM。
+import * as selfcon from '../brain/organ/selfcon.mjs'
 
 /** 宿主是 stdio:'ignore' 起的进程，不打文件日志等于瞎 —— 出问题只能靠猜。 */
 function logLine(level, args) {
@@ -557,6 +559,8 @@ export async function run(argv = []) {
       }
 
       memory.remember(EVT_PLATFORM, chatId, userId, 'user', memText, { isGroup })
+      // 自我账本: 别人的嘴提到她的名字 = 结合事件 (主人/群友分开记)。旁路, 失败不影响回复。
+      try { selfcon.observeMention(memText, isGroup ? 'other' : 'owner') } catch (e) { console.error('[selfcon] observeMention:', e && e.message) }
 
       // 事件进脑（v3 S1 影子层）：旧路径照旧写 episodes.jsonl，这边另存一份结构化事件。
       // 关键差别：谁说的（who.kind）、能不能外说（scope）、哪条消息（msgId）在写入时就定死，
@@ -882,6 +886,8 @@ export async function run(argv = []) {
       // AI 表情包：生成入库 + 补发（异步，不占回复主线；干跑分支已在上面 return，走不到这）
       if (aiWanted) void aiStickerFollowup({ tag, caption, isGroup, groupId, userId })
       memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', plain || out, { isGroup })
+      // 自我账本: 她的嘴用了没认下的候选名 = 自我使用 (受体表达的上游)。旁路。
+      try { selfcon.observeSelfUse(plain || out) } catch (e) { console.error('[selfcon] observeSelfUse:', e && e.message) }
       // 交付证据（v3 §11）：真发出去才记；干跑在上面已经 return，走不到这里。
       try {
         brain.onSent({ chat: chatId, platform: EVT_PLATFORM, text: plain || out, msgId: '', at: Date.now() })

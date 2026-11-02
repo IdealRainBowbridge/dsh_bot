@@ -58,6 +58,7 @@ import * as thalamus from './thalamus.mjs'
 import * as inner from '../inner.mjs'
 import * as hpa from './hpa.mjs'
 import * as neuron from '../cell/neuron.mjs'
+import * as selfcon from './selfcon.mjs'
 import { swallow } from '../../lib/swallow.mjs'
 
 const MIN = 60_000
@@ -86,6 +87,8 @@ export const ACTIONS = {
   browse: { label: '上网逛', minMin: 10, maxMin: 60, need: 0.45, kind: 'leisure' },
   write: { label: '写点东西', minMin: 15, maxMin: 60, need: 0.6, kind: 'create' },
   think: { label: '想事情', minMin: 5, maxMin: 30, need: 0.3, kind: 'inner' },
+  // 照镜子 (批二): 白天只采集 -- 把最近关于自己的话盘一遍, 提出主张候选。结算归 REM。
+  introspect: { label: '照照镜子', minMin: 4, maxMin: 15, need: 0.25, kind: 'inner' },
   // ── 最轻的：什么都不做 ──
   rest: { label: '歇着', minMin: 10, maxMin: 90, need: 0, kind: 'idle' },
 }
@@ -100,6 +103,7 @@ const HINTS = {
   browse: '想随便逛逛，看看有什么新鲜的',
   write: '有点想写点东西，但还没想好写什么',
   think: '坐着把一件事想明白',
+  introspect: '最近说了些话，有点想弄清楚自己到底是个什么样',
   rest: '什么都不太想干，只想待着',
 }
 
@@ -189,6 +193,9 @@ export function desire(action, ctx) {
     case 'browse': return Math.max(0, awake) * 0.55 * (0.45 + 0.55 * ex) * calm + 0.15 * f.da
     case 'write': return Math.max(0, brain) * 0.8 + 0.2 * tension
     case 'think': return Math.max(0, brain) * 0.5 + 0.35 * tension
+    // 照镜子: 账本负荷 (load) 是宏观层的系统性负荷 -- 别扭期/不稳主张多 -> 更想照。
+    // load 缺省 0 (还没装镜子时不平白多一个动作)。
+    case 'introspect': return Math.max(0, brain) * 0.3 + 0.55 * selfcon.load() + 0.1 * tension
     // rest 原来写 fatigue*1.2 + debt*0.8 —— 稍累就顶到 1.00，把别的选项全压死，
     // 于是"什么都没干"成了默认。改成和其他项同一个量级：
     // 累到 0.85 时约 0.66，仍高于看番（0.15）但不会到天花板；
@@ -460,7 +467,8 @@ export async function decide(o = {}) {
     //    把不可及的选项塞进她的心流，等于让她对着菜单念菜名。
     //    这也是"主观"那一层的要求：她体验到的必须是她**真能想到**的范围。
     const live = Object.keys(ACTIONS)
-      .filter((k) => k !== 'sleep' && k !== 'reply')     // 睡和回话不参与"想做"这一层
+      .filter((k) => k !== 'sleep' && k !== 'reply')
+      .filter((k) => k !== 'introspect')                  // 照镜子是内部动作, 不进她嘴里的倾向清单     // 睡和回话不参与"想做"这一层
       .filter((k) => ACTIONS[k].need <= depth + 0.15)
     lean = await leanOf({
       candidates: live.map((k) => ({ k, hint: HINTS[k] || ACTIONS[k].label })),

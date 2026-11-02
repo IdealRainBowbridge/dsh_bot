@@ -196,6 +196,21 @@ export async function bindBody(deps) {
         if (r.ok) deps.log('[body] 💭 想明白一件事：' + r.text.slice(0, 40))
       } catch (e) { swallow(e, 'body:think') }
     },
+
+    introspect: async (d) => {
+      // 照镜子 (批二): 白天只采集。派给独立进程 (照 consolidate 样), 不钉住事件循环;
+      // 结算永远归 REM 通道三, 这里没有改账本的能力。
+      if (deps.isBusy()) return
+      deps.setBusy(true)
+      try {
+        const p = deps.spawn(process.execPath,
+          [deps.botPath(), 'selfcon', 'introspect'],
+          { detached: true, stdio: 'ignore', windowsHide: true })
+        p.on('exit', () => deps.setBusy(false))
+        p.on('error', () => deps.setBusy(false))
+        p.unref()
+      } catch (e) { deps.setBusy(false); swallow(e, 'body:introspect') }
+    },
   })
 
   // 心跳读"有没有打断"：私聊有未处理消息 / 群里有 @
