@@ -95,7 +95,11 @@ export function describe() {
   const tail = chain.length
     ? '（备：' + chain.map((x, i) => '#' + (i + 1) + ' ' + x.model + '@' + host(x.base_url)).join(' → ') + '）'
     : '（无备用通道）'
-  return `${c.model || 'deepseek-chat'} @ ${host(c.base_url || 'https://api.deepseek.com/v1')}` + tail
+  // P1-3 (2026-11-03): flag single-provider risk - every level of the fallback
+  // chain pointing at the same origin is one point of failure wearing N hats.
+  const hosts = new Set([host(c.base_url || 'https://api.deepseek.com/v1'), ...chain.map((x) => host(x.base_url))])
+  const solo = chain.length && hosts.size === 1 ? ' · [single-provider risk: all levels same origin]' : ''
+  return `${c.model || 'deepseek-chat'} @ ${host(c.base_url || 'https://api.deepseek.com/v1')}` + tail + solo
 }
 
 function endpointOf(c) {
