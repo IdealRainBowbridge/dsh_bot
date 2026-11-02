@@ -350,6 +350,17 @@ export function duty(now = Date.now()) {
 export function endSleep(now = Date.now()) {
   const r = stage.wake(now)
   try { rhythm.awake(now) } catch (e) { swallow(e, 'night:end:rhythm') }
+
+  // P2-1 (2026-11-03): CAR (cortisol awakening response). Waking IS a load
+  // event: in real physiology the HPA axis fires a burst on awakening and
+  // cortisol peaks ~30-45 min later, then decays. No new organ is built here -
+  // we hand the wake event to the EXISTING cascade with a sub-sensitisation
+  // strength (0.3 < 0.4, below the fbSensitivity/setShift threshold in
+  // hpa.stress), so the peak shape grows out of the CRH/ACTH/cortisol taus
+  // themselves. Guard: only after a real sleep (>= 4h) - a nap is not a dawn.
+  if (Number(r?.sleptMin || 0) >= 240) {
+    try { hpa.stress(0.3, { why: 'car:wake', now }) } catch (e) { swallow(e, 'night:end:car') }
+  }
   // 整理做了多少：按 REM 分钟映射
   // 真实依据：REM 的时长和"记忆整合的完成度"是正相关的
   const remMin = Number(r?.acc?.REM || 0)
