@@ -78,10 +78,20 @@ export function findPython() {
 
 /** 需要第三方库的场景：返回 python + 缺哪个库。 */
 export function findPythonWith(mods = []) {
-  const p = findPython()
-  if (!p.ok) return { ...p, missing: mods.slice() }
-  const missing = mods.filter((m) => !hasModule(p.bin, m))
-  return { ...p, missing }
+  const list = candidates()
+  // 2026-11-02：先找"能跑且带齐库"的，退而求其次才收"能跑但缺库"的。
+  // 以前第一个能跑的（/usr/bin/python3）就中，哪怕它没 numpy —— 韵律打分器拿到它
+  // 就报缺库全 0 分，而真正带 numpy 的 ~/.dsh/pyenv/bin/python3 排在后面永远轮不到。
+  let fallback = null
+  for (const bin of list) {
+    if (!usable(bin)) continue
+    if (!mods.length) return { ok: true, bin, why: '', candidates: list }
+    const missing = mods.filter((m) => !hasModule(bin, m))
+    if (!missing.length) return { ok: true, bin, why: '', candidates: list }
+    if (!fallback) fallback = { ok: false, bin, why: 'python 可用但缺库：' + missing.join(', '), missing, candidates: list }
+  }
+  if (fallback) return fallback
+  return { ok: false, bin: '', why: '找不到可用的 python 解释器（试过：' + list.join(', ') + '）', candidates: list }
 }
 
 /** 清缓存（测试用）。 */

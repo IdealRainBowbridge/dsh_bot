@@ -37,12 +37,12 @@ export function available() {
     const p = findPythonWith(['numpy'])
     // 显式配了就用配的，但仍然要能 import numpy
     if (!p.ok) return { ok: false, why: p.why }
-    if (p.missing.length) return { ok: false, why: 'python 可用但缺库：' + p.missing.join(', '), bin: p.bin }
+    if (p.missing?.length) return { ok: false, why: 'python 可用但缺库：' + p.missing.join(', '), bin: p.bin }
     return { ok: true, bin: p.bin, why: '' }
   }
   const p = findPythonWith(['numpy'])
   if (!p.ok) return { ok: false, why: p.why }
-  if (p.missing.length) return { ok: false, why: 'python 可用但缺库：' + p.missing.join(', ') + '（韵律打分将退化为全 0 分 → 择优等于选第一条）', bin: p.bin }
+  if (p.missing?.length) return { ok: false, why: 'python 可用但缺库：' + p.missing.join(', ') + '（韵律打分将退化为全 0 分 → 择优等于选第一条）', bin: p.bin }
   return { ok: true, bin: p.bin, why: '' }
 }
 
@@ -74,7 +74,7 @@ export function scoreWavs(items) {
     try { swallow(e, 'prosody:score-unavailable', { force: true }) } catch { /* ignore */ }
     return list.map((it) => ({ path: it.path, ok: false, score: 0, why: msg, degraded: true }))
   } finally {
-    try { fs.rmSync(payload, { force: true }) } catch {}
+    try { fs.rmSync(payload, { force: true }) } catch (e) { swallow(e, 'prosody:scoreWavs') }
   }
 }
 
