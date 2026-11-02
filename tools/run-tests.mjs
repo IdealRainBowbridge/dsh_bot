@@ -28,7 +28,10 @@ const TESTS = [
   'watch-slot-test.mjs',      // 槽位必须进实际聊天那条装配（shadow 模式也生效）
   'tail-read-test.mjs',        // readTail：只读尾部 / 不返回半截行 / 边界
   'brain-affect-test.mjs',    // 情绪混合/奖励/tension/decay（2026-11-02 补测）
-  'brain-rhythm-test.mjs',    // 昼夜曲线形状/光照推相位/睡眠记账
+  'brain-rhythm-test.mjs',
+  'brain-car-test.mjs',       // P2-1 CAR: wake hands one stress to HPA; 30-45min single peak grows out of the cascade (2026-11-03)
+  'brain-allo-test.mjs',      // P2-2 allostasis: chronic setShift drags valence rest-point, recovers after days (2026-11-03)
+  'anchor-usage-test.mjs',    // P2-3 usage-dependent consolidation: replayed lines outrank fresh one-offs (2026-11-03)    // 昼夜曲线形状/光照推相位/睡眠记账
   'brain-delivery-test.mjs',  // 交付证据：记录/检索/last/stats
   'brain-attention-test.mjs', // 紧迫度/队列/生成租约
   'brain-segment-test.mjs',   // 段：话题指纹/切段信号/短句宽容
