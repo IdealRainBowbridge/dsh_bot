@@ -15,7 +15,8 @@ import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
 import { config } from './config.mjs'
 
-const MAX_PEOPLE = 500
+/** 名册容量（config.roster.maxPeople 可调，硬上限 2000 防呆）。 */
+const maxPeople = () => Math.min(2000, Math.max(50, Number(config().roster?.maxPeople ?? 500) || 500))
 
 /** 主人判定（不 export：只有名册自己用，避免双端口径分叉）。 */
 function isOwner(platform, userId) {
@@ -52,7 +53,7 @@ export function observe({ platform = 'qq', userId = '', name = '', isGroup = fal
   const now = Date.now()
   let p = j.people[key]
   if (!p) {
-    if (Object.keys(j.people).length >= MAX_PEOPLE) {
+    if (Object.keys(j.people).length >= maxPeople()) {
       // 满员淘汰：最久没见的先走（名册管「还在来往的人」，不管「三年前的路人」）
       let oldestKey = ''
       let oldestAt = Infinity

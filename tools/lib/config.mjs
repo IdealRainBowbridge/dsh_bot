@@ -10,6 +10,8 @@ export { configPath } from './paths.mjs'
 
 /** 中性默认值：换个账号也能跑；所有"个人化"的东西请写进配置文件。 */
 export const DEFAULTS = {
+  webui: { proactive: { enabled: false, dailyMax: 3, minGapMin: 180, quietHours: 8 } },
+  roster: { maxPeople: 500 },
   // 身份三件套（拼成一行注入提示）+ 专属人设文件（~/.data/persona.md，优先级更高）
   identity: {
     name: '大肥鱼',      // 她叫什么
