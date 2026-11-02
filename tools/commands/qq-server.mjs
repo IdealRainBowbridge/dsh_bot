@@ -68,6 +68,7 @@ import { fill } from '../lib/persona-voice.mjs'
 // 自我账本的镜子 (批二): 每条消息过一遍, 只记"发生了什么", 结算归 REM。
 import * as selfcon from '../brain/organ/selfcon.mjs'
 import * as roster from '../lib/roster.mjs'
+import * as bond from '../lib/bond.mjs'
 
 /** 宿主是 stdio:'ignore' 起的进程，不打文件日志等于瞎 —— 出问题只能靠猜。 */
 function logLine(level, args) {
@@ -443,6 +444,9 @@ export async function run(argv = []) {
       const memText = quoteLine ? `${quoteLine} ${said}` : said
       // 名册登记（2026-11-03）：每条消息过一遍「这是谁」—— 幂等、旁路，失败不影响回复。
       try { roster.observe({ platform: EVT_PLATFORM, userId, name: display || String(evt.sender?.nickname || ''), isGroup }) } catch (e) { swallow(e, 'qq-server:roster') }
+      // bond 器官（2026-11-03）：快相品味每条都过（零 LLM）；私聊攒批等慢相 REM 复盘。
+      try { bond.taste({ platform: EVT_PLATFORM, userId, text: userText, isGroup }) } catch (e) { swallow(e, 'qq-server:bond-taste') }
+      if (!isGroup) { try { bond.observe({ platform: EVT_PLATFORM, userId, text: userText }) } catch (e) { swallow(e, 'qq-server:bond-observe') } }
 
       // 🎵 唱歌分支：主人让她唱，就真的唱（LLM 写词 + 她的音色逐句合成 + 鼓点混音）
       if (QQ.voice_enabled !== false && QQ.sing !== false && !isGroup && /唱(一首|首歌|个|段|吧|$)|唱歌|来一首|哼(一首|段)/.test(userText)) {

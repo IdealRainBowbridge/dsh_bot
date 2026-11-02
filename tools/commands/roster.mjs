@@ -5,11 +5,18 @@
 //   node bot.mjs roster --who 123456 --note "爱发猫图的那位"   # 记印象
 //   node bot.mjs roster --stats
 import * as roster from '../lib/roster.mjs'
+import * as bond from '../lib/bond.mjs'
 
 function arg(argv, name) { const i = argv.indexOf(name); return i >= 0 ? String(argv[i + 1] ?? '') : '' }
 
 export function run(argv = []) {
-  if (argv.includes('--stats')) { console.log(JSON.stringify(roster.stats())); return }
+  if (argv.includes('--stats')) { console.log(JSON.stringify({ ...roster.stats(), bond: bond.stats() })); return }
+  if (argv.includes('--bio')) {
+    const who = arg(argv, '--bio') === '' ? arg(argv, '--who') : arg(argv, '--bio')
+    if (!who) { console.error('✗ --bio 需要 --who <号>'); process.exit(2) }
+    console.log(JSON.stringify(bond.bio('qq', who)))
+    return
+  }
   const who = arg(argv, '--who')
   const call = arg(argv, '--call')
   const note = arg(argv, '--note')

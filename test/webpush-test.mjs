@@ -42,6 +42,10 @@ const resetQuota = () => {
 // ① 开关
 const CFG_OFF = { ...CFG, webui: { proactive: { enabled: false } } }
 ok('开关没开不动', WP.planProactive({ cfg: CFG_OFF, force: true }).ok === false)
+// ①b 启动宽限：全新文件（lastAt=0）非 force 不许立刻兜底开口
+fs.rmSync(wakeFile, { force: true })
+ok('启动宽限：新文件不立刻开口', WP.planProactive({ cfg: CFG, force: false }).ok === false)
+ok('宽限已种下起跑点', JSON.parse(fs.readFileSync(wakeFile, 'utf8')).lastAt > 0)
 
 // ② force 兜底：只出指令，不产出正文
 const a = WP.planProactive({ cfg: CFG, force: true })

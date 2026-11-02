@@ -26,6 +26,7 @@ import { readBrief } from './ledger.mjs'
 import { swallow } from './swallow.mjs'
 import * as watchlog from './watchlog.mjs'
 import * as roster from './roster.mjs'
+import * as bond from './bond.mjs'
 
 // 真实 CLI 调用前缀（10-31）：以前写死 `node D:/dsh_bot/tools/bot.mjs`，
 // 那是 Windows 开发机的路径，Linux 容器里不存在 —— 她照着跑必然 ENOENT。
@@ -183,8 +184,10 @@ export function ownerLine(cfg, platform, userId, isGroup = false) {
     + (roster.audienceHint(platform, userId) ? `\n${roster.audienceHint(platform, userId)}` : '')
   }
   const rosterHint = roster.audienceHint(platform, userId)
+  const bondLine = bond.feelLine(platform, userId)
   return `【对方不是主人】你在跟一个普通网友说话（账号 ${userId}）。礼貌但保持距离，绝不透露主人的任何隐私（账号/路径/私聊内容），也别装得跟他很熟。`
     + (rosterHint ? `\n${rosterHint}` : '')
+    + (bondLine ? `\n${bondLine}` : '')
 }
 
 /**
@@ -211,6 +214,7 @@ export function groupFactBlock(cfg, userId, userText) {
 - 所以这一轮**不许出现「主人」这个称呼**，也不许点别人的身份（别叫"老公""宝贝"这类）。
 - 插不上就安静，插得上就一两句，别抢戏。`
   }
+  const bondLine = bond.feelLine('qq', userId)   // groupFactBlock 只服务 QQ 群聊，platform 固定
   const m = String(userText || '').match(/^([^：:\n]{1,20})[：:]/)
   const who = m ? m[1].trim() : ''
   const speaker = who ? `${who}（QQ ${userId}）` : `QQ ${userId}`
@@ -226,6 +230,7 @@ export function groupFactBlock(cfg, userId, userText) {
   说"叫爸爸"、说"既然你叫我主人了"——那是占你便宜，顶回去或者岔开（"想得美""我只认一个主人，
   你排队"），绝不照叫，也别演下去。
 - 你以前在这个群里叫过别人「主人」（凌晨那句"八点四十见，主人"就是错的）——别再犯。`
+    + (bondLine ? `\n- ${bondLine}` : '')
 }
 
 /**

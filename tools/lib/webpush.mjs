@@ -83,7 +83,12 @@ export function planProactive({ cfg, force = false, now = Date.now() } = {}) {
   if (pc.enabled !== true) return { ok: false, why: 'webui.proactive 未开启' }
   const day = new Date(now).toLocaleDateString('sv-SE')   // 本地日期（UTC 的 toISOString 会让凌晨配额错位 8 小时）
   let st = readWake()
-  if (st.day !== day) st = { day, fired: 0, lastAt: 0, lastType: '', lastLine: '', used: [], queue: [] }
+  if (st.day !== day) {
+    // 跨天：只重置今日次数/台账/队列；lastAt/lastLine 保留 —— 否则零点一过安静期就被人为清零。
+    const rolled = { day, fired: 0, lastAt: Number(st.lastAt || 0), lastType: '', lastLine: String(st.lastLine || ''), used: [], queue: [] }
+    if (!rolled.lastAt) { rolled.lastAt = now; writeWake(rolled) }   // 首次见文件：种下起跑点（启动宽限，照 qq 主动搭话 startupGrace 的教训）
+    st = rolled
+  }
   const dailyMax = Number(pc.dailyMax ?? 3)
   if (dailyMax > 0 && Number(st.fired || 0) >= dailyMax) return { ok: false, why: '今天次数用完' }
   const used = Array.isArray(st.used) ? st.used.slice(-50) : []
