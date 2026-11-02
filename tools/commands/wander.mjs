@@ -12,6 +12,7 @@ import { fill } from '../lib/persona-voice.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { readJsonl } from '../brain/json.mjs'
 import { swallow } from '../lib/swallow.mjs'
+import * as novelty from '../lib/novelty.mjs'
 
 /**
  * 本插件的命令行入口（tools/bot.mjs）的绝对路径。
@@ -61,6 +62,15 @@ function gatherMaterial() {
       .filter(e => Date.now() - Number(e.ts || 0) < 24 * 3600_000 && /值得|有趣|好奇|想/.test(e.summary || ''))
     for (const e of eps.slice(0, 3)) out.push(e.summary.slice(0, 60))
   } catch (e) { swallow(e, 'tools/commands/wander.mjs:46') }
+
+  // 新鲜事进原料（二轮）：arousal 高说明有东西在挠她，念头就该从这里长 ——
+  // 好奇决定"探索什么"，不只是"多久探索一次"。只取真新鲜的（u>0），静默时不出声。
+  try {
+    const a = novelty.assess(Date.now())
+    for (const it of (a.items || [])) {
+      if (it.u > 0) out.push('新鲜（' + it.u + '）：' + it.text.slice(0, 50))
+    }
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:material-novelty') }
   return out
 }
 
@@ -158,7 +168,11 @@ export async function doWander() {
   try {
     const nv = await import('../lib/novelty.mjs')
     const allOk = results.length > 0 && results.every((r) => r.ok)
-    nv.spark(idea.want + ' ' + idea.reason, { source: 'wander', surprise: allOk ? 0.8 : 0.3 })
+    // 惊喜度用器官自己量（二轮）：探索带回来的结果本身有多陌生 = 这次收获有多大。
+    // 全熟（习惯化之后还在同一处打转）→ 分数自然低。失败按 0.2 兜底。
+    const got = results.map((r) => String(r.out || '')).join(' ')
+    const surprise = allOk ? Math.max(0.1, nv.surpriseOf(got)) : 0.2
+    nv.spark(idea.want + ' ' + idea.reason, { source: 'wander', surprise })
   } catch (e) { swallow(e, 'tools/commands/wander.mjs:spark') }
 
   try {

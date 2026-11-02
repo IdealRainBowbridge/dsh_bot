@@ -137,7 +137,7 @@ function gatherContext(now = Date.now()) {
   // 让计划能顺着她真的好奇的方向走 —— 不再只是定时抽签。
   try {
     const a = novelty.assess(Date.now())
-    ctx.novelty = { arousal: a.arousal, items: (a.items || []).slice(0, 3).map((x) => x.text) }
+    ctx.novelty = { arousal: a.arousal, items: (a.items || []).filter((x) => x.u > 0).slice(0, 3).map((x) => x.text) }
   } catch (e) { swallow(e, 'tools/lib/mind.mjs:novelty') }
   return ctx
 }
@@ -233,7 +233,7 @@ export async function plan({ now = Date.now(), force = false } = {}) {
     why,
     at: now,
     until: now + min * 60_000,
-    context: { hour: ctx.hour, mood: ctx.mood, quietMin: ctx.quietMin ?? null, promises: ctx.promises.length },
+    context: { hour: ctx.hour, mood: ctx.mood, quietMin: ctx.quietMin ?? null, promises: ctx.promises.length, arousal: ctx.novelty?.arousal ?? null },
   }
   // 2026-11-02：改原子写。mind-plan.json 的写者不止这里 —— qq-server 里也会重算计划。
   try { writeJsonAtomic(PLAN_PATH(), planObj) } catch (e) { swallow(e, 'tools/lib/mind.mjs:200') }
@@ -241,6 +241,10 @@ export async function plan({ now = Date.now(), force = false } = {}) {
   // 同步写进 focus —— 那是宿主半边唯一认的东西
   if (act === 'rest' || act === 'free') writeFocus(act === 'free' ? '' : 'rest', min, why)
   else writeFocus(act, min, why)
+
+  // 规划决定回流（二轮）：选定的活动+理由记成 lastTopic ——
+  // 同一个"为什么"短时间内不会反复当选（saturate 生效），计划随经历变化，不围着一件事转圈。
+  try { novelty.spark(act + ' ' + why, { source: 'mind', surprise: 0.1 }, now) } catch (e) { swallow(e, 'tools/lib/mind.mjs:spark') }
 
   return { activity: act, min, why, raw: planObj }
 }

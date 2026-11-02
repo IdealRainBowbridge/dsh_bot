@@ -93,5 +93,15 @@ ok('主文件路径与 memory.episodeFile 一致', (() => {
   return !!st.updatedAt   // 上面 tick/spark 都写过 → 状态文件活着 = dataPath 口径一致
 })())
 
+// ⑧ surpriseOf（二轮）：器官自己量惊喜度 —— 探索的回报由收获本身的陌生度决定
+{
+  const s1 = novelty.surpriseOf('一组完全没见过的陌生概念词组', NOW + 200)
+  ok('全新收获 → 惊喜高', s1 >= 0.7, 's1=' + s1)
+  novelty.spark('一组完全没见过的陌生概念词组', {}, NOW + 201)
+  const s2 = novelty.surpriseOf('一组完全没见过的陌生概念词组', NOW + 202)
+  ok('见过之后 → 惊喜回落', s2 < s1 && s2 <= 0.1, 's2=' + s2)
+  ok('空收获不炸', typeof novelty.surpriseOf('', NOW + 203) === 'number')
+}
+
 console.log(`\n${fail ? '✗' : '✓'} novelty-test：${pass} 通过 / ${fail} 失败`)
 if (fail) process.exitCode = 1

@@ -66,6 +66,16 @@ export function saturate(text, lastTopic, lastAt, now = Date.now()) {
   return Math.max(0.2, 1 - 0.8 * Math.exp(-hours / 2))
 }
 
+/** 量一次"这段收获有多惊喜"：收获文本的陌生度（0~1）。
+ *  探索完回头量自己带回了什么 —— 惊喜度不再由调用方拍脑袋给。 */
+export function surpriseOf(text, now = Date.now()) {
+  const st = readJson(STATE_PATH(), {})
+  const seen = st.seen && typeof st.seen === 'object' ? st.seen : {}
+  let grams
+  try { grams = interestGrams(48) } catch (e) { swallow(e, 'novelty:grams'); grams = new Set() }
+  return unfamiliarity(String(text ?? '').slice(0, 400), grams, seen, now)
+}
+
 // ── 感受器 ───────────────────────────────────────────────────
 
 /** 窗口内的情节行（主/QQ/微信三处，只读不写）。路径走 memory.episodeFile，
