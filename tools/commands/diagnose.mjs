@@ -254,7 +254,7 @@ export async function run(argv = []) {
       const same = runtime.version === String(decl.testedAgainst || '').split('@').pop()
       items.push(same
         ? ok('DSH 契约', '运行时 ' + runtime.name + '@' + runtime.version + ' · 契约版本 ' + (decl.contractVersion || '?') + '（与实测版本一致）')
-        : warn('DSH 契约', '运行时 ' + runtime.name + '@' + runtime.version + '，插件只在 ' + (decl.testedAgainst || '?') + ' 上实测过 —— 建议跑一遍全量测试'))
+        : bad('DSH 契约', '运行时 ' + runtime.name + '@' + runtime.version + '，插件只在 ' + (decl.testedAgainst || '?') + ' 上实测过 —— 版本不匹配，先全量测试再上线'))
     } else items.push(warn('DSH 契约', '读不到 /opt/dsh/package.json（非 DSH 环境？）'))
   } catch (e) { items.push(warn('DSH 契约', '检查失败：' + e.message)) }
 
@@ -326,6 +326,72 @@ export async function run(argv = []) {
   // 6) 容器/沙箱
   const inDocker = fs.existsSync('/.dockerenv')
   items.push(ok('运行环境', (inDocker ? '容器内' : '宿主机') + ' · ' + process.platform + ' · node ' + process.version))
+
+  // ── P0-4 数据形状体检（2026-11-03）：stream/episodes 三抓手 ────────────────
+  // 三抓手：未来时间戳 / 整齐毫秒（合成时钟特征）/ 精确 N 倍间隔（生成序列特征）。
+  // 写侧只打标（_tflags），这里按形状全库扫 —— 老数据没标也能抓。只报告，不清洗。
+  try {
+    const files = [dataPath('brain', 'log', 'stream.jsonl'), dataPath('episodes.jsonl'), dataPath('qq', 'episodes.jsonl'), dataPath('wechat', 'episodes.jsonl')]
+    let scanned = 0, nFuture = 0, nAlms = 0, nEven = 0
+    const nowMs = Date.now()
+    for (const f of files) {
+      let raw = ''
+      try {
+        const st = fs.statSync(f)
+        if (st.size > 8 * 1024 * 1024) {
+          // big file: read only the tail (same trick as readJsonl)
+          const fd = fs.openSync(f, 'r')
+          try {
+            const buf = Buffer.alloc(2 * 1024 * 1024)
+            fs.readSync(fd, buf, 0, buf.length, st.size - buf.length)
+            raw = buf.toString('utf8')
+            raw = raw.slice(raw.indexOf('\n') + 1)
+          } finally { fs.closeSync(fd) }
+        } else raw = fs.readFileSync(f, 'utf8')
+      } catch { continue }
+      scanned++
+      let prev = 0
+      for (const line of raw.split('\n')) {
+        const t = line.trim(); if (!t) continue
+        let r; try { r = JSON.parse(t) } catch { continue }
+        const at = Number(r.at || r.ts || 0); if (!at) continue
+        if (at > nowMs + 5 * 60_000) nFuture++
+        if (at % 1000 === 0) nAlms++
+        if (prev && at > prev && (at - prev) % 60_000 === 0) nEven++
+        prev = at
+      }
+    }
+    if (!scanned) items.push(warn('数据形状', '没有可扫的 stream/episodes 文件'))
+    else if (nFuture === 0 && nAlms < 3 && nEven < 3) items.push(ok('数据形状', scanned + ' 个文件无合成时间痕迹（未来/整齐毫秒/整分间隔）'))
+    else items.push(bad('数据形状', '可疑时间戳：未来 ' + nFuture + ' · 整齐毫秒 ' + nAlms + ' · 整分间隔 ' + nEven + '（扫 ' + scanned + ' 个文件）—— 时间形状被破坏'))
+  } catch (e) { items.push(warn('数据形状', '检查失败：' + e.message)) }
+
+  // ── P1-1 改名六层体检（2026-11-03）：容器内能验的层在这里验 ───────────────
+  // 宿主脚本/单元那两层容器里够不着 —— feiyu-rename-audit.sh（宿主定时跑）
+  // 把结果写进 rename-audit.json，这里读它的结论。
+  try {
+    const here = process.cwd()
+    if (here.includes('dsh_bot')) items.push(ok('改名·挂载', '代码跑在 ' + here + '（dsh_bot 挂载点）'))
+    else items.push(bad('改名·挂载', '工作目录 ' + here + ' 不是 dsh_bot 挂载点 —— 六层改名里第 2 层断了'))
+    if (fs.existsSync('/home/feiyu/plugins/dsh-feiyu')) items.push(warn('改名·挂载', '旧挂载 dsh-feiyu 仍存在 —— 双路径并存容易读错边'))
+    if (fs.existsSync(dataPath('persona.md'))) items.push(ok('改名·数据根', 'persona.md 在数据根上（~/.data 对齐）'))
+    else items.push(bad('改名·数据根', dataPath('persona.md') + ' 不存在 —— 数据根分叉（人格根本没加载的 P0 家族）'))
+    try {
+      const audit = JSON.parse(fs.readFileSync(dataPath('rename-audit.json'), 'utf8'))
+      if (audit.ok) items.push(ok('改名·宿主', audit.summary || '宿主脚本/单元无旧容器名引用（' + (audit.at || '?') + '）'))
+      else items.push(bad('改名·宿主', audit.summary || '宿主侧仍有旧容器名引用 —— 见 rename-audit.json'))
+    } catch { items.push(warn('改名·宿主', 'rename-audit.json 不存在 —— 宿主侧体检还没跑过（/usr/local/bin/feiyu-rename-audit.sh）')) }
+  } catch (e) { items.push(warn('改名体检', '检查失败：' + e.message)) }
+
+  // ── P1-3 通道多样性（2026-11-03）：第二家 key 就位才算真 fallback ─────────
+  try {
+    const c = config().llm || {}
+    const fb = [].concat(c.fallback ?? c.fallbacks ?? []).filter((x) => x && typeof x === 'object')
+    const origins = new Set(fb.map((x) => String(x.base_url || x.baseUrl || c.base_url || '') + '|' + String(x.api_key || '').slice(0, 8)))
+    if (!fb.length) items.push(warn('通道多样性', 'llm.fallback 未配置 —— 主通道挂即全停'))
+    else if (origins.size <= 1) items.push(warn('通道多样性', 'fallback ' + fb.length + ' 级全部同源 —— 网关单点；第二家 key 在 llm.fallback 加 {base_url, api_key, model} 即生效，管道已就位'))
+    else items.push(ok('通道多样性', 'fallback ' + fb.length + ' 级跨 ' + origins.size + ' 个来源'))
+  } catch (e) { items.push(warn('通道多样性', '检查失败：' + e.message)) }
 
   if (json) { console.log(JSON.stringify({ items }, null, 2)); return }
   console.log('\n🔎 体检（静默失效专项）\n')
