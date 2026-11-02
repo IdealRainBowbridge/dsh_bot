@@ -10,6 +10,8 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'
+import { startIdleRestart } from '../lib/selfrestart.mjs'
+import { brainHealth } from '../lib/brain-health.mjs'
 import { swallow } from '../lib/swallow.mjs'
 import * as neuron from '../brain/cell/neuron.mjs'
 import { splitBubbles, parseMessage } from '../lib/onebot.mjs'
@@ -1022,7 +1024,7 @@ export async function run(argv = []) {
         })(),
         platforms: PLATFORMS.snapshot(config()),
         napcat: { ok: napcatOk, url: NAPCAT, checkedAt: napcatCheckedAt, downSince: napcatDownSince || null },
-        brain: brainHealth(),
+        brain: brainHealth(brain),
         channel: (() => { try { return CHANNEL.snapshot() } catch (e) { return { error: String(e?.message ?? e) } } })(),
         ...memory.stats(),
       }))
@@ -1073,19 +1075,6 @@ export async function run(argv = []) {
     res.writeHead(404); res.end()
   })
 
-  /** /health 里的脑摘要（只读小文件，别在这里跑 doctor）。 */
-  function brainHealth() {
-    try {
-      const b = config().brain || {}
-      return {
-        mode: b.mode || 'shadow',
-        episodes: brain.episode.allEpisodes().length,
-        intents: brain.intents.stats(),
-        backlog: brain.event.backlog(),
-        today: brain.metrics.today(),
-      }
-    } catch (e) { return { error: String(e?.message || e) } }
-  }
 
   const QQ_BIND = process.env.QQ_BIND_HOST || '127.0.0.1'
   server.listen(port, QQ_BIND, () => {
@@ -1522,27 +1511,9 @@ export async function run(argv = []) {
   }
   // [beat] setInterval(tryProactive, 60_000) -> self.decide() 决定 social 时才动
 
-  // 自改空闲自重启（2026-11-03 第二轮优化）：selfApply 落了要重启的改动会写 flag；
-  // 这里每分钟看一眼：10 分钟没人说话 + 改完满 3 分钟 → 自己退，im-gateway 拉起新代码。
-  // 不再要人喊「重启」。手闸仍在：老爸说「重启」随时立刻生效。
-  setInterval(() => {
-    try {
-      const flag = dataPath('selfmod-restart.flag')
-      if (!fs.existsSync(flag)) return
-      const idleMs = Date.now() - (lastOwnerMsgTs() || 0)
-      if (idleMs < 10 * 60_000) return
-      const info = JSON.parse(fs.readFileSync(flag, 'utf8'))
-      if (Date.now() - Number(info.at || 0) < 3 * 60_000) return
-      fs.unlinkSync(flag)
-      log(`[qq][selfmod] 空闲自重启（${info.id} ${info.file}），距他上一句 ${Math.round(idleMs / 60000)} 分钟`)
-      const bye = '我刚改了自己一点代码，趁没人的时候重开一下，几秒钟就回来。'
-      try {
-        const oq = String(config().owner?.qq || '')
-        memory.remember('qq', 'qq:' + oq, oq, 'assistant', bye, { isGroup: false })
-      } catch (e) { swallow(e, 'qq:selfrestart-mem') }
-      setTimeout(() => { process.exit(0) }, 1500)
-    } catch (e) { logErr('[qq][selfmod] 自重启检查失败：' + (e?.message ?? e)) }
-  }, 60_000)
+
+  // 自改空闲自重启：逻辑在 lib/selfrestart.mjs（2026-11-03 从本文件拆出，行数上限）。
+  try { startIdleRestart({ log, logErr, lastOwnerMsgTs }) } catch (e) { logErr('[qq][selfmod] 自重启启动失败：' + (e?.message ?? e)) }
 
   // ── 承诺执行器单独跑（10-28）────────────────────────────────────────
   // 和"主动搭话"彻底解耦：到点就做，不需要先开口、不需要掷骰子、不占搭话日额。
