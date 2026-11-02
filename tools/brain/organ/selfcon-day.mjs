@@ -53,7 +53,8 @@ export async function dayIntrospect({ now = Date.now(), chatFn = null } = {}) {
   const out = { ok: true, proposals: 0, summary: '' }
   const book = selfcon.readBook()
   const mine = recentSelfLines(now)
-    .filter((t) => selfcon.isSelfRelevant(t) || /我是|我这个人|我叫|我的名字/.test(t))
+    // 词表要宽: 她聊自己的话常常是「这名字啊……」这种句式, 用「我是/我叫」抓不到 (2026-11-03 实测漏)
+    .filter((t) => selfcon.isSelfRelevant(t) || /我是|我这个人|我叫|我的名字|名字|我这|我就是/.test(t))
     .slice(-12)
 
   const cand = book.candidates && book.candidates.name
