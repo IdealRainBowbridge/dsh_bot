@@ -381,7 +381,7 @@ export async function decide(o = {}) {
     const snap = field.snapshot()
     f = snap.dims
     depth = snap.derived.cognitiveDepth
-  } catch { }
+  } catch (e) { swallow(e, 'self:decide') }
   const sleepy = await night.assess(now)
   // 五条通路的此刻可用度（2026-11-02 接上）。
   //
@@ -499,7 +499,7 @@ export async function decide(o = {}) {
     if (action !== 'rest' && changed) {
       inner.think('刚决定去' + spec.label, { kind: 'act', about: 'self', now })
     }
-  } catch { }
+  } catch (e) { swallow(e, 'self:best-effort') }
 
   st.current = cur
   st.at = now
@@ -553,6 +553,6 @@ function save(st) {
     mutateJson(selfPath(), empty(), () => ({
       at: st.at, current: st.current, history: (st.history || []).slice(-30), decisions: st.decisions,
     }))
-  } catch { }
+  } catch (e) { swallow(e, 'self:save') }
   return st
 }

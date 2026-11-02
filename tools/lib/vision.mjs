@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 export function visionCfg() {
   const v = config().vision ?? {}
@@ -63,7 +64,7 @@ export async function describeFrames(frames, o = {}) {
     || '这是同一条短视频里连拍的几帧画面。用 2~3 句中文描述：画面里有什么、在做什么、什么风格氛围。只输出描述本身，别分析别啰嗦。' }]
   let attached = 0
   for (const f of (frames || []).slice(0, Math.max(1, v.maxFrames))) {
-    try { content.push({ type: 'image_url', image_url: { url: dataUri(f) } }); attached++ } catch {}
+    try { content.push({ type: 'image_url', image_url: { url: dataUri(f) } }); attached++ } catch (e) { swallow(e, 'vision:describeFrames') }
   }
   if (!attached) return null
   try {
@@ -73,7 +74,7 @@ export async function describeFrames(frames, o = {}) {
     if (fb && fb.base_url && fb.model && fb.api_key) {
       try {
         const out = await askOnce(fb, content)
-        try { fs.appendFileSync(dataPath('vision-fallback.log'), `${new Date().toISOString()} 视觉主通道失败(${String(e.message).slice(0, 70)}) → 已用备通道\n`) } catch {}
+        try { fs.appendFileSync(dataPath('vision-fallback.log'), `${new Date().toISOString()} 视觉主通道失败(${String(e.message).slice(0, 70)}) → 已用备通道\n`) } catch (e) { swallow(e, 'vision:describeFrames') }
         return out
       } catch { /* 备通道也挂 → 下面统一返回 null */ }
     }

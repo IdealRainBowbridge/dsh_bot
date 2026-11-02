@@ -253,7 +253,7 @@ function writeBreakers(o) {
     const f = BREAKER_FILE()
     fs.mkdirSync(f.slice(0, f.lastIndexOf('/')) || '.', { recursive: true })
     fs.writeFileSync(f, JSON.stringify(o))
-  } catch {}
+  } catch (e) { swallow(e, 'llm:writeBreakers') }
 }
 /** 这一级现在是否被熔断（冷却中）。 */
 function isOpen(key, breakers) {
@@ -350,7 +350,7 @@ export function breakerSnapshot() {
   return out
 }
 function fbLog(line) {
-  try { fs.appendFileSync(dataPath('llm-fallback.log'), new Date().toISOString() + ' ' + line + '\n') } catch {}
+  try { fs.appendFileSync(dataPath('llm-fallback.log'), new Date().toISOString() + ' ' + line + '\n') } catch (e) { swallow(e, 'llm:fbLog') }
 }
 
 /**
@@ -401,7 +401,7 @@ export async function chat(messages, opts = {}) {
           continue
         }
         // 重试用尽仍失败：标记为瞬时，让上层知道"通道没坏"
-        if (isTransient(e)) { try { e.transient = true } catch {} }
+        if (isTransient(e)) { try { e.transient = true } catch (e) { swallow(e, 'llm:attemptOnce') } }
         throw e
       }
     }
@@ -421,7 +421,7 @@ export async function chat(messages, opts = {}) {
       throw new Error('LLM 返回空内容')
     }
     // 直连通道自己记账（账本只扫 DSH 会话，扫不到这条路）
-    try { recordDirectUsage(j.usage, { model: c.model, via: 'chat' }) } catch {}
+    try { recordDirectUsage(j.usage, { model: c.model, via: 'chat' }) } catch (e) { swallow(e, 'llm:attemptOnce') }
     // 10-31：v4-pro 推理模式会吐原生 DSML 工具调用标记，没带 tools 时会泄漏成正文。
     // 兜底剥离；剥完是空的就抛错（宁可报错，也不能把尖括号垃圾当消息发出去）。
     const cleaned = stripDsml(out)

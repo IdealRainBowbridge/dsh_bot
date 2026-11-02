@@ -191,7 +191,7 @@ export function apply(id) {
   try {
     fs.writeFileSync(file, item.change)
   } catch (e) {
-    try { fs.copyFileSync(bk.dest, file) } catch {}
+    try { fs.copyFileSync(bk.dest, file) } catch (e) { swallow(e, 'selfmod:apply') }
     return { ok: false, reason: '写入失败：' + e.message, rolledBack: true }
   }
 

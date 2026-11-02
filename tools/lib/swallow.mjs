@@ -4,7 +4,7 @@
 // 本身不都是错的（探活、缓存、可选依赖本来就该容错），但"出错了什么都不留"让整类
 // 事故变成静默失效：代码看着对、从来没执行过、文档还打着勾。
 //
-// 用法：catch {} → catch (e) { swallow(e, 'qq-server:mood-tick') }
+// 用法：catch { /* 底层兜底：这里不能依赖上层 swallow（会循环依赖），错误在此终止是设计 */ } → catch (e) { swallow(e, 'qq-server:mood-tick') }
 // 设计：① 绝不抛（这本身就是兜底路径）；② 合并去重 + 每小时一条摘要，
 //       避免每 60s 的 tick 把日志刷爆；③ 写 ~/.data/logs/swallowed.log，超 2MB 截半。
 import fs from 'node:fs'
@@ -32,7 +32,7 @@ function flush(force = false) {
   try {
     const f = LOG()
     fs.mkdirSync(path.dirname(f), { recursive: true })
-    try { if (fs.statSync(f).size > MAX_BYTES) fs.writeFileSync(f, fs.readFileSync(f, 'utf8').slice(-MAX_BYTES / 2)) } catch {}
+    try { if (fs.statSync(f).size > MAX_BYTES) fs.writeFileSync(f, fs.readFileSync(f, 'utf8').slice(-MAX_BYTES / 2)) } catch { /* 底层兜底：这里不能依赖上层 swallow（会循环依赖），错误在此终止是设计 */ }
     fs.appendFileSync(f, lines.join('\n') + '\n')
   } catch { /* 日志写不进去也绝不能反过来炸业务 */ }
 }
@@ -57,7 +57,7 @@ export function swallow(err, tag = 'unknown', opts = {}) {
 }
 
 /** 手动冲刷（进程退出前调用，保证不丢最后一批）。 */
-export function flushSwallowed() { try { flush(true) } catch {} }
+export function flushSwallowed() { try { flush(true) } catch { /* 底层兜底：这里不能依赖上层 swallow（会循环依赖），错误在此终止是设计 */ } }
 
 /** 读回日志尾部（面板/体检用）。 */
 export function readSwallowed(n = 40) {

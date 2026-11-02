@@ -11,6 +11,7 @@
 // 并且每条都标出**是不是 @ 主人**：主人最想知道的就是"没 @ 我的那部分"。
 import fs from 'node:fs'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 export const LOG_FILE = () => dataPath('bili-social.jsonl')
 
@@ -113,7 +114,7 @@ export function read({ days = 1, since = 0, kind = '', onlySpeak = false, exclud
       if (excludeOwner && r.toOwner) continue
       if (r.toOwner === undefined) r.toOwner = mentionsOwner(r, cfg)
       out.push(r)
-    } catch {}
+    } catch (e) { swallow(e, 'social-log:read') }
   }
   return out
 }

@@ -6,6 +6,7 @@
 import { apiGet, makeHeaders, reportWatch } from '../lib/bili-api.mjs'
 import { loadCred } from '../lib/cred.mjs'
 import { config } from '../lib/config.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 function arg(argv, name) {
   const i = argv.indexOf(name)
@@ -94,7 +95,7 @@ export async function run(argv = []) {
         const cand = subs.map(s => String(s.lan ?? s.lang ?? '?')).join(' / ')
         const kind = isAiTrack(pick) ? 'AI 轨' : '人审轨'
         process.stderr.write(`[debrief] 字幕候选 ${subs.length} 条：${cand || '无'} → 选中 ${subtitleLang}（${kind}）\n`)
-      } catch {}
+      } catch (e) { swallow(e, 'debrief:isAiTrack') }
       let su = String(pick.subtitle_url ?? '')
       if (su.startsWith('//')) su = 'https:' + su
       // 10-29：真因查明了。同一个视频连调三次，字幕内容分别是「造车技术…」「♪ 音乐 ♪」「这是德国人最喜欢吃的烤鸡」——
@@ -215,7 +216,7 @@ export async function run(argv = []) {
       const r = await w.likeVideo(bvid, { go: true })
       if (!r.ok) console.log(json ? '' : `  （点赞没成：${String(r.why ?? '').slice(0, 60)}）`)
       else if (!json) console.log(`  👍 ${r.why}`)
-    } catch {}
+    } catch (e) { swallow(e, 'debrief:best-effort') }
   }
 
   const pack = {

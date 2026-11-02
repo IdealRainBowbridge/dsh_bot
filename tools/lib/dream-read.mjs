@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
 import { readJsonl } from '../brain/json.mjs'
+import { swallow } from './swallow.mjs'
 
 const DREAMS = () => dataPath('dreams.jsonl')
 const NL = String.fromCharCode(10)
@@ -36,7 +37,7 @@ export function dreamToMention() {
       fs.writeFileSync(tmp, lines.join(NL) + NL)
       fs.renameSync(tmp, DREAMS())      // 原子替换：以前直接写，半截文件会毁掉全部梦
     }
-  } catch {}
+  } catch (e) { swallow(e, 'dream-read:dreamToMention') }
   return d
 }
 

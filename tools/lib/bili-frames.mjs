@@ -23,6 +23,7 @@ import { apiGet, makeHeaders } from './bili-api.mjs'
 import { loadCred } from './cred.mjs'
 import { dataPath } from './paths.mjs'
 import { visionOn, describeFrames } from './vision.mjs'
+import { swallow } from './swallow.mjs'
 // adapt-frames 是**动态** import 的（见 seeVideo 里）：它只在真要按内容挑帧时才需要。
 // 静态引入会让"只想抽一帧"的轻调用也背上它。
 
@@ -472,7 +473,7 @@ export async function seeVideo(bvid, opts = {}) {
     return null
   } finally {
     // 帧图不囤：描述完就删（她要的是那句话，不是图库）
-    try { fs.rmSync(tmp, { recursive: true, force: true }) } catch {}
+    try { fs.rmSync(tmp, { recursive: true, force: true }) } catch (e) { swallow(e, 'bili-frames:best-effort') }
   }
 }
 

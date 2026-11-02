@@ -6,6 +6,7 @@
 import { readJson, mutateJson } from './json.mjs'
 import { attentionPath, genPath } from './paths.mjs'
 import { bump } from './metrics.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const empty = () => ({
   focus: null,                       // {chat, since, label}
@@ -45,7 +46,7 @@ export function arrive({ chat, label = '', urgency = 0.3, kind = 'chat', ev = ''
   st.inbox.sort((a, b) => (b.urgency - a.urgency) || (a.at - b.at))
   st.inbox = st.inbox.slice(0, 12)
   st.updatedAt = now
-  try { mutateJson(attentionPath(), empty(), () => st) } catch {}
+  try { mutateJson(attentionPath(), empty(), () => st) } catch (e) { swallow(e, 'attention:arrive') }
   bump('attentionIn')
   return st.inbox
 }
@@ -71,14 +72,14 @@ export function claim(chat, holder = String(process.pid), { ttlMs = 90_000, now 
   if (g.alive && g.chat !== chat) return { ok: false, reason: 'busy', busyWith: g.chat, until: g.until }
   if (g.alive && g.chat === chat && g.holder !== holder) return { ok: false, reason: 'same-chat-busy', until: g.until }
   const next = { chat, holder, until: now + ttlMs, fencing: Number(g.fencing || 0) + 1, at: now }
-  try { mutateJson(genPath(), {}, () => next) } catch {}
+  try { mutateJson(genPath(), {}, () => next) } catch (e) { swallow(e, 'attention:claim') }
   return { ok: true, fencing: next.fencing }
 }
 
 export function release(chat, holder = String(process.pid)) {
   const g = leaseState()
   if (g.chat === chat && g.holder === holder) {
-    try { mutateJson(genPath(), {}, () => ({ chat: null, holder: '', until: 0, fencing: Number(g.fencing || 0) })) } catch {}
+    try { mutateJson(genPath(), {}, () => ({ chat: null, holder: '', until: 0, fencing: Number(g.fencing || 0) })) } catch (e) { swallow(e, 'attention:release') }
   }
 }
 
@@ -116,7 +117,7 @@ export function done(chat) {
       st.inbox = (st.inbox || []).filter((x) => x.chat !== chat)
       return st
     })
-  } catch {}
+  } catch (e) { swallow(e, 'attention:done') }
 }
 
 /** 给她自己看/给别人看的一行："正忙着看番 3 分钟"。 */

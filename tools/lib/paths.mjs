@@ -57,7 +57,7 @@ export const dataDir = (() => {
   const cands = _dataCandidates()
   if (process.env.BOT_DATA_DIR) return cands[0]
   for (const d of cands) {
-    try { if (fs.existsSync(d)) return d } catch { }
+    try { if (fs.existsSync(d)) return d } catch { /* 底层兜底：这里不能依赖上层 swallow（会循环依赖），错误在此终止是设计 */ }
   }
   return cands[0]                      // 都不存在 → 用新的
 })()

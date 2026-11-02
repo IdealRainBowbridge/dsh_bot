@@ -4,6 +4,7 @@
 //   node bot.mjs qzone --content "今天吃了三碗白饭…吧" [--image URL] [--permission 1]
 //     permission: 1=所有人可见(默认) 4=好友可见 64=仅自己
 import { config } from '../lib/config.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 function arg(argv, name) {
   const i = argv.indexOf(name)
@@ -38,7 +39,7 @@ export async function run(argv = []) {
     signal: AbortSignal.timeout(30000),
   })
   let j = null
-  try { j = await r.json() } catch {}
+  try { j = await r.json() } catch (e) { swallow(e, 'qzone:run') }
   if (!r.ok || (j && j.status === 'failed')) {
     console.error(`✗ 发说说失败：${JSON.stringify(j ?? r.status).slice(0, 200)}`)
     console.error('  提示：send_qzone_msg 是 NapCat 扩展，部分版本未暴露；确认 NapCat 版本支持，或改用 qzone-bridge 桥接')

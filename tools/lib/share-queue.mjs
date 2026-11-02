@@ -109,7 +109,7 @@ export async function shareTick() {
       { role: 'user', content: `刚发生的事（${ev.kind}）：${ev.title}${ev.text ? '——' + ev.text : ''}${ev.meta ? '（' + ev.meta + '）' : ''}` },
     ], { temperature: 0.95, max_tokens: 120, timeoutMs: 20000, purpose: 'creative' })
     text = String(r || '').trim()
-  } catch {}
+  } catch (e) { swallow(e, 'share-queue:shareTick') }
   if (!text) text = `老爹，${ev.title}。${ev.text || ''}`
 
   try {
@@ -127,6 +127,6 @@ export async function shareTick() {
       } catch (e) { swallow(e, 'share-queue:commit') }
       return { ok: true, text, event: ev }
     }
-  } catch {}
+  } catch (e) { swallow(e, 'share-queue:shareTick') }
   return null
 }

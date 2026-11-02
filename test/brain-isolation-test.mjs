@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { swallow } from '../tools/lib/swallow.mjs'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-brain-iso-'))
 process.env.BOT_DATA_DIR = tmp
@@ -38,7 +39,7 @@ const walk = (d) => {
 }
 walk(paths.BRAIN())
 let hits = 0
-for (const f of allFiles) { try { if (fs.readFileSync(f, 'utf8').includes('微信暗号QQQ')) hits++ } catch {} }
+for (const f of allFiles) { try { if (fs.readFileSync(f, 'utf8').includes('微信暗号QQQ')) hits++ } catch (e) { swallow(e, 'brain-isolation-test:walk') } }
 ok('脑目录里零处微信内容', hits === 0, `命中 ${hits} 个文件`)
 
 // ② 群聊 audience 看不到私聊情景

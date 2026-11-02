@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process'
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
 import * as rvc from './rvc.mjs'
+import { swallow } from './swallow.mjs'
 
 const SONGS_DIR = () => dataPath('songs')
 const FFMPEG = () => config().rvc?.ffmpeg || 'D:/GPT-SoVITS/runtime/ffmpeg.exe'
@@ -38,7 +39,7 @@ function searchQuotaRecord() {
     const j = JSON.parse(fs.readFileSync(f, 'utf8'))
     const count = j.day === day ? Number(j.count ?? 0) : 0
     fs.writeFileSync(f, JSON.stringify({ day, count: count + 1 }))
-  } catch {}
+  } catch (e) { swallow(e, 'cover:searchQuotaRecord') }
 }
 
 /** URL → wav（yt-dlp 走本机 Clash；ytsearch1: 前缀 = YouTube 搜索第一名）。 */
@@ -75,7 +76,7 @@ async function fetchSource(src, dir) {
   const got = fs.readdirSync(dir).find((f) => f.startsWith('source.') && f !== 'source.wav')
   if (!got) throw new Error('yt-dlp 没产出音频（链接/代理/额度？）')
   ffmpeg(['-i', path.join(dir, got), '-ar', '44100', '-ac', '2', wav])
-  try { fs.rmSync(path.join(dir, got), { force: true }) } catch {}
+  try { fs.rmSync(path.join(dir, got), { force: true }) } catch (e) { swallow(e, 'cover:fetchSource') }
   searchQuotaRecord()
   return wav
 }
@@ -93,9 +94,9 @@ export function listSongs() {
         const meta = JSON.parse(fs.readFileSync(path.join(SONGS_DIR(), key, 'meta.json'), 'utf8'))
         const voices = fs.readdirSync(path.join(SONGS_DIR(), key)).filter((f) => /^cover-.*\.wav$/.test(f)).map((f) => f.replace(/^cover-/, '').replace(/\.wav$/, ''))
         out.push({ key, title: meta.title || key, hasCover: voices.length > 0, voices, source: meta.source || '', at: meta.createdAt || 0 })
-      } catch {}
+      } catch (e) { swallow(e, 'cover:listSongs') }
     }
-  } catch {}
+  } catch (e) { swallow(e, 'cover:listSongs') }
   return out.sort((a, b) => b.at - a.at)
 }
 
@@ -119,7 +120,7 @@ export async function coverSong({ source, title = '', pitch = 0, log = () => {} 
   fs.mkdirSync(dir, { recursive: true })
   // 成品按音色分缓存：换音色后同一首歌要重唱，不能命中旧音色的歌声
   let voice = ''
-  try { voice = (await import('./rvc.mjs')).currentVoice() } catch {}
+  try { voice = (await import('./rvc.mjs')).currentVoice() } catch (e) { swallow(e, 'cover:coverSong') }
   const cover = path.join(dir, `cover-${voice || 'none'}.wav`)
   const metaFile = path.join(dir, 'meta.json')
   if (voice && fs.existsSync(cover)) {

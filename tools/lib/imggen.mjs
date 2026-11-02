@@ -14,6 +14,7 @@ import { execFile, execFileSync } from 'node:child_process'
 import { dataPath, homePath } from './paths.mjs'
 import { config } from './config.mjs'
 import { STICKER_DIR } from './stickers.mjs'
+import { swallow } from './swallow.mjs'
 
 const GEN_FILE = () => dataPath('imggen.json')
 
@@ -66,7 +67,7 @@ function refCacheRead() {
     const j = JSON.parse(fs.readFileSync(REF_CACHE(), 'utf8'))
     if (j && j.urls) return j.urls
     if (j && j.url) return { __legacy: { url: j.url, at: j.at } }   // 旧格式兼容
-  } catch {}
+  } catch (e) { swallow(e, 'imggen:refCacheRead') }
   return {}
 }
 function refUrlCached(refPath) {
@@ -114,7 +115,7 @@ function uploadRef(localPath) {
   const urls = refCacheRead()
   urls[localPath] = { url, at: Date.now() }
   const keep = Object.entries(urls).sort((a, b) => b[1].at - a[1].at).slice(0, 8)
-  try { fs.writeFileSync(REF_CACHE(), JSON.stringify({ urls: Object.fromEntries(keep) })) } catch {}
+  try { fs.writeFileSync(REF_CACHE(), JSON.stringify({ urls: Object.fromEntries(keep) })) } catch (e) { swallow(e, 'imggen:uploadRef') }
   return url
 }
 /** 按文案情绪挑参考图：大哭/举手/得意/微笑 四象限，关键词粗分（够用，别过度设计）。 */
@@ -160,8 +161,8 @@ export function genQuotaOk(max, file = GEN_FILE()) {
 }
 export function genQuotaRecord(file = GEN_FILE()) {
   let count = 0
-  try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); count = j.day === dayKey() ? Number(j.count ?? 0) : 0 } catch {}
-  try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify({ day: dayKey(), count: count + 1 })) } catch {}
+  try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); count = j.day === dayKey() ? Number(j.count ?? 0) : 0 } catch (e) { swallow(e, 'imggen:genQuotaRecord') }
+  try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify({ day: dayKey(), count: count + 1 })) } catch (e) { swallow(e, 'imggen:genQuotaRecord') }
 }
 
 // ── 纯逻辑（测试用）─────────────────────────────────────────────────────────
@@ -199,8 +200,8 @@ export function capTagFiles(tag, cap = TAG_CAP, dir = STICKER_DIR) {
     const d = path.join(dir, tag)
     const files = fs.readdirSync(d).filter(f => f.startsWith('ai-') && /\.(jpg|jpeg|png|webp|gif)$/i.test(f))
       .map(f => ({ f, mt: fs.statSync(path.join(d, f)).mtimeMs })).sort((a, b) => a.mt - b.mt)
-    for (const x of files.slice(0, Math.max(0, files.length - cap))) { try { fs.rmSync(path.join(d, x.f), { force: true }) } catch {} }
-  } catch {}
+    for (const x of files.slice(0, Math.max(0, files.length - cap))) { try { fs.rmSync(path.join(d, x.f), { force: true }) } catch (e) { swallow(e, 'imggen:capTagFiles') } }
+  } catch (e) { swallow(e, 'imggen:capTagFiles') }
 }
 
 // ── 千问AI平台（10-26）：OpenAI 兼容 /images/generations，也吃参考图（image= dataURI）
@@ -239,8 +240,8 @@ async function genQwenImage(prompt, tmpFile, q, cap = '') {
     if (!isImageFile(tmpFile)) throw new Error('下载的不是有效图片')
     return true
   } catch (e) {
-    try { fs.rmSync(tmpFile, { force: true }) } catch {}
-    try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} 千问生图失败：${String(e?.message ?? e).slice(0, 200)}\n`) } catch {}
+    try { fs.rmSync(tmpFile, { force: true }) } catch (e) { swallow(e, 'imggen:genQwenImage') }
+    try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} 千问生图失败：${String(e?.message ?? e).slice(0, 200)}\n`) } catch (e) { swallow(e, 'imggen:genQwenImage') }
     return false
   }
 }
@@ -311,7 +312,7 @@ export async function generateStickerImage(caption, o = {}) {
           fs.renameSync(tmp, outSf)
           genQuotaRecord()
           if (tag) capTagFiles(tag)
-          try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} 硅基没出图 → 千问平台出图成功（${qw.model}）：${cap}\n`) } catch {}
+          try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} 硅基没出图 → 千问平台出图成功（${qw.model}）：${cap}\n`) } catch (e) { swallow(e, 'imggen:run') }
           return outSf
         }
       }
@@ -324,21 +325,21 @@ export async function generateStickerImage(caption, o = {}) {
       for (let attempt = 1; attempt <= 3; attempt++) {
         code = await curlTo(url, tmp, o.timeoutMs ?? 120000, ig.proxy === false ? false : undefined)
         if (code === '200') break
-        try { fs.rmSync(tmp, { force: true }) } catch {}
+        try { fs.rmSync(tmp, { force: true }) } catch (e) { swallow(e, 'imggen:run') }
         if (attempt < 3 && (code === '402' || code === '503')) {
           await new Promise((r) => setTimeout(r, 55000))
           continue
         }
         return null
       }
-      if (code !== '200' || !isImageFile(tmp)) { try { fs.rmSync(tmp, { force: true }) } catch {}; return null }
+      if (code !== '200' || !isImageFile(tmp)) { try { fs.rmSync(tmp, { force: true }) } catch (e) { swallow(e, 'imggen:run') }; return null }
       genQuotaRecord()
       // ⚠️ 兜底图不进标签库（10-25 主人要求：图库里只能有根本形象的表情包）。
       // 标签模式给个临时图让这条消息照样能发；自制模式才落盘到 自制/。
       if (tag) {
         const temp = path.join(STICKER_DIR, '自制', `px-${hash}.jpg`)
-        try { fs.mkdirSync(path.dirname(temp), { recursive: true }); fs.renameSync(tmp, temp) } catch { try { fs.rmSync(tmp, { force: true }) } catch {} }
-        try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} 硅基没出图，标签「${tag}」用 pollinations 兜底（不入库）：${cap}\n`) } catch {}
+        try { fs.mkdirSync(path.dirname(temp), { recursive: true }); fs.renameSync(tmp, temp) } catch { try { fs.rmSync(tmp, { force: true }) } catch (e) { swallow(e, 'imggen:run') } }
+        try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} 硅基没出图，标签「${tag}」用 pollinations 兜底（不入库）：${cap}\n`) } catch (e) { swallow(e, 'imggen:run') }
         return isImageFile(temp) ? temp : null
       }
       fs.renameSync(tmp, path.join(dir, `px-${hash}.jpg`))
@@ -389,8 +390,8 @@ async function genSiliconflow(prompt, tmpFile, ig, cap = '') {
   try {
     return !!(await editImage({ instruction: `画出她${prompt}的样子`, caption: cap, out: tmpFile }))
   } catch (e) {
-    try { fs.rmSync(tmpFile, { force: true }) } catch {}
-    try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} siliconflow 失败：${String(e?.message ?? e).slice(0, 200)}\n`) } catch {}
+    try { fs.rmSync(tmpFile, { force: true }) } catch (e) { swallow(e, 'imggen:genSiliconflow') }
+    try { fs.appendFileSync(dataPath('imggen.log'), `${new Date().toISOString()} siliconflow 失败：${String(e?.message ?? e).slice(0, 200)}\n`) } catch (e) { swallow(e, 'imggen:genSiliconflow') }
     return false
   }
 }

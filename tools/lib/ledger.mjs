@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const PY_TIMEOUT = 120_000
 const USAGE_CACHE = () => dataPath('cache', 'ledger-usage.json')
@@ -36,7 +37,7 @@ export function pythonPath(cfg = config()) {
   for (const c of cands) {
     try {
       if (fs.existsSync(c)) return c
-    } catch {}
+    } catch (e) { swallow(e, 'ledger:pythonPath') }
   }
   return cands[cands.length - 1]
 }
@@ -63,7 +64,7 @@ function usageSignature(dir) {
         parts.push(`${ws}/${s}:${st.size}:${Math.round(st.mtimeMs)}`)
       }
     }
-  } catch {}
+  } catch (e) { swallow(e, 'ledger:usageSignature') }
   return createHash('sha1').update(parts.sort().join('|')).digest('hex')
 }
 
@@ -80,7 +81,7 @@ export async function usage(opts = {}) {
     try {
       const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'))
       if (c.signature === sig && c.data) return { ...(await mergeDirect({ ...c.data })), cached: true }
-    } catch {}
+    } catch (e) { swallow(e, 'ledger:usage') }
   }
   // 10-31 审计：容器里没有 python3，原来这条路整个走不通（账本永远 ✗）。
   // 先试 python（Windows 宿主仍可走），拿不到就回落到纯 Node 的 zstd 解码。
@@ -96,7 +97,7 @@ export async function usage(opts = {}) {
     try {
       fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
       fs.writeFileSync(cacheFile, JSON.stringify({ signature: sig, at: Date.now(), data }, null, 0))
-    } catch {}
+    } catch (e) { swallow(e, 'ledger:pyOk') }
     return { ...(await mergeDirect({ ...data })), cached: false, via: 'node' }
   }
   const py = opts.python || pythonPath(cfg)
@@ -115,7 +116,7 @@ export async function usage(opts = {}) {
   try {
     fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
     fs.writeFileSync(cacheFile, JSON.stringify({ signature: sig, at: Date.now(), data }, null, 0))
-  } catch {}
+  } catch (e) { swallow(e, 'ledger:pyOk') }
   return { ...(await mergeDirect({ ...data })), cached: false }
 }
 

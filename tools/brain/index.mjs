@@ -34,6 +34,7 @@ import * as night from './organ/night.mjs'
 // 2026-11-02：记忆层 —— 段（一件事）+ 锚（她自己的原话）
 import * as segment from './segment.mjs'
 import * as anchor from './anchor.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 export { event, episode, working, attention, intents, facts, affect, delivery, claim, assembleMod as assemble, consolidate, doctor, metrics, recall, selfM, schema, competence, taskqueue, backfill, field, rhythm, inner, hpa, thalamus, sleepstage, night, segment, anchor }
 
@@ -45,7 +46,7 @@ export function configure(cfg = config()) {
     const b = cfg.brain || {}
     event.setOwnerIds(b.ownerIds || [])
     if (b.enabled !== false) selfM.ensure()
-  } catch {}
+  } catch (e) { swallow(e, 'index:configure') }
 }
 
 export function mode() {
@@ -86,7 +87,7 @@ export function onEvent(input = {}) {
     const r = event.emit(input)
     if (!r.ok) return r
     const ev = r.event
-    try { episode.ingest({ limit: 20 }) } catch {}
+    try { episode.ingest({ limit: 20 }) } catch (e) { swallow(e, 'index:onEvent') }
     const eps = episode.allEpisodes()
     const ep = eps.find((e) => e.srcEv === ev.ev) || null
     if (ep && ev.who.kind === 'owner') learnOwnerFacts(ev, ep.id)
@@ -100,7 +101,7 @@ export function onEvent(input = {}) {
         text: ev.text || '',
         meta: { platform: ev.where?.platform, chat: ev.where?.chat, ep: ep?.id },
       }, ev.at)
-    } catch { }
+    } catch (e) { swallow(e, 'index:onEvent') }
 
     // ② 身体：事件会改状态场。不是"打标签"，是**施加扰动** ——
     //    扰动的效果按时间弛豫回去，所以一次难受会持续一阵再平复，不是记一个数。
@@ -117,7 +118,7 @@ export function onEvent(input = {}) {
       // 夜里还醒着 = 欠觉（按真实小时数累积，不按次数）
       const hod = new Date(ev.at).getHours()
       if (hod >= 1 && hod < 5) field.poke('sleepDebt', 0.012, { why: 'awake-at-night', now: ev.at })
-    } catch { }
+    } catch (e) { swallow(e, 'index:onEvent') }
 
     // ③ 器官：事件 → HPA 轴（压力是走级联的，不是直接标一个数）
     //    这一步的意义：一句话造成的不是"压力值 +0.3"，而是
@@ -141,7 +142,7 @@ export function onEvent(input = {}) {
 
       // 每若干事件把 HPA 的产物灌回全身（器官间连接）
       hpa.perfuse(ev.at)
-    } catch { }
+    } catch (e) { swallow(e, 'index:onEvent') }
 
     // ③.5 记忆：把这条消息并进「段」
     //     记忆单位是**一件事**不是一句话 —— 靠 segment 按
@@ -152,7 +153,7 @@ export function onEvent(input = {}) {
         text: ev.text || '', role: ev.who.kind, at: ev.at,
         chat: ev.where?.chat || '', platform: ev.where?.platform || '',
       })
-    } catch { }
+    } catch (e) { swallow(e, 'index:onEvent') }
 
     // ④ 内心：她注意到什么、想说什么。这是"她有自己的想法"的落点。
     try {
@@ -166,7 +167,7 @@ export function onEvent(input = {}) {
           inner.think('他问的这个得留神，别答错', { kind: 'notice', about: 'owner', now: ev.at })
         }
       }
-    } catch { }
+    } catch (e) { swallow(e, 'index:best-effort') }
     if (ep) {
       try {
         working.refresh(ev.where.chat, {
@@ -174,7 +175,7 @@ export function onEvent(input = {}) {
           mood: affect.line().replace(/^你现在的底色：/, '').slice(0, 60),
           recallA: ep.quote ? `刚说的：${ep.quote.slice(0, 60)}` : '',
         })
-      } catch {}
+      } catch (e) { swallow(e, 'index:best-effort') }
       try {
         attention.arrive({
           chat: ev.where.chat,
@@ -188,8 +189,8 @@ export function onEvent(input = {}) {
             emotion: Math.abs(Number(ep.feel?.valence || 0)),
           }),
         })
-      } catch {}
-      try { affect.feel({ valence: ep.feel.valence, arousal: ep.feel.arousal }) } catch {}
+      } catch (e) { swallow(e, 'index:best-effort') }
+      try { affect.feel({ valence: ep.feel.valence, arousal: ep.feel.arousal }) } catch (e) { swallow(e, 'index:best-effort') }
     }
     return { ok: true, event: ev, ep }
   } catch (e) {
@@ -245,10 +246,10 @@ export function assembleFor(opts = {}) {
  */
 export function tick(now = Date.now()) {
   const out = { catchUp: null, shouldConsolidate: false, backlog: 0, due: [] }
-  try { episode.ingest({ limit: 200 }) } catch {}
-  try { out.catchUp = intents.catchUp(now) } catch {}
-  try { out.backlog = event.backlog() } catch {}
-  try { out.due = intents.due(now).map((x) => ({ id: x.id, object: x.object, action: x.action, verify: x.verify, lateH: Math.round((now - Number(x.dueAt)) / 3600_000) })) } catch {}
+  try { episode.ingest({ limit: 200 }) } catch (e) { swallow(e, 'index:tick') }
+  try { out.catchUp = intents.catchUp(now) } catch (e) { swallow(e, 'index:tick') }
+  try { out.backlog = event.backlog() } catch (e) { swallow(e, 'index:tick') }
+  try { out.due = intents.due(now).map((x) => ({ id: x.id, object: x.object, action: x.action, verify: x.verify, lateH: Math.round((now - Number(x.dueAt)) / 3600_000) })) } catch (e) { swallow(e, 'index:tick') }
   try {
     const b = config().brain || {}
     const at = String(b.consolidateAt || '04:30')
@@ -258,14 +259,14 @@ export function tick(now = Date.now()) {
     const st = consolidate.status()
     const ageH = st.lastRunAt ? (now - st.lastRunAt) / 3600_000 : 999
     out.shouldConsolidate = now >= target && ageH >= 20
-  } catch {}
+  } catch (e) { swallow(e, 'index:tick') }
   return out
 }
 
 /** 巩固（CLI / 子进程调用）。chatFn 可选，不传就只跑规则。 */
 export function runConsolidation({ now = Date.now(), chatFn = null, dryRun = false } = {}) {
   const r = consolidate.run({ now, chatFn, dryRun })
-  try { if (!dryRun) rebuildDerived({ now }) } catch {}
+  try { if (!dryRun) rebuildDerived({ now }) } catch (e) { swallow(e, 'index:runConsolidation') }
   return r
 }
 

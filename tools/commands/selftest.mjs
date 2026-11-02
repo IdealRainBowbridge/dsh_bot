@@ -11,6 +11,7 @@ import { configPath, dataPath, credentialsPath, WORK_DIR, diaryPath } from '../l
 import { config } from '../lib/config.mjs'
 import { apiGet, makeHeaders, apiState } from '../lib/bili-api.mjs'
 import { loadCred, looksLikeJct } from '../lib/cred.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 export async function run(argv = []) {
   const json = argv.includes('--json')
@@ -94,7 +95,7 @@ export async function run(argv = []) {
 
   // ⑦ ffmpeg（可选 —— 只有将来的"抽帧看画面"要它，v0.1 不用）
   let ffmpeg = false
-  try { execFileSync('ffmpeg', ['-version'], { timeout: 8000, windowsHide: true }); ffmpeg = true } catch {}
+  try { execFileSync('ffmpeg', ['-version'], { timeout: 8000, windowsHide: true }); ffmpeg = true } catch (e) { swallow(e, 'selftest:add') }
   add('ffmpeg（可选）', true, ffmpeg ? '已安装（v0.2 抽帧可用）' : '未安装 —— 不影响 v0.1，想要就 winget install Gyan.FFmpeg')
 
   // ⑧ 熔断状态
@@ -116,13 +117,13 @@ export async function run(argv = []) {
   // ⑫ QQ（NapCat）
   const napcatUrl = (cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   let napcatOk = false
-  try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(napcatUrl, { signal: c.signal }); napcatOk = true } catch {}
+  try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(napcatUrl, { signal: c.signal }); napcatOk = true } catch (e) { swallow(e, 'selftest:best-effort') }
   add('QQ·OneBot 网关（SnowLuma）', true, napcatOk ? `OneBot 网关已连（${napcatUrl}）` : 'OneBot 网关未启动 —— 先确认 snowluma.service 在跑且已登录 QQ')
 
   // ⑬ TTS（GPT-SoVITS）
   const sovitsUrl = cfg.voice?.sovits_url || 'http://127.0.0.1:9880/tts'
   let ttsOk = false
-  try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(sovitsUrl, { method: 'POST', signal: c.signal, body: '{}' }); ttsOk = true } catch {}
+  try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(sovitsUrl, { method: 'POST', signal: c.signal, body: '{}' }); ttsOk = true } catch (e) { swallow(e, 'selftest:best-effort') }
   add('语音 TTS（可选）', true, ttsOk ? `GPT-SoVITS 已连（${sovitsUrl}）` : 'GPT-SoVITS 未启动 —— 发 QQ 语音前先装（xiaoxiao 音色）')
 
   // ⑬b 参考文本是否和参考音频对得上（10-26 主人报"语音和视频里反复出现同一句话"）
@@ -234,7 +235,7 @@ export async function run(argv = []) {
 
   const allOk = items.every(i => i.ok)
   if (allOk) {
-    try { fs.mkdirSync(dataPath(), { recursive: true }); fs.writeFileSync(dataPath('selftest-passed.json'), JSON.stringify({ at: new Date().toISOString(), node: process.versions.node })) } catch {}
+    try { fs.mkdirSync(dataPath(), { recursive: true }); fs.writeFileSync(dataPath('selftest-passed.json'), JSON.stringify({ at: new Date().toISOString(), node: process.versions.node })) } catch (e) { swallow(e, 'selftest:syncNote') }
   }
 
   if (json) { console.log(JSON.stringify({ ok: allOk, items, self, dryRun: !!cfg.guard?.dryRun }, null, 2)); process.exit(allOk ? 0 : 1) }

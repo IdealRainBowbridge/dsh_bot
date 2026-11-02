@@ -8,6 +8,7 @@ import path from 'node:path'
 import { readJson, mutateJson, shortHash, ensureDir } from './json.mjs'
 import { selfPath, selfMetaPath, selfHistoryDir } from './paths.mjs'
 import { isoOf } from './clock.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 export const SECTIONS = ['owner', 'self', 'narrative']
 const MARK = (s) => [`<!-- ${s}:begin -->`, `<!-- ${s}:end -->`]
@@ -34,14 +35,14 @@ export function ensure() {
       fs.writeFileSync(selfPath(), TEMPLATE)
       mutateJson(selfMetaPath(), {}, () => ({ createdAt: Date.now(), version: 1 }))
     }
-  } catch {}
+  } catch (e) { swallow(e, 'self:ensure') }
   return selfPath()
 }
 
 export function read() {
   ensure()
   let raw = ''
-  try { raw = fs.readFileSync(selfPath(), 'utf8') } catch {}
+  try { raw = fs.readFileSync(selfPath(), 'utf8') } catch (e) { swallow(e, 'self:read') }
   const get = (s) => {
     const [b, e] = MARK(s)
     const i = raw.indexOf(b), j = raw.indexOf(e)
@@ -67,10 +68,10 @@ function snapshot(raw, why = '') {
     fs.writeFileSync(path.join(selfHistoryDir(), name), raw)
     const files = fs.readdirSync(selfHistoryDir()).sort()
     for (const f of files.slice(0, Math.max(0, files.length - 60))) {
-      try { fs.rmSync(path.join(selfHistoryDir(), f), { force: true }) } catch {}
+      try { fs.rmSync(path.join(selfHistoryDir(), f), { force: true }) } catch (e) { swallow(e, 'self:snapshot') }
     }
     mutateJson(selfMetaPath(), {}, (cur) => ({ ...(cur || {}), lastWhy: String(why).slice(0, 120), lastAt: Date.now() }))
-  } catch {}
+  } catch (e) { swallow(e, 'self:snapshot') }
 }
 
 /**

@@ -14,6 +14,7 @@ import { config } from '../lib/config.mjs'
 import { synth } from '../lib/tts.mjs'
 import { compactRef } from '../lib/refclean.mjs'
 import { dataPath, configPath } from '../lib/paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const MODELS_DIR = 'D:/GPT-SoVITS/models'
 const INTRO = '主人，这是我现在的声音，好听吗？我是大肥鱼，这条声音你觉得适合我就换上吧。'
@@ -31,9 +32,9 @@ function listVoices() {
         const wav = files.find(f => f.toLowerCase().endsWith('.wav'))
         const txt = files.find(f => f.toLowerCase().endsWith('.txt'))
         if (wav) out.push({ name, wav: path.join(dir, wav).replace(/\\/g, '/'), text: txt ? fs.readFileSync(path.join(dir, txt), 'utf8').trim() : '' })
-      } catch {}
+      } catch (e) { swallow(e, 'voice:listVoices') }
     }
-  } catch {}
+  } catch (e) { swallow(e, 'voice:listVoices') }
   return out
 }
 
@@ -335,12 +336,12 @@ export async function run(argv = []) {
           const keep = path.join(dir, 'ref.wav')
           fs.copyFileSync(top.path, keep)
           fs.writeFileSync(path.join(dir, 'ref.txt'), line, 'utf8')
-          for (const f of cands) if (f !== keep) { try { fs.rmSync(f, { force: true }) } catch {} }
+          for (const f of cands) if (f !== keep) { try { fs.rmSync(f, { force: true }) } catch (e) { swallow(e, 'voice:readManifest') } }
           manifest[key] = { wav: keep, text: line, sd: top.sd, rng: top.rng, score: top.score, ok: !!top.ok, builtAt: new Date().toISOString() }
           console.log(`  ✓ ${label.padEnd(4)} 起伏 ${String(top.sd).padStart(5)} 音域 ${String(top.rng).padStart(5)} 分 ${String(top.score).padStart(6)}${top.ok ? '' : '（偏平，可 --force 重做）'}`)
         } catch (e) {
           console.log(`  ✗ ${label} 失败：${e.message}`)
-          for (const f of cands) { try { fs.rmSync(f, { force: true }) } catch {} }
+          for (const f of cands) { try { fs.rmSync(f, { force: true }) } catch (e) { swallow(e, 'voice:readManifest') } }
         }
       }
       fs.mkdirSync(EMO_DIR, { recursive: true })

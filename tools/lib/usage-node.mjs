@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import { swallow } from './swallow.mjs'
 
 const MAGIC = [0x28, 0xB5, 0x2F, 0xFD]
 
@@ -13,7 +14,7 @@ function decodeFrames(buf) {
   let off = 0
   while (off < buf.length) {
     if (!MAGIC.every((b, i) => buf[off + i] === b)) {
-      try { out.push(zlib.zstdDecompressSync(buf.subarray(off))) } catch {}
+      try { out.push(zlib.zstdDecompressSync(buf.subarray(off))) } catch (e) { swallow(e, 'usage-node:decodeFrames') }
       break
     }
     let ok = false
@@ -23,7 +24,7 @@ function decodeFrames(buf) {
         off = end
         ok = true
         break
-      } catch {}
+      } catch (e) { swallow(e, 'usage-node:decodeFrames') }
     }
     if (!ok) break
   }

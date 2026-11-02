@@ -4,6 +4,7 @@
 import { config } from '../lib/config.mjs'
 import { loadCred } from '../lib/cred.mjs'
 import { makeHeaders } from '../lib/bili-api.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const MY_MID = () => String(config().owner?.biliMid || config().owner?.mid || '40048138')
 
@@ -74,7 +75,7 @@ export async function setSign(rawText) {
     try {
       const { emit } = await import('../brain/event.mjs')
       emit({ proc: 'bili-me', platform: 'bilibili', chatId: 'bilibili:self', userId: '40048138', role: 'assistant', text: '改了B站签名：' + String(text).slice(0, 40) })
-    } catch {}
+    } catch (e) { swallow(e, 'bili-me:setSign') }
   }
   return { ok: j?.code === 0, code: j?.code, why: j?.message || '', text }
 }

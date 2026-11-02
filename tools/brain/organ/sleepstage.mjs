@@ -45,6 +45,7 @@ import { sleepPath } from '../paths.mjs'
 import * as field from '../field.mjs'
 import * as neuron from '../cell/neuron.mjs'
 import * as hpa from './hpa.mjs'
+import { swallow } from '../../lib/swallow.mjs'
 
 const MIN = 60_000
 const HOUR = 3_600_000
@@ -252,7 +253,7 @@ export function sleep(now = Date.now()) {
   st.acc = { N1: 0, N2: 0, N3: 0, REM: 0 }
   st.interruptions = 0
   st.at = now
-  try { field.poke('sleepDebt', 0, { why: 'sleep:begin', now }) } catch { }
+  try { field.poke('sleepDebt', 0, { why: 'sleep:begin', now }) } catch (e) { swallow(e, 'sleepstage:sleep') }
   return save(st)
 }
 
@@ -283,7 +284,7 @@ export function wake(now = Date.now()) {
   // 为什么用有效分钟而不是 sleptMin：被打断的 8 小时不等于 8 小时。
   // 用 N2+N3+REM 作为"有修复作用的睡眠"（N1 是过渡，几乎不承担修复）
   const effectiveH = (acc.N2 * 0.85 + acc.N3 * 1.0 + acc.REM * 0.9) / 60
-  try { field.repaySleep(effectiveH, now); resets.debt = Number(effectiveH.toFixed(2)) } catch { }
+  try { field.repaySleep(effectiveH, now); resets.debt = Number(effectiveH.toFixed(2)) } catch (e) { swallow(e, 'sleepstage:wake') }
 
   // ── ② 深睡重置受体池（最关键的一条）────────────────────────────
   // 白天用掉的受体，靠 N3 补回来。没有深睡的夜里，第二天整个人是钝的。
@@ -313,7 +314,7 @@ export function wake(now = Date.now()) {
     const v = Number(f.dims.valence || 0)
     field.setDim('valence', Number((v * (1 - demote)).toFixed(3)), { why: 'sleep:rem-demote', now })
     resets.emotion = Number(demote.toFixed(3))
-  } catch { }
+  } catch (e) { swallow(e, 'sleepstage:wake') }
 
   // ── ④ HPA 轴过夜回落 ─────────────────────────────────────────────
   // 皮质醇的昼夜低谷本来就在夜里。睡一觉就是把当天的急性压力清掉大半。
@@ -321,7 +322,7 @@ export function wake(now = Date.now()) {
     const before = hpa.read(now)
     hpa.relieve('sleep', { now })
     resets.hpa = Number(Math.max(0, before.acute - hpa.read(now).acute).toFixed(3))
-  } catch { }
+  } catch (e) { swallow(e, 'sleepstage:wake') }
 
   const rec = {
     at: now, sleptMin: Number(sleptMin.toFixed(0)), acc,
@@ -424,6 +425,6 @@ function save(st) {
       at: st.at, inSleep: st.inSleep, beganAt: st.beganAt, wakeAt: st.wakeAt,
       acc: st.acc, interruptions: st.interruptions, history: (st.history || []).slice(-10),
     }))
-  } catch { }
+  } catch (e) { swallow(e, 'sleepstage:save') }
   return st
 }

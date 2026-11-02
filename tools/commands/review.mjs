@@ -10,6 +10,7 @@ import { readTail } from '../lib/memory.mjs'
 import { dataPath, diaryPath, homePath } from '../lib/paths.mjs'
 import * as llm from '../lib/llm.mjs'
 import { config } from '../lib/config.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 function arg(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? (argv[i + 1] ?? d) : d }
 
@@ -19,7 +20,7 @@ const SELF_HEADER = '## 她的自我迭代（复盘自动追加，主人可随�
 function appendSelfNote(date, note) {
   const file = dataPath('persona.md')
   let text = ''
-  try { text = fs.readFileSync(file, 'utf8') } catch {}
+  try { text = fs.readFileSync(file, 'utf8') } catch (e) { swallow(e, 'review:appendSelfNote') }
   const line = `- [${date}] ${note}`
   if (!text.includes(SELF_HEADER)) {
     fs.mkdirSync(pathOf(file), { recursive: true })
@@ -57,9 +58,9 @@ export async function run(argv = []) {
           const t = String(r.summary || r.text || '').trim()
           if (t) items.push({ platform: r.platform, title: t.slice(0, 60), author: r.userId || '' })
         }
-      } catch {}
+      } catch (e) { swallow(e, 'review:run') }
     }
-  } catch {}
+  } catch (e) { swallow(e, 'review:run') }
 
   const date = new Date().toLocaleDateString('sv-SE')
   if (!items.length) { console.log('今天还没看什么，没东西可复盘。'); return { text: '', path: diaryPath('private') } }

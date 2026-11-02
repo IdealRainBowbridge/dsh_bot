@@ -12,6 +12,7 @@ import { config } from '../lib/config.mjs'
 import * as llm from '../lib/llm.mjs'
 import { dataPath, homePath, WORK_DIR } from '../lib/paths.mjs'
 import { acquire } from '../lib/lock.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
@@ -36,14 +37,14 @@ function logWeb(kind, what) {
     const time = now.toTimeString().slice(0, 5)
     const md = LOG()
     let content = ''
-    try { content = fs.readFileSync(md, 'utf8') } catch {}
+    try { content = fs.readFileSync(md, 'utf8') } catch (e) { swallow(e, 'web:logWeb') }
     if (!content.startsWith('# 大肥鱼 · 上网日志')) content = '# 大肥鱼 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n'
     if (!content.includes(`## ${day}\n`)) content = content.replace('# 大肥鱼 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n', `# 大肥鱼 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n## ${day}\n\n`)
     const at = content.indexOf(`## ${day}\n`) + `## ${day}\n\n`.length
     content = content.slice(0, at) + `- ${time} **${kind}** ${String(what).slice(0, 180)}\n` + content.slice(at)
     fs.mkdirSync(path.dirname(md), { recursive: true })
     fs.writeFileSync(md, content)
-  } catch {}
+  } catch (e) { swallow(e, 'web:logWeb') }
 }
 
 function htmlToText(html) {
@@ -70,7 +71,7 @@ export function searchWeb(kw) {
     while ((m = re.exec(html)) && results.length < 10) {
       results.push({ title: htmlToText(m[2]).slice(0, 80), url: m[1], snippet: htmlToText(m[4]).slice(0, 150) })
     }
-  } catch {}
+  } catch (e) { swallow(e, 'web:searchWeb') }
   if (!results.length) {
     try {
       const html = curlGet(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(kw)}`, { proxy: true })
@@ -82,7 +83,7 @@ export function searchWeb(kw) {
         if (uddg) url = decodeURIComponent(uddg[1])
         results.push({ title: htmlToText(m[2]).slice(0, 80), url, snippet: htmlToText(m[3]).slice(0, 150) })
       }
-    } catch {}
+    } catch (e) { swallow(e, 'web:searchWeb') }
   }
   logWeb('搜索', `「${kw}」→ ${results.length} 条结果`)
   return results
@@ -170,7 +171,7 @@ async function roamLoop() {
       try {
         const logTail = fs.readFileSync(LOG(), 'utf8').split('\n').filter(Boolean).slice(-3).join(' / ')
         lastDo = logTail.slice(0, 200)
-      } catch {}
+      } catch (e) { swallow(e, 'web:sleep') }
       const built = buildMessages({ platform: 'qq', userText: '', chatId: 'qq:web-roam-self', userId: String(cfg.owner?.qq || ''), turnsToday: round })
       const msgs = [
         built[0],
@@ -199,7 +200,7 @@ async function roamLoop() {
         const rs = searchWeb(String(plan.query).trim())   // searchWeb 内部已记日志
         for (const r of rs.slice(0, 5)) console.log('  ·', r.title, '—', r.url)
         lastResults = rs
-        try { const { remember } = await import('../lib/memory.mjs'); remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（搜索了「${String(plan.query).slice(0, 40)}」，首选：${rs[0]?.title || ''}）`) } catch {}      } else if (act === '读网页' && String(plan.url || '').trim()) {
+        try { const { remember } = await import('../lib/memory.mjs'); remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（搜索了「${String(plan.query).slice(0, 40)}」，首选：${rs[0]?.title || ''}）`) } catch (e) { swallow(e, 'web:sleep') }      } else if (act === '读网页' && String(plan.url || '').trim()) {
         const url = String(plan.url).trim()
         let text = ''
         try {
@@ -212,7 +213,7 @@ async function roamLoop() {
           try {
             const { remember } = await import('../lib/memory.mjs')
             remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（这一页读不到正文，别再读它了：${url.slice(0, 60)}）`)
-          } catch {}
+          } catch (e) { swallow(e, 'web:sleep') }
         }
         if (text) {
           console.log('  正文前 200 字：' + text.slice(0, 200).replace(/\n/g, ' '))
@@ -220,7 +221,7 @@ async function roamLoop() {
           try {
             const { remember } = await import('../lib/memory.mjs')
             remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（读了 ${url}：${text.slice(0, 80)}）`)
-          } catch {}
+          } catch (e) { swallow(e, 'web:sleep') }
         }
       } else if (act === '写小说' && String(plan.text || '').trim()) {
         const dir = path.join(WORK_DIR, 'creative')
@@ -229,14 +230,14 @@ async function roamLoop() {
         fs.appendFileSync(file, `\n## ${new Date().toTimeString().slice(0, 5)} ${String(plan.topic || '').slice(0, 30)}\n\n${String(plan.text).slice(0, 800)}\n`)
         console.log('  ✓ 存入', file)
         logWeb('写小说', String(plan.topic || '').slice(0, 40))
-        try { const { remember } = await import('../lib/memory.mjs'); remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（写了小说片段：${String(plan.topic || '').slice(0, 30)}——${String(plan.text).slice(0, 60)}）`) } catch {}
+        try { const { remember } = await import('../lib/memory.mjs'); remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（写了小说片段：${String(plan.topic || '').slice(0, 30)}——${String(plan.text).slice(0, 60)}）`) } catch (e) { swallow(e, 'web:sleep') }
       } else if ((act === '学习' || act === '自我升级') && String(plan.text || '').trim()) {
         if (act === '自我升级') {
           if (cfg.web?.selfUpgrade?.enabled !== true) { console.log('  （自我升级未开启，这轮跳过）'); await sleep(60000); continue }
           doBackup()
           console.log('  🔒 已自动备份，升级内容：' + String(plan.text).slice(0, 100))
           logWeb('自我升级', String(plan.text).slice(0, 120))
-          try { const { remember } = await import('../lib/memory.mjs'); remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（自我升级：${String(plan.text).slice(0, 80)}）`) } catch {}
+          try { const { remember } = await import('../lib/memory.mjs'); remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（自我升级：${String(plan.text).slice(0, 80)}）`) } catch (e) { swallow(e, 'web:best-effort') }
           // 她在 DSH 会话里才能真正改文件 —— 这里的角色是"记账+备份"，实际修改由她会话执行
         } else {
           const { addLore } = await import('../lib/memory.mjs')
@@ -260,7 +261,24 @@ async function roamLoop() {
 
 function doBackup() {
   // 轻量备份：调 selfup 命令（同目录），避免重复实现
-  try { execFileSync(process.execPath, [path.join(HERE, 'selfup.mjs'), 'backup'], { encoding: 'utf8', timeout: 120000, windowsHide: true }) } catch {}
+  try { execFileSync(process.execPath, [path.join(HERE, 'selfup.mjs'), 'backup'], { encoding: 'utf8', timeout: 120000, windowsHide: true }) } catch (e) { swallow(e, 'web:doBackup') }
+}
+
+/** 浏览器优先的读页：JS 渲染页走内置 chromium（tools/lib/browser.mjs），
+ *  起不来/读不到再落回 curl 扒静态 —— 永远不比以前差。 */
+export async function browseSmart(url, { device = 'auto', waitMs = 9000, maxChars = 8000, links = false } = {}) {
+  try {
+    const { browserRead } = await import('../lib/browser.mjs')
+    const p = await browserRead(url, { device, waitMs, maxChars, links })
+    logWeb('浏览', `${url}（${p.device === 'pc' ? '电脑' : '手机'}·内置浏览器）`)
+    const head = `${p.title}\n${p.url}\n[身份：${p.device === 'pc' ? '电脑' : '手机'}${p.more ? ' · 未完可续读' : ''}]\n\n`
+    return head + p.text + (p.links?.length ? '\n\n—— 可点的链接 ——\n' + p.links.map((l) => `${l.text} → ${l.href}`).join('\n') : '')
+  } catch (e) {
+    swallow(e, 'web:browseSmart')
+    return fetchWeb(url)   // curl 兜底（空壳页会在 shellPageReason 抛提示）
+  } finally {
+    try { const m = await import('../lib/browser.mjs'); await m.browserDetach() } catch (e) { swallow(e, 'web:browseDetach') }
+  }
 }
 
 export async function run(argv = []) {
@@ -284,12 +302,13 @@ export async function run(argv = []) {
 
   if (sub === 'browse') {
     const url = argv[1]
-    if (!url) { console.log('用法：web browse <url> [--wait 3000] [--chars 8000]'); return }
+    if (!url) { console.log('用法：web browse <url> [--pc|--mobile] [--wait 3000] [--chars 8000] [--links]'); return }
     const waitIdx = argv.indexOf('--wait')
     const waitMs = waitIdx > 0 ? Number(argv[waitIdx + 1]) || 3000 : 3000
     const charsIdx = argv.indexOf('--chars')
     const maxChars = charsIdx > 0 ? Number(argv[charsIdx + 1]) || 8000 : 8000
-    console.log(await browseWeb(url, { waitMs, maxChars }))
+    const device = has('--mobile') ? 'mobile' : has('--pc') ? 'pc' : 'auto'
+    console.log(await browseSmart(url, { waitMs, maxChars, device, links: has('--links') }))
     return
   }
 

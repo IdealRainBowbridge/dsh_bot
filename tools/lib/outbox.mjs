@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const MD = () => dataPath('bili-outbox.md')
 const HEADER = '# 大肥鱼 · B站发言台账\n\n> 她在 B站 公开说的每一句话，按天记录（最新在上）。点链接看视频和评论上下文。\n\n'
@@ -14,14 +15,14 @@ export function recordBili({ kind, title = '', bvid = '', to = '', text = '', ex
   try {
     const KIND_MAP = { 评论: 'comment', 分享评论: 'share', 回评: 'reply', 弹幕: 'danmaku', 动态: 'dynamic', 图片评论: 'imgComment' }
     import('./social-log.mjs').then((s) => s.append({ kind: KIND_MAP[kind] || 'comment', bvid, title, to, text, extra })).catch(() => {})
-  } catch {}
+  } catch (e) { swallow(e, 'outbox:recordBili') }
   try {
     const now = new Date()
     const day = now.toLocaleDateString('sv-SE')
     const time = now.toTimeString().slice(0, 5)
     const md = MD()
     let content = ''
-    try { content = fs.readFileSync(md, 'utf8') } catch {}
+    try { content = fs.readFileSync(md, 'utf8') } catch (e) { swallow(e, 'outbox:recordBili') }
     if (!content.startsWith('# 大肥鱼 · B站发言台账')) content = HEADER
     if (!content.includes(`## ${day}\n`)) content = content.replace(HEADER, HEADER + `## ${day}\n\n`)
     const link = bvid ? `[《${String(title || bvid).slice(0, 24)}》](https://www.bilibili.com/video/${bvid})` : (title ? `《${String(title).slice(0, 24)}》` : '')

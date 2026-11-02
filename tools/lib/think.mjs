@@ -83,14 +83,14 @@ export async function introspect({ userText = '', chatId = '', isGroup = false, 
 
   // ── 落地三件事（顺序不能换）────────────────────────────────────
   // ① 原文进流：不裁、不摘要。这是"她当时心里到底怎么想的"的唯一证据。
-  try { IN.stream({ role: 'self', kind: 'think', text: raw, meta: { chat: chatId } }, now) } catch { }
+  try { IN.stream({ role: 'self', kind: 'think', text: raw, meta: { chat: chatId } }, now) } catch (e) { swallow(e, 'think:introspect') }
   // ② 进念头池：想说没说的会压着，攒成 tension（闭合回路）
-  try { IN.think(raw, { kind: 'urge', about: 'owner', now }) } catch { }
+  try { IN.think(raw, { kind: 'urge', about: 'owner', now }) } catch (e) { swallow(e, 'think:introspect') }
   // ③ 想的时候情绪会动 —— 想到难受的事，人不会毫无反应
   try {
     if (/(烦|累|不想|难受|算了|随便|没意思|懒得)/.test(raw)) F.poke('valence', -0.06, { why: 'inner:neg', now })
     else if (/(好|想|喜欢|开心|有意思)/.test(raw)) F.poke('valence', 0.05, { why: 'inner:pos', now })
-  } catch { }
+  } catch (e) { swallow(e, 'think:introspect') }
 
   log('[qq] 💭 心里想的（不外发）：' + raw.slice(0, 50))
   return { thought: raw, used: true, depth }

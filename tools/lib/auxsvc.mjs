@@ -10,6 +10,7 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..')
 const BOT_MJS = path.join(ROOT, 'tools', 'bot.mjs')
@@ -19,7 +20,7 @@ function readState() {
   try { return JSON.parse(fs.readFileSync(SUP_FILE(), 'utf8')) } catch { return {} }
 }
 function writeState(s) {
-  try { fs.mkdirSync(path.dirname(SUP_FILE()), { recursive: true }); fs.writeFileSync(SUP_FILE(), JSON.stringify(s, null, 1)) } catch {}
+  try { fs.mkdirSync(path.dirname(SUP_FILE()), { recursive: true }); fs.writeFileSync(SUP_FILE(), JSON.stringify(s, null, 1)) } catch (e) { swallow(e, 'auxsvc:writeState') }
 }
 
 function say(line) {
@@ -27,7 +28,7 @@ function say(line) {
   try {
     fs.mkdirSync(path.dirname(SUP_FILE()), { recursive: true })
     fs.appendFileSync(dataPath('aux-supervisor.log'), `${t} ${line}\n`)
-  } catch {}
+  } catch (e) { swallow(e, 'auxsvc:say') }
 }
 
 /** 端口上到底活没活（HTTP /health 优先，退化成 TCP 探测）。 */
@@ -53,7 +54,7 @@ function spawnDetached(args, logName, env = {}) {
     env: { ...process.env, ...env },
   })
   child.unref()
-  try { fs.closeSync(fd) } catch {}
+  try { fs.closeSync(fd) } catch (e) { swallow(e, 'auxsvc:spawnDetached') }
   return child
 }
 

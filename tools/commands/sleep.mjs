@@ -49,7 +49,7 @@ const runCmd = async (cmd, args, opts) => {
 export async function sleepiness() {
   const N = await import("../brain/organ/night.mjs")
   let a = null
-  try { a = await N.assess(Date.now()) } catch { }
+  try { a = await N.assess(Date.now()) } catch (e) { swallow(e, 'sleep:sleepiness') }
   if (!a) return { total: 0, parts: { memory: 0, events: 0, code: 0, debt: 0 }, detail: { note: "night.assess 取不到" } }
   return {
     total: Number(a.score || 0),
@@ -160,7 +160,7 @@ export async function sleepNow(opts = {}) {
       // 只认 10 分钟内写进去的 plan —— 更老的是上一觉留下的，不能用
       if (Date.now() - Number(ns0.at || 0) < 10 * 60_000) alreadyPlanned = ns0.plan
     }
-  } catch { }
+  } catch (e) { swallow(e, 'sleep:sleepNow') }
 
   try {
     const NIGHT0 = await import("../brain/organ/night.mjs")
@@ -180,7 +180,7 @@ export async function sleepNow(opts = {}) {
     const { setOnline } = await import("./status.mjs")
     await setOnline("dnd")
     console.log("[sleep] 状态已切勿扰（睡觉了）")
-  } catch {}
+  } catch (e) { swallow(e, 'sleep:sleepNow') }
   const mark = (name, result) => { phases.push({ name, ms: Date.now() - started, result }); writeJson(SLEEP_STATE(), { sleeping: true, phase: name, started, phases }); console.log("[sleep] " + name + " 完成") }
   // ══════════════════════════════════════════════════════════════════════
   // 两条额外通道（2026-11-02）
@@ -228,7 +228,7 @@ export async function sleepNow(opts = {}) {
     if (ns && ns.plan && typeof ns.plan.maintenance === "number") {
       DEPTH = { maintenance: ns.plan.maintenance, dream: ns.plan.dream, source: "入睡预演", acc: ns.plan.acc }
     }
-  } catch { }
+  } catch (e) { swallow(e, 'sleep:mark') }
   // 外部设定的 plan 优先（alreadyPlanned 是在 beginSleep 之前读到的）
   if (alreadyPlanned && typeof alreadyPlanned.maintenance === "number") {
     DEPTH = { maintenance: alreadyPlanned.maintenance, dream: alreadyPlanned.dream, source: "外部设定", acc: alreadyPlanned.acc }
@@ -241,7 +241,7 @@ export async function sleepNow(opts = {}) {
         const p = NIGHT.plan(Number(sn.elapsedMin), 0)
         DEPTH = { maintenance: p.maintenance, dream: p.dream, source: "实时分期", acc: p.acc }
       }
-    } catch { }
+    } catch (e) { swallow(e, 'sleep:mark') }
   }
   console.log("[sleep] 这一觉深度：" + DEPTH.source + " → 维护 " + DEPTH.maintenance.toFixed(2) + " / 梦 " + DEPTH.dream.toFixed(2))
 
@@ -503,7 +503,7 @@ export async function sleepNow(opts = {}) {
     const { setOnline } = await import("./status.mjs")
     await setOnline("online")
     console.log("[sleep] 状态已切回在线")
-  } catch {}
+  } catch (e) { swallow(e, 'sleep:best-effort') }
   writeJson(SLEEP_STATE(), { sleeping: false, phase: "awake", lastSleep: report, lastSleepAt: Date.now() })
   console.log("[sleep] 醒了，全程 " + Math.round((Date.now() - started) / 1000) + "s")
   return { ok: true, report }

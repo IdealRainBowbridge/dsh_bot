@@ -67,7 +67,7 @@ async function seeds(now = Date.now()) {
     try {
       const prev = readJsonl(DREAMS(), { limit: 6 })
       for (const p of prev) for (const x of (p.seeds || [])) recentSpines.add(String(x).slice(0, 40))
-    } catch { }
+    } catch (e) { swallow(e, 'dream:seeds') }
 
     const scored = eps.map((e) => {
       const sal = Number(e.salience || 0.3)

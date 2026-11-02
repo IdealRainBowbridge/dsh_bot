@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const DIR = () => dataPath('locks')
 
@@ -22,7 +23,7 @@ export function acquire(name) {
     }
     fs.writeFileSync(f, String(process.pid))
     let released = false
-    const release = () => { if (!released) { released = true; try { if (fs.readFileSync(f, 'utf8') === String(process.pid)) fs.rmSync(f, { force: true }) } catch {} } }
+    const release = () => { if (!released) { released = true; try { if (fs.readFileSync(f, 'utf8') === String(process.pid)) fs.rmSync(f, { force: true }) } catch (e) { swallow(e, 'lock:release') } } }
     process.on('exit', release)
     return release
   } catch { return null }   // 锁系统故障不挡业务

@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const EP = dataPath('episodes.jsonl')
 
@@ -20,9 +21,9 @@ export async function run(argv = []) {
       try {
         const r = JSON.parse(line)
         if (r.platform === 'bilibili' && Number(r.ts ?? 0) >= since) rows.push(r)
-      } catch {}
+      } catch (e) { swallow(e, 'report:arg') }
     }
-  } catch {}
+  } catch (e) { swallow(e, 'report:arg') }
 
   const by = { bilibili: [] }
   for (const r of rows) {

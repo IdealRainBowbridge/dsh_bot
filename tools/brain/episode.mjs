@@ -12,6 +12,7 @@ import { semDir } from './paths.mjs'
 import { isoOf, relTime } from './clock.mjs'
 import { consume as consumeEvents } from './event.mjs'
 import { bump } from './metrics.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const EP_RE = /^\d{4}-\d{2}\.jsonl$/
 
@@ -33,7 +34,7 @@ export function touchStrength(ids, { delta = 0.2, now = Date.now() } = {}) {
       }
       return cur
     })
-  } catch {}
+  } catch (e) { swallow(e, 'episode:touchStrength') }
 }
 
 /** 情绪极性与唤醒（rule-only，毫秒级；LLM 版的情绪判断在巩固里）。 */
@@ -234,7 +235,7 @@ function seenSet() {
 
 function saveSeen(set) {
   const ids = [...set].slice(-8000)
-  try { mutateJson(SEEN_PATH(), { ids: [] }, () => ({ ids, at: Date.now() })) } catch {}
+  try { mutateJson(SEEN_PATH(), { ids: [] }, () => ({ ids, at: Date.now() })) } catch (e) { swallow(e, 'episode:saveSeen') }
 }
 
 /**

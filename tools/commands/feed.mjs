@@ -8,6 +8,7 @@ import { config } from '../lib/config.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import fs from 'node:fs'
 import * as memory from '../lib/memory.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 // 偏好词是"话题名"（美食 / 猫咪 / AI 与 Agent 工具），标题和简介里几乎不会原样出现。
 // 只做整串 includes = 永远漏（10-23、10-24 连续两天把"康师傅桶面""现钓渔获做餐"判成无命中）。
@@ -145,7 +146,7 @@ export async function run(argv = []) {
         usable = kept
       }
     }
-  } catch {}
+  } catch (e) { swallow(e, 'feed:best-effort') }
   usable.sort((a, b) => b.hit - a.hit || b.density - a.density)
   const picked = usable.slice(0, n)
 

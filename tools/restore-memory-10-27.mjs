@@ -12,6 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './lib/paths.mjs'
+import { swallow } from './lib/swallow.mjs'
 
 const GO = process.argv.includes('--go')
 const bakOf = (base) => fs.readdirSync(path.dirname(dataPath(base)))
@@ -61,7 +62,7 @@ if (epBaks.length) {
         const r = JSON.parse(line)
         const k = `${r.ts}|${r.role}|${String(r.text || '').slice(0, 40)}`
         if (!rows.has(k)) rows.set(k, r)
-      } catch {}
+      } catch (e) { swallow(e, 'restore-memory-10-27:bakOf') }
     }
   }
   const merged = [...rows.values()].sort((a, b) => Number(a.ts) - Number(b.ts))

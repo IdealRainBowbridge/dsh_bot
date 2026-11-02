@@ -11,6 +11,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { homePath } from '../lib/paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const FILE = () => path.join(process.env.DSH_HOME || homePath('.dsh'), 'bot-next-wake.json')
 const pad = (n) => String(n).padStart(2, '0')
@@ -27,7 +28,7 @@ function arg(argv, name) {
 export function run(argv = []) {
   const f = FILE()
   if (argv.includes('--clear')) {
-    try { fs.rmSync(f, { force: true }) } catch {}
+    try { fs.rmSync(f, { force: true }) } catch (e) { swallow(e, 'selfwake:run') }
     console.log('✓ 已取消下一次自定唤醒')
     return
   }

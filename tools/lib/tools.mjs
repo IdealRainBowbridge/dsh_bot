@@ -113,6 +113,22 @@ export const CHAT_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'browse_page',
+      description: '用你的内置浏览器打开网页：像真人一样渲染（电脑/手机两种身份自动识别），JS 画出来的正文也能读，还能点击/输入/截图。比 look_up 的 fetch 强得多，读文章/帖子/公众号优先用它。',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '要打开的 http(s) 链接' },
+          device: { type: 'string', enum: ['auto', 'pc', 'mobile'], description: '设备身份：auto=按域名猜（默认），pc=电脑，mobile=手机' },
+          links: { type: 'boolean', description: '要不要列出页面上可点的链接（想继续点就开）' },
+        },
+        required: ['url'],
+      },
+    },
+  },
 ]
 
 /** 跑一条 bot CLI（限时、限输出）。 */
@@ -201,11 +217,30 @@ export async function runTool(name, args = {}) {
         return { ok: r.ok, result: r.ok ? `已写进${book === 'owner' ? '给老爹的信' : '你的私人日记'}。` : `日记没写成：${r.err || r.out}` }
       }
 
+      case 'browse_page': {
+        const url = String(a.url || '').trim()
+        if (!url) return { ok: false, result: '没给链接。' }
+        const dev = ['pc', 'mobile'].includes(a.device) ? a.device : 'auto'
+        const args = ['browser', 'read', url, '--device', dev]
+        if (a.links) args.push('--links')
+        const r = await runCli(args, 90000)
+        if (!r.ok) return { ok: false, result: `浏览器没读成：${(r.err || r.out || '').slice(0, 200)}` }
+        return { ok: true, result: String(r.out || '').slice(0, 1800) }
+      }
+
       case 'look_up': {
         const mode = a.mode === 'fetch' ? 'fetch' : 'search'
         const q = String(a.q || '').trim()
         if (!q) return { ok: false, result: '没给关键词。' }
-        const r = await runCli(mode === 'fetch' ? ['web', 'fetch', q] : ['web', 'search', q], 90000)
+        if (mode === 'fetch') {
+          // 内置浏览器优先（JS 渲染/双设备身份），失败自动落回 web fetch（curl 扒静态）
+          const b = await runCli(['browser', 'read', q], 90000)
+          if (b.ok) return { ok: true, result: String(b.out || '').slice(0, 1800) }
+          const r = await runCli(['web', 'fetch', q], 60000)
+          if (!r.ok) return { ok: false, result: `上网没成：${(r.err || r.out || b.err || '').slice(0, 200)}` }
+          return { ok: true, result: String(r.out || '').slice(0, 1800) }
+        }
+        const r = await runCli(['web', 'search', q], 90000)
         if (!r.ok) return { ok: false, result: `上网没成：${(r.err || r.out || '').slice(0, 200)}` }
         return { ok: true, result: String(r.out || '').slice(0, 1800) }
       }

@@ -14,6 +14,7 @@
 | **DeepSeek API** | `deepseek-chat`（`https://api.deepseek.com/v1`） | QQ / 抖音私信 / 微信 的实时对话 | 充值后填 `llm.api_key` |
 | **B站凭据** | Cookie（`SESSDATA` + `bili_jct` + `buvid3`） | B站刷视频/评论 | 浏览器 F12 → Application → Cookies |
 | **本插件** | `0.4.0` | 就是本仓库 | `dsh plugin --profile desktop add "link:<repo>"` |
+| **内置浏览器**（可选） | `chromium 156`（Debian 官方包）+ `fonts-noto-cjk` | `browser read / browse_page`：JS 渲染页读正文、手机/电脑双身份、截图 | 容器里 `apt install --no-install-recommends chromium fonts-noto-cjk`；Windows 侧把 `browser.chromiumBin` 指向本机 chrome.exe |
 
 装完即可用：B站刷视频、QQ 聊天（无表情包/无语音）、记忆、面板。
 

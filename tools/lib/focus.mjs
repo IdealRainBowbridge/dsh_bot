@@ -84,7 +84,7 @@ export function writeFocus(activity, min = 0, note = '') {
 }
 
 export function clearFocus() {
-  try { fs.rmSync(FOCUS_PATH, { force: true }) } catch {}
+  try { fs.rmSync(FOCUS_PATH, { force: true }) } catch (e) { swallow(e, 'focus:clearFocus') }
 }
 
 /** 组装一份好用的快照（提示语里直接念给人听）。 */

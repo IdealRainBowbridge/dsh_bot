@@ -40,6 +40,7 @@
 import { readJson, mutateJson, readJsonl, appendJsonl, shortHash } from './json.mjs'
 import { innerPath, innerStreamPath } from './paths.mjs'
 import * as field from './field.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const HOUR = 3_600_000
 const MAX_KEEP = 60            // 常驻的活跃想法上限
@@ -132,7 +133,7 @@ export function told(id, now = Date.now()) {
   it.toldAt = now
   st.updatedAt = now
   // 说出来 = 卸掉一点压力（这是负反馈的另一半：poke 的是 +，这里是 -）
-  try { field.poke('tension', -0.35, { why: 'inner:told', now }) } catch { }
+  try { field.poke('tension', -0.35, { why: 'inner:told', now }) } catch (e) { swallow(e, 'inner:told') }
   return persist(st)
 }
 
@@ -192,7 +193,7 @@ export function settle(now = Date.now()) {
   const load = pending.reduce((n, x) => n + Math.max(0, Number(x.weight || 0) - 0.8), 0)
   if (load > 0.4) {
     // 只推 tension，不直接改 valence —— 压力是"心里有事"，不是"心情差"。差别很重要。
-    try { field.poke('tension', Math.min(2.5, load * 0.12), { why: 'inner:pending', now }) } catch { }
+    try { field.poke('tension', Math.min(2.5, load * 0.12), { why: 'inner:pending', now }) } catch (e) { swallow(e, 'inner:settle') }
   }
   return { pending: pending.length, load: Number(load.toFixed(2)) }
 }
@@ -235,7 +236,7 @@ export function readStream({ from = 0, limit = 200 } = {}) {
 function persist(st) {
   try {
     mutateJson(innerPath(), empty(), () => ({ items: st.items, updatedAt: st.updatedAt }))
-  } catch { }
+  } catch (e) { swallow(e, 'inner:persist') }
   return st
 }
 

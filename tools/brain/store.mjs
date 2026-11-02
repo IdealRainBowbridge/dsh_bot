@@ -12,6 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { ensureDir, readJson, writeJsonAtomic, shortHash } from './json.mjs'
 import { lockPath } from './paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const sab = new Int32Array(new SharedArrayBuffer(4))
 export function sleepSync(ms) {
@@ -36,9 +37,9 @@ export function withLock(name, fn, { timeoutMs = 3000, staleMs = 15000 } = {}) {
     } catch (e) {
       if (e.code !== 'EEXIST') throw e
       let hold = null
-      try { hold = JSON.parse(fs.readFileSync(file, 'utf8')) } catch {}
+      try { hold = JSON.parse(fs.readFileSync(file, 'utf8')) } catch (e) { swallow(e, 'store:withLock') }
       const stale = !hold || !hold.ts || (Date.now() - Number(hold.ts) > staleMs) || !alive(hold.pid)
-      if (stale) { try { fs.rmSync(file, { force: true }) } catch {} ; continue }
+      if (stale) { try { fs.rmSync(file, { force: true }) } catch (e) { swallow(e, 'store:withLock') } ; continue }
       if (Date.now() - started > timeoutMs) throw new Error(`brain 写锁忙：${name}`)
       sleepSync(15 + Math.floor(Math.random() * 25))
       continue
@@ -46,12 +47,12 @@ export function withLock(name, fn, { timeoutMs = 3000, staleMs = 15000 } = {}) {
     try {
       fs.writeSync(fd, JSON.stringify({ pid: process.pid, ts: Date.now(), name }))
     } finally {
-      try { fs.closeSync(fd) } catch {}
+      try { fs.closeSync(fd) } catch (e) { swallow(e, 'store:withLock') }
     }
     try {
       return fn()
     } finally {
-      try { fs.rmSync(file, { force: true }) } catch {}
+      try { fs.rmSync(file, { force: true }) } catch (e) { swallow(e, 'store:withLock') }
     }
   }
 }
@@ -84,7 +85,7 @@ export function tryExclusive(name, { staleMs = 10 * 60 * 1000 } = {}) {
     const hold = JSON.parse(fs.readFileSync(file, 'utf8'))
     if (hold && hold.pid && alive(hold.pid) && Date.now() - Number(hold.ts || 0) < staleMs) return null
     fs.rmSync(file, { force: true })
-  } catch {}
+  } catch (e) { swallow(e, 'store:tryExclusive') }
   try {
     const fd = fs.openSync(file, 'wx')
     fs.writeSync(fd, JSON.stringify({ pid: process.pid, ts: Date.now(), name }))
@@ -94,7 +95,7 @@ export function tryExclusive(name, { staleMs = 10 * 60 * 1000 } = {}) {
     try {
       const hold = JSON.parse(fs.readFileSync(file, 'utf8'))
       if (hold?.pid === process.pid) fs.rmSync(file, { force: true })
-    } catch {}
+    } catch (e) { swallow(e, 'store:release') }
   }
   return release
 }
@@ -105,5 +106,5 @@ export function touchLock(name) {
   try {
     const hold = JSON.parse(fs.readFileSync(file, 'utf8'))
     if (hold?.pid === process.pid) writeJsonAtomic(file, { ...hold, ts: Date.now() })
-  } catch {}
+  } catch (e) { swallow(e, 'store:touchLock') }
 }

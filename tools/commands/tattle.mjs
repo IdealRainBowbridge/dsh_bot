@@ -7,6 +7,7 @@ import { config } from '../lib/config.mjs'
 import { fill } from '../lib/persona-voice.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { sendOwnerQQ } from '../lib/notify.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const NL = String.fromCharCode(10)
 const STATE = () => dataPath('tattle.json')
@@ -47,7 +48,7 @@ export async function tattle({ title, bvid, score, reason, highlight }) {
   const q = quotaOk()
   if (!q.ok) return { ok: false, why: q.why }
   let text = ''
-  try { text = await compose({ title, bvid, score, reason, highlight }) } catch {}
+  try { text = await compose({ title, bvid, score, reason, highlight }) } catch (e) { swallow(e, 'tattle:tattle') }
   if (!text) {
     text = `老爹，今天看到《${String(title).slice(0, 30)}》，打了 ${score} 分。${reason ? String(reason).slice(0, 60) : '值得一看'}。有空可以看看。`
   }

@@ -2,7 +2,7 @@
 //
 // 为什么需要它：`sleep` 的第三阶段是"优化增强（git 归档）"，它调 `git` 命令。
 // 但容器里**根本没装 git**（Debian 精简镜像），`runCmd('git', ...)` 抛错后被
-// `catch {}` 吞掉 —— 于是"睡一觉会归档代码"这件事从来没发生过，而报告里打着勾。
+// `catch (e) { swallow(e, 'tar:best-effort') }` 吞掉 —— 于是"睡一觉会归档代码"这件事从来没发生过，而报告里打着勾。
 //
 // 与其为了一个归档动作往镜像里塞 git（还要 root、还要维护），不如用 Node 自带的
 // zlib 直接写 tar.gz：tar 格式就是 512 字节头部 + 数据 + 补零，40 行能写完。
@@ -10,6 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import { swallow } from './swallow.mjs'
 
 const BLOCK = 512
 

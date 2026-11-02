@@ -56,9 +56,9 @@ export function readResults(stamp) {
       try {
         const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
         out[j.job] = j
-      } catch { }
+      } catch (e) { swallow(e, 'nightwork:readResults') }
     }
-  } catch { }
+  } catch (e) { swallow(e, 'nightwork:readResults') }
   return out
 }
 
@@ -159,7 +159,7 @@ async function jobOptimize(stamp) {
       problems = rv.items.filter((x) => !x.ok)
       reviewNote = problems.length ? problems.map((b) => b.name + ': ' + b.detail).join(' | ') : '全部健康'
     }
-  } catch { }
+  } catch (e) { swallow(e, 'nightwork:jobOptimize') }
 
   return { ok: archive.ok, archive, problems: problems.length, note: reviewNote }
 }

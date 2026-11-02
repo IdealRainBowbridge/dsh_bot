@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { swallow } from './swallow.mjs'
 
 /** 用写文件验证执行：Electron 进程可以退出码 0 但不跑 JS，必须实测。 */
 export function probeRuntime(file, env) {
@@ -28,14 +29,14 @@ export function resolveRuntime(dshHome, options = {}) {
   const bin = platform === 'win32' ? 'node.exe' : 'node'
   const cands = [env.DSH_NODE, env.DSH_DESKTOP_NODE_EXECUTABLE]
   for (const root of new Set([path.join(dshHome, 'dsh-runtimes'), path.join(home, '.dsh', 'dsh-runtimes')])) {
-    try { for (const d of fs.readdirSync(root)) cands.push(path.join(root, d, 'dependencies', 'node', 'bin', bin)) } catch {}
+    try { for (const d of fs.readdirSync(root)) cands.push(path.join(root, d, 'dependencies', 'node', 'bin', bin)) } catch (e) { swallow(e, 'runtime:resolveRuntime') }
   }
   const sep = platform === 'win32' ? ';' : ':'
   for (const dir of String(env.PATH ?? '').split(sep)) if (dir) cands.push(path.join(dir.replace(/^"|"$/g, ''), bin))
   if (platform === 'win32' && env.ProgramFiles) cands.push(path.join(env.ProgramFiles, 'nodejs', bin))
   if (options.allowCurrent && !electron) cands.push(current)
   for (const file of new Set(cands.filter(Boolean))) {
-    try { if (fs.statSync(file).isFile() && probe(file, env)) return { file, env: { ...env } } } catch {}
+    try { if (fs.statSync(file).isFile() && probe(file, env)) return { file, env: { ...env } } } catch (e) { swallow(e, 'runtime:resolveRuntime') }
   }
   if (electron) {
     const nodeEnv = { ...env, ELECTRON_RUN_AS_NODE: '1' }

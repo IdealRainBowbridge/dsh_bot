@@ -26,6 +26,12 @@ const TESTS = [
   'stress-source-test.mjs',   // stress 三源 / 快慢两个尺度 / 同步性    // social→reply 下限 / attach→owner 门槛上限    // 五条通路接线：落盘/消耗/恢复/接入决策        // 突触标定：双脉冲易化/STD/恢复/通路隔离        // 看番账本：注入 / ok:false 标注 / 72h 边界（2026-11-02）
   'watch-slot-test.mjs',      // 槽位必须进实际聊天那条装配（shadow 模式也生效）
   'tail-read-test.mjs',        // readTail：只读尾部 / 不返回半截行 / 边界
+  'brain-affect-test.mjs',    // 情绪混合/奖励/tension/decay（2026-11-02 补测）
+  'brain-rhythm-test.mjs',    // 昼夜曲线形状/光照推相位/睡眠记账
+  'brain-delivery-test.mjs',  // 交付证据：记录/检索/last/stats
+  'brain-attention-test.mjs', // 紧迫度/队列/生成租约
+  'brain-segment-test.mjs',   // 段：话题指纹/切段信号/短句宽容
+  'brain-store-test.mjs',     // store：锁/原子读改写/多进程无丢失
   'shard-test.mjs',            // 记忆分片：part2 能读回 / 不串台
   'memory-recall-test.mjs',
   'qq-human-test.mjs',
@@ -35,7 +41,7 @@ const TESTS = [
   'focus-one-thing-test.mjs',
   'tts-reftext-test.mjs',
   'voice-emotion-test.mjs',
-  'web-shell-test.mjs',
+  'web-shell-test.mjs',  'browser-engine-test.mjs',   // 内置浏览器引擎：双设备/SSRF/CDP/实机渲染（2026-11-02）
   'recall-push-test.mjs',
   'imggen-test.mjs',
   'vision-test.mjs',

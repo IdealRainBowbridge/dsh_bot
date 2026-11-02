@@ -51,7 +51,7 @@ export function readFaceCache() {
   try {
     const j = JSON.parse(fs.readFileSync(FACE_CACHE, 'utf8'))
     if (Array.isArray(j.names) && j.names.length && Date.now() - Number(j.at) < 86400e3) return j.names
-  } catch {}
+  } catch (e) { swallow(e, 'stickers:readFaceCache') }
   return null
 }
 
@@ -78,7 +78,7 @@ export async function loadBiliFaces() {
       }
     }
     if (!names.length) return BILI_FACES
-    try { fs.writeFileSync(FACE_CACHE, JSON.stringify({ at: Date.now(), names })) } catch {}
+    try { fs.writeFileSync(FACE_CACHE, JSON.stringify({ at: Date.now(), names })) } catch (e) { swallow(e, 'stickers:loadBiliFaces') }
     return names
   } catch {
     return BILI_FACES

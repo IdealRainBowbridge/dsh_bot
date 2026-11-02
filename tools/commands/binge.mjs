@@ -31,6 +31,7 @@ import * as memory from '../lib/memory.mjs'
 import * as promises from '../lib/promises.mjs'
 import * as jsontext from '../lib/jsontext.mjs'
 import * as watchlog from '../lib/watchlog.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const DIR = dataPath('binge')
 const arg = (argv, name) => {
@@ -47,7 +48,7 @@ function save(name, obj) {
   try {
     fs.mkdirSync(DIR, { recursive: true })
     fs.writeFileSync(fileOf(name), JSON.stringify(obj, null, 1) + '\n')
-  } catch {}
+  } catch (e) { swallow(e, 'binge:save') }
 }
 
 // ── 挑投稿的规则（10-28 提到模块级：续看时要能给"备选"再排一次序）──────────────
@@ -189,7 +190,7 @@ async function watchOne(bvid, opt = {}) {
     r.searchParams.set('sort', '2'); r.searchParams.set('ps', '5')
     const jr = await apiGet(r.href, H, { soft: true })
     for (const c of (jr?.data?.replies ?? []).slice(0, 5)) hot.push({ name: c.member?.uname ?? '', text: String(c.content?.message ?? '').slice(0, 120) })
-  } catch {}
+  } catch (e) { swallow(e, 'binge:isAi') }
 
   const material = subs.length
     ? subs.slice(0, 240).join('\n')
@@ -206,7 +207,7 @@ async function watchOne(bvid, opt = {}) {
       const r = await BF.seeVideo(bvid, { frames: Number(vcfg.vision?.bingeFrames ?? 3) })
       if (r?.desc) visionDesc = r.desc
     }
-  } catch {}
+  } catch (e) { swallow(e, 'binge:isAi') }
 
   // ③.6 真的听一段声音（11-02，补上「音频识别 + 对齐观看帧」）：
   // 画面告诉你"有谁、在做什么"，但**说不出来他们在说什么**。
@@ -353,7 +354,7 @@ function dailyUsed() {
       const j = JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8'))
       for (const r of j.log ?? []) if (new Date(Number(r.at)).toLocaleDateString('sv-SE') === today && r.ok) n++
     }
-  } catch {}
+  } catch (e) { swallow(e, 'binge:dailyUsed') }
   return n
 }
 
@@ -366,7 +367,7 @@ export async function run(argv = []) {
         const j = JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8'))
         out.push({ 剧: j.show, 看过: `${j.seen?.length ?? 0}/${j.total ?? '?'} 集`, 最近: j.log?.at?.(-1)?.at ? new Date(j.log.at(-1).at).toLocaleString('zh-CN', { hour12: false }) : '' })
       }
-    } catch {}
+    } catch (e) { swallow(e, 'binge:run') }
     if (!out.length) { console.log('（还没看过任何一部 —— node bot.mjs binge --search "番名" 开始）'); return }
     for (const r of out) console.log(`  ${r.剧}　看过 ${r.看过}　最近 ${r.最近}`)
     return

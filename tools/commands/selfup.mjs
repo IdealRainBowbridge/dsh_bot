@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { config } from '../lib/config.mjs'
 import { dataPath, configPath } from '../lib/paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const BACKUP_ROOT = () => dataPath('selfup-backups')
 const LOG = () => dataPath('selfup-log.md')
@@ -35,8 +36,8 @@ function doBackup() {
   // 配置 + 人设也快照
   // configPath 是字符串常量（paths.mjs），不是函数 —— 以前写成 configPath() 抛 TypeError，
   // 又被 try 吞掉 → 每份备份都悄悄少一个配置文件（10-26 修）
-  try { fs.copyFileSync(configPath, path.join(dest, 'bot.config.json')) } catch {}
-  try { fs.copyFileSync(dataPath('persona.md'), path.join(dest, 'persona.md')) } catch {}
+  try { fs.copyFileSync(configPath, path.join(dest, 'bot.config.json')) } catch (e) { swallow(e, 'selfup:copyDir') }
+  try { fs.copyFileSync(dataPath('persona.md'), path.join(dest, 'persona.md')) } catch (e) { swallow(e, 'selfup:copyDir') }
   // 只留最近 10 份
   const olds = fs.readdirSync(BACKUP_ROOT()).sort().reverse().slice(10)
   for (const o of olds) fs.rmSync(path.join(BACKUP_ROOT(), o), { recursive: true, force: true })
@@ -49,7 +50,7 @@ function logLine(text) {
   const time = now.toTimeString().slice(0, 5)
   const md = LOG()
   let content = ''
-  try { content = fs.readFileSync(md, 'utf8') } catch {}
+  try { content = fs.readFileSync(md, 'utf8') } catch (e) { swallow(e, 'selfup:logLine') }
   if (!content.startsWith('# 大肥鱼 · 自我升级日志')) content = '# 大肥鱼 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n'
   if (!content.includes(`## ${day}\n`)) content = content.replace('# 大肥鱼 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n', `# 大肥鱼 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n## ${day}\n\n`)
   const at = content.indexOf(`## ${day}\n`) + `## ${day}\n\n`.length
@@ -85,7 +86,7 @@ export async function run(argv = []) {
     const root = BACKUP_ROOT()
     const backups = fs.existsSync(root) ? fs.readdirSync(root).sort().reverse() : []
     console.log(`备份份数：${backups.length}（${backups[0] ?? '无'} 最新）`)
-    try { console.log('最近日志：\n' + fs.readFileSync(LOG(), 'utf8').split('\n').slice(0, 12).join('\n')) } catch {}
+    try { console.log('最近日志：\n' + fs.readFileSync(LOG(), 'utf8').split('\n').slice(0, 12).join('\n')) } catch (e) { swallow(e, 'selfup:run') }
     return
   }
 

@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const MIXIN = [46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52]
 const keyOf = u => String(u).split('/').at(-1).split('.')[0]
@@ -35,7 +36,7 @@ const REQ_LOG = dataPath('api-requests.log')
 const CACHE_TTL_MS = 24 * 3600 * 1000
 const logReq = (hit, p) => {
   if (noCacheEnv()) return
-  try { fs.appendFileSync(REQ_LOG, `${new Date().toISOString()} ${hit ? 'HIT ' : 'NET '} ${p}\n`) } catch {}
+  try { fs.appendFileSync(REQ_LOG, `${new Date().toISOString()} ${hit ? 'HIT ' : 'NET '} ${p}\n`) } catch (e) { swallow(e, 'bili-api:logReq') }
 }
 
 // 只缓存「静态一点的元信息」✗ 动态内容（评论/收件箱/动态流）绝不能缓存 ✓
@@ -57,7 +58,7 @@ function writeJson(file, value) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, JSON.stringify(value))
-  } catch {}
+  } catch (e) { swallow(e, 'bili-api:writeJson') }
 }
 
 // 缓存键：去掉每次都变的签名参数（wts / w_rid），按账号摘要隔离

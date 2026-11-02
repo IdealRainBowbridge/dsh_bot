@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath, diaryPath } from './paths.mjs'
 import * as memory from './memory.mjs'
+import { swallow } from './swallow.mjs'
 
 const DIR = dataPath('qq')
 const PROFILE_FILE = path.join(DIR, 'owner-profile.md')
@@ -40,7 +41,7 @@ export function recentOuter(limit = 4) {
         if (r.role !== 'assistant' && r.role !== 'event') continue
         const text = String(r.summary || r.text || '').trim()
         if (text) rows.push({ ts: Number(r.ts || 0), platform, text })
-      } catch {}
+      } catch (e) { swallow(e, 'qq-memory:recentOuter') }
     }
   }
   rows.sort((a, b) => a.ts - b.ts)
@@ -58,7 +59,7 @@ function diaryTail(lines = 3) {
       const raw = fs.readFileSync(diaryPath(book), 'utf8').trim()
       const tail = raw.split('\n').map(x => x.trim()).filter(x => x && !x.startsWith('#')).slice(-lines)
       if (tail.length) return tail.map(x => `· ${x.slice(0, 80)}`)
-    } catch {}
+    } catch (e) { swallow(e, 'qq-memory:diaryTail') }
   }
   return []
 }

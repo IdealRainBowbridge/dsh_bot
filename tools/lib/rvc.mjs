@@ -10,6 +10,7 @@ import path from 'node:path'
 import { spawn, execFileSync } from 'node:child_process'
 import { config } from './config.mjs'
 import { dataPath, homePath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const RVC_ROOT = () => config().rvc?.root || 'D:/rvc/RVC'
 const RVC_PY = () => config().rvc?.python || 'D:/rvc/venv/Scripts/python.exe'
@@ -23,7 +24,7 @@ export function rvcReady() {
 }
 
 function readRun() { try { return JSON.parse(fs.readFileSync(RUN_FILE(), 'utf8')) } catch { return {} } }
-function writeRun(o) { try { fs.mkdirSync(path.dirname(RUN_FILE()), { recursive: true }); fs.writeFileSync(RUN_FILE(), JSON.stringify(o, null, 1)) } catch {} }
+function writeRun(o) { try { fs.mkdirSync(path.dirname(RUN_FILE()), { recursive: true }); fs.writeFileSync(RUN_FILE(), JSON.stringify(o, null, 1)) } catch (e) { swallow(e, 'rvc:writeRun') } }
 
 export function listVoiceModels() {
   const run = readRun()
@@ -48,7 +49,7 @@ function recordModel(name, pth, index) {
 function logFile(name) { return dataPath('rvc', `train-${name}.log`) }
 const stamp = () => new Date().toISOString().slice(11, 19)
 function appendLog(name, line) {
-  try { fs.mkdirSync(path.dirname(logFile(name)), { recursive: true }); fs.appendFileSync(logFile(name), `${stamp()} ${line}\n`) } catch {}
+  try { fs.mkdirSync(path.dirname(logFile(name)), { recursive: true }); fs.appendFileSync(logFile(name), `${stamp()} ${line}\n`) } catch (e) { swallow(e, 'rvc:appendLog') }
 }
 
 /** 跑一条 RVC 子命令（cwd=仓库根），实时把 stdout 进日志。返回退出码。 */
@@ -71,7 +72,7 @@ function runRvc(args, { onLine } = {}) {
         tail.push(line)
         if (tail.length > 8) tail.shift()
         fs.appendFileSync(logPath, line + '\n')
-        try { onLine?.(line) } catch {}
+        try { onLine?.(line) } catch (e) { swallow(e, 'rvc:feed') }
       }
     }
     child.stdout.on('data', feed)
@@ -282,7 +283,7 @@ export async function convertVoice({ input, output, name, pitch = 0, indexRate =
       execFileSync(ffmpegExe, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0',
         '-i', path.join(tmp, 'list.txt').replace(/\//g, path.sep), '-c:a', 'pcm_s16le', out], { timeout: 120000, windowsHide: true })
       return out
-    } finally { try { fs.rmSync(tmp, { recursive: true, force: true }) } catch {} }
+    } finally { try { fs.rmSync(tmp, { recursive: true, force: true }) } catch (e) { swallow(e, 'rvc:convertOne') } }
   }
   await convertOne(String(input).replace(/\//g, path.sep), out)
   return out
@@ -308,7 +309,7 @@ export async function separateVocals({ input, outDir, model = 'vocals-bs-roforme
   }))
   const code = "import sys;request_path=sys.argv[1];sys.argv[:]=[sys.argv[0]];from tools.pymss_webui import _pymss_worker_main;raise SystemExit(_pymss_worker_main(request_path))"
   const r = await runRvc(['-u', '-c', code, tmpReq], {})
-  try { fs.rmSync(tmpReq, { force: true }) } catch {}
+  try { fs.rmSync(tmpReq, { force: true }) } catch (e) { swallow(e, 'rvc:separateVocals') }
   const vocal = findWav(vocalRoot), instrumental = findWav(insRoot)
   if (!vocal) throw new Error('人声分离失败：' + r.tail.join(' | ').slice(-250))
   return { vocal, instrumental }

@@ -10,6 +10,7 @@ import * as guard from './guard.mjs'
 import { classifyComment } from './comment-kind.mjs'
 import { dataPath } from './paths.mjs'
 import { updateJson, readJsonSafe } from './atomic.mjs'
+import { swallow } from './swallow.mjs'
 
 // ── 日额度账本 ───────────────────────────────────────────────────────────
 const ACT_FILE = dataPath('bili-actions.json')
@@ -63,10 +64,10 @@ const MY_COMMENTS = dataPath('my-comments.json')
  */
 export function recordMyComment(bvid, aid, rpid, check = {}) {
   let list = []
-  try { list = JSON.parse(fs.readFileSync(MY_COMMENTS, 'utf8')) } catch {}
+  try { list = JSON.parse(fs.readFileSync(MY_COMMENTS, 'utf8')) } catch (e) { swallow(e, 'bili-write:recordMyComment') }
   const { exists = null, visible = null } = check ?? {}
   list.push({ bvid, aid, rpid, ts: Date.now(), exists, visible })
-  try { fs.writeFileSync(MY_COMMENTS, JSON.stringify(list.slice(-100), null, 1)) } catch {}
+  try { fs.writeFileSync(MY_COMMENTS, JSON.stringify(list.slice(-100), null, 1)) } catch (e) { swallow(e, 'bili-write:recordMyComment') }
 }
 
 // ── 基础：表单 POST（B站的写接口全是 form 编码 + csrf）─────────────────────
@@ -110,7 +111,7 @@ export async function sendDanmaku(bvid, rawText, { go = false, atSec = 0 } = {})
     progress: String(at * 1000), fontsize: '25', pool: '0', mode: '1', color: '16777215', rnd: String(Date.now()).slice(0, -3), plat: '1',
   })
   const res = okOf(j)
-  if (res.ok) { capRecord('danmaku'); try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '弹幕', title: info.title, bvid, text, extra: `第${at}s` }) } catch {} return { ...res, why: `弹幕已发（第 ${at}s）：${text}` } }
+  if (res.ok) { capRecord('danmaku'); try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '弹幕', title: info.title, bvid, text, extra: `第${at}s` }) } catch (e) { swallow(e, 'bili-write:sendDanmaku') } return { ...res, why: `弹幕已发（第 ${at}s）：${text}` } }
   // 直连被拦（B站对脚本直连的写接口回 HTML 拦截页，json 解析失败 code=-1）→ CDP 真浏览器页内发
   if (Number(res.code) === -1 || Number(res.code) === -400) {
     try {
@@ -153,7 +154,7 @@ export async function postDynamic(rawText, { go = false } = {}) {
   }
   const j = await formPost(cred, 'https://api.bilibili.com/x/dynamic/feed/create/dyn', dynReq)
   const res = okOf(j)
-  if (res.ok) { capRecord('dyn'); try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '动态', text }) } catch {} return { ...res, why: '动态已发' } }
+  if (res.ok) { capRecord('dyn'); try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '动态', text }) } catch (e) { swallow(e, 'bili-write:postDynamic') } return { ...res, why: '动态已发' } }
   // 直连被 -400 拦（B站对脚本直连有风控）→ 走 CDP 真浏览器页面内发（借官方之口，登录一次永久有效）
   if (Number(res.code) === -400) {
     try {
@@ -168,7 +169,7 @@ export async function postDynamic(rawText, { go = false } = {}) {
         capRecord('dyn')
         // 台账（10-27 补）：以前这条 CDP 成功路径只记额度、不写台账，于是"我发过一条动态"在
         // 账本里查不到（当天 social-log 里 dynamic 条数 = 0）。说不清自己说过什么，等于没记。
-        try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '动态', text }) } catch {}
+        try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '动态', text }) } catch (e) { swallow(e, 'bili-write:postDynamic') }
         return { ok: true, why: '动态已发（CDP 真浏览器通道）' }
       }
       if (out.includes('NEED_LOGIN')) return { ok: false, why: '动态需要先在 CDP Chrome 窗口里登录一次B站（扫码），之后永久免登' }
@@ -254,7 +255,7 @@ export async function commentWithPicture(bvid, rawMessage, imagePath, { go = fal
     pictures: JSON.stringify([pic]), has_vote_option: 'true', gaia_source: 'main_web', at_name_to_mid: '{}',
   })
   const res = okOf(j)
-  if (res.ok) { capRecord('imgComment'); guard.commit(`bilibili:${bvid}`, message); recordMyComment(bvid, info.aid, j?.data?.rpid); try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '图片评论', title: info.title, bvid, text: message, extra: path.basename(imagePath) }) } catch {} }
+  if (res.ok) { capRecord('imgComment'); guard.commit(`bilibili:${bvid}`, message); recordMyComment(bvid, info.aid, j?.data?.rpid); try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: '图片评论', title: info.title, bvid, text: message, extra: path.basename(imagePath) }) } catch (e) { swallow(e, 'bili-write:commentWithPicture') } }
   return { ...res, why: res.ok ? '图片评论已发' : `图片评论失败 ${res.message}` }
 }
 
@@ -277,7 +278,7 @@ export async function followUser(mid, { go = false } = {}) {
 export async function scanReplies({ sinceMs } = {}) {
   const since = sinceMs ?? 0
   let mine = []
-  try { mine = JSON.parse(fs.readFileSync(MY_COMMENTS, 'utf8')) } catch {}
+  try { mine = JSON.parse(fs.readFileSync(MY_COMMENTS, 'utf8')) } catch (e) { swallow(e, 'bili-write:scanReplies') }
   const cred = loadCred()
   const H = makeHeaders(cred)
   const out = []
@@ -289,7 +290,7 @@ export async function scanReplies({ sinceMs } = {}) {
         if (Number(r.ctime ?? 0) * 1000 <= Math.max(since, c.ts)) continue
         out.push({ bvid: c.bvid, aid: c.aid, rootRpid: c.rpid, reply: { rpid: r.rpid, uname: r.member?.uname ?? '', text: String(r.content?.message ?? '').slice(0, 120) }, ts: Number(r.ctime ?? 0) * 1000 })
       }
-    } catch {}
+    } catch (e) { swallow(e, 'bili-write:scanReplies') }
   }
   return out
 }
@@ -416,7 +417,7 @@ export async function postReply(bvid, rootRpid, parentRpid, rawMessage, { go = f
     capRecord(bucket)
     guard.commit(`bilibili:${bvid}`, message || '[图]')
     recordMyComment(bvid, info.aid, j?.data?.rpid)
-    try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: image ? '回评(图)' : '回评', title: info.title, bvid, to: inReplyTo, text: message, extra: useImage ? path.basename(useImage) : '' }) } catch {}
+    try { const { recordBili } = await import('./outbox.mjs'); recordBili({ kind: image ? '回评(图)' : '回评', title: info.title, bvid, to: inReplyTo, text: message, extra: useImage ? path.basename(useImage) : '' }) } catch (e) { swallow(e, 'bili-write:post') }
   }
   const why = res.ok
     ? `已回复「${(message || '[图]').slice(0, 30)}」${image && !useImage ? '（楼中楼不能带图，已降级纯文字）' : ''}`
@@ -445,7 +446,7 @@ export async function listOwnVideos({ ps = 10 } = {}) {
   try {
     const d = JSON.parse(fs.readFileSync(dataPath('bili-debut.json'), 'utf8'))
     if (d?.bvid) push({ bvid: d.bvid, title: d.title || '' })
-  } catch {}
+  } catch (e) { swallow(e, 'bili-write:push') }
   try {
     const root = dataPath('bili-posts')
     for (const name of fs.readdirSync(root)) {
@@ -454,7 +455,7 @@ export async function listOwnVideos({ ps = 10 } = {}) {
       const b = String(fs.readFileSync(f, 'utf8')).trim()
       if (b) push({ bvid: b, title: name })
     }
-  } catch {}
+  } catch (e) { swallow(e, 'bili-write:push') }
 
   // ③ 空间接口（能拿到标题/时间）
   //    10-27 实测：这个 IP 上 `/x/space/wbi/arc/search` 有时 -412，而且会把 apiGet 熔断 20 分钟，
@@ -479,7 +480,7 @@ export async function listOwnVideos({ ps = 10 } = {}) {
   // aid 缓存进 bili-own-engage.json：view 接口被 412 的时候还能靠缓存照常回评论。
   const CACHE = dataPath('bili-own-engage.json')
   let cache = {}
-  try { cache = JSON.parse(fs.readFileSync(CACHE, 'utf8'))?.aidCache || {} } catch {}
+  try { cache = JSON.parse(fs.readFileSync(CACHE, 'utf8'))?.aidCache || {} } catch (e) { swallow(e, 'bili-write:push') }
   // 归属校验（10-27 血的教训）：ownBvids 手填错一个号，她就会跑去**别人的视频**下面回评论。
   // 拿 nav 的 mid 跟视频 ownerMid 比，不一样就丢掉这个 BV。
   let myMid = String(cfg.ownMid ?? '')
@@ -487,7 +488,7 @@ export async function listOwnVideos({ ps = 10 } = {}) {
     try {
       const nav = await apiGet('https://api.bilibili.com/x/web-interface/nav', makeHeaders(loadCred()), { soft: true })
       myMid = String(nav?.data?.mid ?? '')
-    } catch {}
+    } catch (e) { swallow(e, 'bili-write:push') }
   }
   const full = []
   let dirty = false
@@ -524,7 +525,7 @@ export async function listOwnVideos({ ps = 10 } = {}) {
       cur.aidCache = { ...(cur.aidCache || {}), ...cache }
       fs.mkdirSync(path.dirname(CACHE), { recursive: true })
       fs.writeFileSync(CACHE, JSON.stringify(cur))
-    } catch {}
+    } catch (e) { swallow(e, 'bili-write:cur') }
   }
   if (skipped.length) {
     console.warn(`  ⚠ 跳过 ${skipped.length} 个不属于自己的 BV：${skipped.join(' ')}（bilibili.ownBvids 填错了？）`)

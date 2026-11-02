@@ -140,7 +140,7 @@ export function add(text, opts = {}) {
         priority: 0.6,
       })
     }
-  } catch {}
+  } catch (e) { swallow(e, 'promises:add') }
   return item
 }
 
@@ -186,7 +186,7 @@ export function done(id, note = '') {
   try {
     const mirror = brainIntents.all().find((x) => x.origin === `promise:${id}`)
     if (mirror) brainIntents.settle(mirror.id, { ok: true, evidence: [`promise:${id}${note ? ':' + note.slice(0, 40) : ''}`], force: true })
-  } catch {}
+  } catch (e) { swallow(e, 'promises:done') }
   return it
 }
 
@@ -209,7 +209,7 @@ export function fail(id, why = '') {
   try {
     const mirror = brainIntents.all().find((x) => x.origin === `promise:${id}`)
     if (mirror) brainIntents.settle(mirror.id, { ok: false, reason: why || 'failed' })
-  } catch {}
+  } catch (e) { swallow(e, 'promises:fail') }
   // 应激通路：**答应过的事没做到**（2026-11-02 接上）。
   //
   // 这是三个 stress 源里最重的一个（0.9），因为它是"对自己的信用亏欠"，

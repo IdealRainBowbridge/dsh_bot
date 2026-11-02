@@ -11,6 +11,7 @@ import { appendJsonl, readJsonl, readJson, writeJsonAtomic } from './json.mjs'
 import { inboxFile, inboxCursor, inboxDir } from './paths.mjs'
 import { isoOf } from './clock.mjs'
 import { bump } from './metrics.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 export const ACTS = ['say', 'action', 'observe', 'promise', 'feel', 'push']
 export const SCOPES = ['private', 'group', 'public']
@@ -151,6 +152,6 @@ export function backlog() {
       const cur = readJson(inboxCursor(file), { lines: 0 }) || { lines: 0 }
       n += Math.max(0, readJsonl(file).length - Number(cur.lines || 0))
     }
-  } catch {}
+  } catch (e) { swallow(e, 'event:backlog') }
   return n
 }

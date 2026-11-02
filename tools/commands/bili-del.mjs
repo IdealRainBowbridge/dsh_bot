@@ -3,6 +3,7 @@
 import { loadCred } from '../lib/cred.mjs'
 import { makeHeaders } from '../lib/bili-api.mjs'
 import * as W from '../lib/bili-write.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
 
@@ -37,7 +38,7 @@ export async function run(argv) {
     try {
       const { default: memory } = await import('../lib/memory.mjs')
       memory.remember('bilibili', 'bilibili:self', '40048138', 'assistant', `删除了稿件 aid=${aid}（笨蛋老爸手动执行的验证）`, { kind: 'post' })
-    } catch {}
+    } catch (e) { swallow(e, 'bili-del:run') }
   }
   else console.error('✗ 删除失败 code=' + j?.code + ': ' + (j?.message || ''))
 }

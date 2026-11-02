@@ -13,13 +13,14 @@ import { ensureSelfSticker } from '../lib/stickers.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { acquire } from '../lib/lock.mjs'
 import * as watchlog from '../lib/watchlog.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const FEIYU = path.join(HERE, '..', 'bot.mjs')
 
 // 宿主 stdio:ignore 起进程，不打文件日志等于瞎 —— 出问题只能靠猜
 const LOG = dataPath('bili-watch.log')
-const log = (...a) => { const m = a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' '); try { console.log(m) } catch {}; try { fs.appendFileSync(LOG, `${new Date().toISOString()} ${m}\n`) } catch {} }
+const log = (...a) => { const m = a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' '); try { console.log(m) } catch (e) { swallow(e, 'bili-watch:log') }; try { fs.appendFileSync(LOG, `${new Date().toISOString()} ${m}\n`) } catch (e) { swallow(e, 'bili-watch:log') } }
 
 /** 近 N 天发过评论的视频（quota 账本）—— feed 端直接过滤，别每轮都先撞同一个视频。 */
 function recentPostedBvids(days) {
@@ -47,7 +48,7 @@ export async function run(argv = []) {
   const cfg = config()
   // 单实例锁：完全自由/面板两条路径都能启动，双实例=重复评论风控灾难
   if (argv.includes('--free') && !acquire('bili-watch')) { log('[bili-watch] 已有实例在跑，本次不重复启动'); return }
-  try { const n = memory.sweepEpisodes(); if (n) log(`[bili-watch] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch {}
+  try { const n = memory.sweepEpisodes(); if (n) log(`[bili-watch] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch (e) { swallow(e, 'bili-watch:run') }
   const dry = has(argv, '--dry') || cfg.guard?.dryRun !== false
   const ownerName = cfg.owner?.name || ''
   // 自由刷：大肥鱼自己长时间刷 B站，不限条数/时长（unlimited）或按限度
@@ -192,7 +193,7 @@ export async function run(argv = []) {
           const w = await import('../lib/bili-write.mjs')
           const r = await w.sendDanmaku(bvid, danmaku, { go: true })
           if (r.ok) log('  💬 ' + r.why)
-        } catch {}
+        } catch (e) { swallow(e, 'bili-watch:best-effort') }
       }
       // 投币：评分很高才投（react.coin 显式开 + 每日额度）
       // tattle hook (10-31): deep-read score >= threshold -> LLM report -> QQ DM to owner.
@@ -209,14 +210,14 @@ export async function run(argv = []) {
         try {
           const { enqueue } = await import('../lib/share-queue.mjs')
           enqueue({ kind: 'video', title: it.title, text: comment.slice(0, 80), meta: '评分 ' + Math.round(score) })
-        } catch {}
+        } catch (e) { swallow(e, 'bili-watch:best-effort') }
       }
       if (score >= 16 && hc.react?.coin === true && dry === false) {
         try {
           const w = await import('../lib/bili-write.mjs')
           const r = await w.coinVideo(bvid, { go: true, num: 1 })
           if (r.ok) log('  🪙 ' + r.why)
-        } catch {}
+        } catch (e) { swallow(e, 'bili-watch:best-effort') }
       }
       // 关注好 UP：评分高的视频作者值得关注（follow 显式开）
       if (score >= 16 && hc.follow?.enabled === true && dry === false) {
@@ -224,7 +225,7 @@ export async function run(argv = []) {
           const w = await import('../lib/bili-write.mjs')
           const r = await w.followUser(String(it.ownerMid || ''), { go: true })
           if (r.ok) log('  ➕ 已关注 UP：' + (it.owner || ''))
-        } catch {}
+        } catch (e) { swallow(e, 'bili-watch:best-effort') }
       }
       // 图片评论（表情贴纸）：LLM 给了贴纸文案 → 先试 AI 画一张真表情包（10-25 新增），
       // AI 关着/失败/额度用完再退 PIL 文字贴纸（imageComment 显式开 + 日额度在 bili-write 把关）
@@ -253,7 +254,7 @@ export async function run(argv = []) {
       // 回评论社交：每 30 分钟扫一次别人对我评论的回复（replies 显式开）
       if (hc.replies?.enabled === true && dry === false && Date.now() - lastReplyScan > 30 * 60_000) {
         lastReplyScan = Date.now()
-        try { log(runFeiyu(['replies', '--go', '--max', '5']).split('\n').slice(0, 4).join(' | ')) } catch {}
+        try { log(runFeiyu(['replies', '--go', '--max', '5']).split('\n').slice(0, 4).join(' | ')) } catch (e) { swallow(e, 'bili-watch:best-effort') }
       }
       if (restMs > 0) await sleep(restMs + Math.random() * 60_000)
     }

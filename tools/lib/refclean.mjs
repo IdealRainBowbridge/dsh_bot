@@ -15,6 +15,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { config } from './config.mjs'
 import { ffmpegBin, ffprobeBin } from './video.mjs'
+import { swallow } from './swallow.mjs'
 
 const WIN = 0.01
 // v5 深度排查：这里所有 ffmpeg/ffprobe 调用原来都**没有 timeout**。
@@ -116,7 +117,7 @@ export function compactRef(src, opt = {}) {
     if (text) fs.writeFileSync(out.replace(/\.wav$/, '.txt'), text, 'utf8')
     return { file: out, text, dur, speech: plan.speech, removed: plan.removed, pieces: plan.pieces.length, padded }
   } finally {
-    for (const f of tmp) { try { fs.rmSync(f, { force: true }) } catch {} }
+    for (const f of tmp) { try { fs.rmSync(f, { force: true }) } catch (e) { swallow(e, 'refclean:compactRef') } }
   }
 }
 
@@ -131,13 +132,13 @@ function probeDur(file) {
       { encoding: 'utf8', windowsHide: true, timeout: 30_000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'] })
     const d = parseFloat(String(out).trim())
     if (d > 0) return d
-  } catch {}
+  } catch (e) { swallow(e, 'refclean:probeDur') }
   // 兜底：ffmpeg 的 Duration 在 stderr，必须 2>&1（以前读 stdout 必然空）
   try {
     const e = execFileSync(ffmpegBin(cfg), ['-v', 'info', '-i', file, '-f', 'null', '-'],
       { encoding: 'utf8', windowsHide: true, timeout: 60_000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'] })
     const m = String(e).match(/Duration: (\d+):(\d+):([\d.]+)/)
     if (m) return (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3])
-  } catch {}
+  } catch (e) { swallow(e, 'refclean:probeDur') }
   return 0
 }

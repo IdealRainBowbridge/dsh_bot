@@ -21,6 +21,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const FFMPEG_FALLBACKS = ['D:/rvc/bin/ffmpeg.exe', 'D:/GPT-SoVITS/runtime/ffmpeg.exe', 'ffmpeg']
 const FFPROBE_FALLBACKS = ['D:/rvc/bin/ffprobe.exe', 'D:/GPT-SoVITS/runtime/ffprobe.exe', 'ffprobe']
@@ -32,14 +33,14 @@ const FFPROBE_FALLBACKS = ['D:/rvc/bin/ffprobe.exe', 'D:/GPT-SoVITS/runtime/ffpr
 export function ffmpegBin(cfg = config()) {
   const cands = [cfg.video?.ffmpeg, FFMPEG_FALLBACKS[0], cfg.rvc?.ffmpeg, FFMPEG_FALLBACKS[1], 'ffmpeg']
   for (const c of cands.filter(Boolean)) {
-    try { if (c === 'ffmpeg' || fs.existsSync(c)) return c } catch {}
+    try { if (c === 'ffmpeg' || fs.existsSync(c)) return c } catch (e) { swallow(e, 'video:ffmpegBin') }
   }
   return 'ffmpeg'
 }
 
 export function ffprobeBin(cfg = config()) {
   for (const c of [cfg.video?.ffprobe, ...FFPROBE_FALLBACKS].filter(Boolean)) {
-    try { if (c === 'ffprobe' || fs.existsSync(c)) return c } catch {}
+    try { if (c === 'ffprobe' || fs.existsSync(c)) return c } catch (e) { swallow(e, 'video:ffprobeBin') }
   }
   return 'ffprobe'
 }
@@ -333,7 +334,7 @@ export function conformClip({ src, out, dur, w, h, fps = 30, cfg = config() }) {
     '-map', '[o]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an', pp], { cfg })
   ff(['-stream_loop', '-1', '-i', pp, '-t', need.toFixed(3), '-vf', base,
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an', out], { cfg })
-  try { fs.rmSync(pp, { force: true }) } catch {}
+  try { fs.rmSync(pp, { force: true }) } catch (e) { swallow(e, 'video:conformClip') }
   return out
 }
 
@@ -370,7 +371,7 @@ export function fontFile(cfg = config()) {
   ]
     .filter(Boolean)
   for (const c of cands) {
-    try { if (fs.existsSync(c)) return c } catch {}
+    try { if (fs.existsSync(c)) return c } catch (e) { swallow(e, 'video:fontFile') }
   }
   return cands[0]
 }
@@ -809,7 +810,7 @@ export async function makeFilm({ scenes, spec, text = {}, dir, opts = {}, log = 
   } catch (e) { log('  同步校验跳过：' + String(e.message).slice(0, 60)) }
 
   if (!keep) {
-    try { fs.rmSync(clipsDir, { recursive: true, force: true }) } catch {}
+    try { fs.rmSync(clipsDir, { recursive: true, force: true }) } catch (e) { swallow(e, 'video:best-effort') }
   }
   return { final, timeline, dur, assPath, sync }
 }

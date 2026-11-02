@@ -12,6 +12,7 @@
 //   ③ 表里没有 → 让 NapCat 的 get_msg 把原文取回来（含图片/语音/卡片的描述）
 import fs from 'node:fs'
 import { dataPath } from './paths.mjs'
+import { swallow } from './swallow.mjs'
 
 const MAX = 400                      // 环形表上限（够覆盖最近一两天的来回）
 const FILE = () => dataPath('msg-index.json')
@@ -25,7 +26,7 @@ function load() {
   try {
     const arr = JSON.parse(fs.readFileSync(FILE(), 'utf8'))
     for (const it of Array.isArray(arr) ? arr : []) if (it?.id) ring.set(String(it.id), it)
-  } catch {}
+  } catch (e) { swallow(e, 'quote:load') }
 }
 
 function flush() {
@@ -34,7 +35,7 @@ function flush() {
   try {
     const arr = [...ring.entries()].slice(-MAX).map(([id, v]) => ({ id, ...v }))
     fs.writeFileSync(FILE(), JSON.stringify(arr), 'utf8')
-  } catch {}
+  } catch (e) { swallow(e, 'quote:flush') }
 }
 
 /** 登记一条"说过的消息"。who: me | owner | other */

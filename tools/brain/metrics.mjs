@@ -5,6 +5,7 @@
 import { readJson, writeJsonAtomic } from './json.mjs'
 import { metricsPath } from './paths.mjs'
 import { dayKey } from './clock.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const empty = () => ({ days: {} })
 
@@ -20,7 +21,7 @@ export function bump(key, n = 1) {
   if (!j.days[day]) j.days[day] = {}
   j.days[day][key] = Number(j.days[day][key] || 0) + Number(n)
   prune(j)
-  try { writeJsonAtomic(metricsPath(), j) } catch {}
+  try { writeJsonAtomic(metricsPath(), j) } catch (e) { swallow(e, 'metrics:bump') }
   return j.days[day][key]
 }
 
@@ -30,7 +31,7 @@ export function setValue(key, value) {
   if (!j.days[day]) j.days[day] = {}
   j.days[day][key] = value
   prune(j)
-  try { writeJsonAtomic(metricsPath(), j) } catch {}
+  try { writeJsonAtomic(metricsPath(), j) } catch (e) { swallow(e, 'metrics:setValue') }
   return value
 }
 

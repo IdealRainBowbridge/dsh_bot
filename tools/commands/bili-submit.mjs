@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { loadCred } from '../lib/cred.mjs'
 import { makeHeaders } from '../lib/bili-api.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 /* chunk_size 由 preupload 返回值决定 */
@@ -148,7 +149,7 @@ export async function submitVideo(videoPath, opts = {}) {
       const { default: memory } = await import('../lib/memory.mjs')
       memory.remember('bilibili', 'bilibili:self', '40048138', 'assistant',
         `投稿成功：《${opts.title}》 BV${j.data.bvid}（自动投稿）`, { kind: 'post' })
-    } catch {}
+    } catch (e) { swallow(e, 'bili-submit:submitVideo') }
     return { ok: true, aid: j?.data?.aid, bvid: j?.data?.bvid }
   }
   return { ok: false, why: '提交失败 code=' + j?.code + ': ' + (j?.message || '') }

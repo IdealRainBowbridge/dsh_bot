@@ -9,6 +9,7 @@
 import { readJson, mutateJson } from './json.mjs'
 import { factsPath, loreClassPath } from './paths.mjs'
 import { endOfDay, isoOf, stamp } from './clock.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 /** 谓词闭集：合并键必须是有限集合，否则同义谓词永远合不到一起。 */
 export const PREDICATES = [
@@ -53,7 +54,7 @@ function load() {
 }
 
 function save(items) {
-  try { mutateJson(factsPath(), { items: [] }, () => ({ items, updatedAt: Date.now() })) } catch {}
+  try { mutateJson(factsPath(), { items: [] }, () => ({ items, updatedAt: Date.now() })) } catch (e) { swallow(e, 'facts:save') }
   return items
 }
 
@@ -281,6 +282,6 @@ export function classifyLore({ lore } = {}) {
     out[bucket].push(it)
   }
   out.total = seen.size
-  try { mutateJson(loreClassPath(), {}, () => out) } catch {}
+  try { mutateJson(loreClassPath(), {}, () => out) } catch (e) { swallow(e, 'facts:walk') }
   return { total: out.total, value: out.value.length, interest: out.interest.length, work: out.work.length, ops: out.ops.length, drop: out.drop.length }
 }

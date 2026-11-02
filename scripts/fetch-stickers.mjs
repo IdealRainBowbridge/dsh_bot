@@ -16,6 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { homePath, dataPath } from '../tools/lib/paths.mjs'
+import { swallow } from '../tools/lib/swallow.mjs'
 
 const REPO = 'lmy414/ai-girl-stickers'
 const BRANCH = 'main'
@@ -72,7 +73,7 @@ async function downloadOne(file) {
         return { ok: true, bytes: fs.statSync(dest).size }
       } catch (e) { return { fail: e.message } }
     }
-    try { fs.rmSync(tmp, { force: true }) } catch {}
+    try { fs.rmSync(tmp, { force: true }) } catch (e) { swallow(e, 'fetch-stickers:downloadOne') }
     if (attempt === 4) return { fail: err }
     await new Promise((r) => setTimeout(r, 1500 * attempt))
   }

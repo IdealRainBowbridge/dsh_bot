@@ -10,11 +10,12 @@ import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
 import { dataPath } from '../lib/paths.mjs'
 import { labelOf } from '../lib/focus.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const HIST = () => dataPath('mind-history.jsonl')
 
 function appendHistory(obj) {
-  try { fs.appendFileSync(HIST(), JSON.stringify(obj) + '\n') } catch {}
+  try { fs.appendFileSync(HIST(), JSON.stringify(obj) + '\n') } catch (e) { swallow(e, 'mind:appendHistory') }
 }
 
 export async function run(argv = []) {
@@ -52,7 +53,7 @@ export async function run(argv = []) {
     let rows = []
     try {
       rows = fs.readFileSync(HIST(), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
-    } catch {}
+    } catch (e) { swallow(e, 'mind:run') }
     if (!rows.length) { console.log('还没有计划流水'); return }
     console.log('\n最近 15 次规划：')
     for (const r of rows.slice(-15)) {

@@ -100,7 +100,7 @@ function whyNow(ep, ctx) {
     const cq = norm(String(ctx.userText || ''))
     const gq = norm(t)
     if (cq.length >= 2 && overlapRatio(bigrams(cq), bigrams(gq)) >= 0.34) return '他刚说到这个'
-  } catch { }
+  } catch (e) { swallow(e, 'memchannel:whyNow') }
 
   // ② 情绪对得上（她此刻低落，想起来的也多是低落的）
   const cur = Number(ctx.valence || 0)
@@ -133,7 +133,7 @@ export function process({ bundle = {}, userText = '', now = Date.now(), valence 
   const t0 = Date.now()
   // 强度：用过的记忆周围边更通（第七次建好没接的那个）
   let STR = {}
-  try { STR = strengths() } catch { }
+  try { STR = strengths() } catch (e) { swallow(e, 'memchannel:process') }
 
   // ══════════════════════════════════════════════════════════════════════
   // 激活扩散：回忆是一个**过程**，不是一次打分
@@ -206,7 +206,7 @@ export function process({ bundle = {}, userText = '', now = Date.now(), valence 
           // 把共同词记下来，渲染时说得出"提到过 X"
           ;(byId.get(a.id).__link ||= {})
         }
-      } catch { }
+      } catch (e) { swallow(e, 'memchannel:addEdge') }
       // 情绪同向且都强
       const va = Number(a.feel?.valence || 0), vb = Number(b.feel?.valence || 0)
       if (Math.abs(va) > 0.3 && Math.abs(vb) > 0.3 && Math.sign(va) === Math.sign(vb)) {
@@ -279,7 +279,7 @@ export function process({ bundle = {}, userText = '', now = Date.now(), valence 
   try {
     const pend = items.filter((x) => x.act === 'promise' || x.act === 'plan')
     for (const ep of pend.slice(0, 2)) light(ep, 0.6, '', '这事还悬着')
-  } catch { }
+  } catch (e) { swallow(e, 'memchannel:light') }
 
   // 起点四：**自由浮现**——跟话题无关，只跟此刻有关
   //
@@ -303,7 +303,7 @@ export function process({ bundle = {}, userText = '', now = Date.now(), valence 
       if (!pick) { pick = pool[Math.floor(Math.random() * pool.length)]; why = '也不知道为什么想起来的' }
       if (pick) light(pick, 0.45, '', why)
     }
-  } catch { }
+  } catch (e) { swallow(e, 'memchannel:light') }
 
   // ── ③ 扩散：**这一步就是"想一会儿"** ─────────────────────────────
   //
@@ -377,7 +377,7 @@ export function process({ bundle = {}, userText = '', now = Date.now(), valence 
   // ── ⑤ 记一笔"被划过"（下次这些边更通） ─────────────────────────────
   try {
     touchStrength(used.map((x) => x.ep.id), { delta: 0.10, now })
-  } catch { }
+  } catch (e) { swallow(e, 'memchannel:best-effort') }
 
   // ── ⑥ 渲染 ────────────────────────────────────────────────────────
   const lines = []

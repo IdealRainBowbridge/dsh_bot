@@ -11,6 +11,7 @@ import * as w from '../lib/bili-write.mjs'
 import { config } from '../lib/config.mjs'
 import * as memory from '../lib/memory.mjs'
 import * as llm from '../lib/llm.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 function arg(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? String(argv[i + 1] ?? d) : d }
 const has = (argv, name) => argv.includes(name)
@@ -35,8 +36,8 @@ export async function run(argv = []) {
         const { readTail } = await import('../lib/memory.mjs')
         const lines = readTail((await import('../lib/paths.mjs')).dataPath('episodes.jsonl'), 800)
         const since = Date.now() - 86400_000
-        for (const l of lines) { try { const r = JSON.parse(l); if (Number(r.ts ?? 0) >= since && ['bilibili', 'douyin'].includes(r.platform)) rows.push((r.platform === 'bilibili' ? 'B站' : '抖音') + '：' + String(r.summary || '').slice(0, 50)) } catch {} }
-      } catch {}
+        for (const l of lines) { try { const r = JSON.parse(l); if (Number(r.ts ?? 0) >= since && ['bilibili', 'douyin'].includes(r.platform)) rows.push((r.platform === 'bilibili' ? 'B站' : '抖音') + '：' + String(r.summary || '').slice(0, 50)) } catch (e) { swallow(e, 'act:run') } }
+      } catch (e) { swallow(e, 'act:run') }
       if (!rows.length) { console.log('最近 24 小时没看东西，今天的动态改天再发。'); return }
       const persona = (await import('../lib/persona.mjs')).personaText()
       const msgs = [

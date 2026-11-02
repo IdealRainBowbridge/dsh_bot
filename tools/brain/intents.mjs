@@ -11,6 +11,7 @@ import { intentsPath, journalPath } from './paths.mjs'
 import { isoOf, parseCue } from './clock.mjs'
 import { reward, tension } from './affect.mjs'
 import { bump } from './metrics.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 export const KINDS = ['intent', 'wish', 'blocked']
 export const VERIFY_TYPES = ['delivery', 'file', 'ledger', 'api', 'human']
@@ -24,7 +25,7 @@ const load = () => {
   return j && Array.isArray(j.items) ? { items: j.items, updatedAt: j.updatedAt || 0 } : { items: [], updatedAt: 0 }
 }
 const save = (items) => {
-  try { mutateJson(intentsPath(), { items: [] }, () => ({ items, updatedAt: Date.now() })) } catch {}
+  try { mutateJson(intentsPath(), { items: [] }, () => ({ items, updatedAt: Date.now() })) } catch (e) { swallow(e, 'intents:save') }
   return items
 }
 

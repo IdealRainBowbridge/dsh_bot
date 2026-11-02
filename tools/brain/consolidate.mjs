@@ -19,6 +19,7 @@ import * as selfM from './self.mjs'
 import { tryExclusive, touchLock } from './store.mjs'
 import { endOfDay, isoOf, stamp } from './clock.mjs'
 import { bump, setValue } from './metrics.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const doneFile = () => path.join(consDir(), 'done.jsonl')
 
@@ -161,7 +162,7 @@ function writeDiary(lines, now) {
     const file = diaryPath(new Date(now))
     const head = fs.existsSync(file) ? '' : `# ${new Date(now).toDateString()} 的复盘\n\n`
     fs.appendFileSync(file, head + lines.join('\n') + '\n')
-  } catch {}
+  } catch (e) { swallow(e, 'consolidate:writeDiary') }
 }
 
 function decayStrengths(now) {
@@ -175,7 +176,7 @@ function decayStrengths(now) {
       }
       return cur
     })
-  } catch {}
+  } catch (e) { swallow(e, 'consolidate:decayStrengths') }
 }
 
 /** 周日（或叙事还是空的）重写叙事段，≤300 字。 */

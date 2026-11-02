@@ -39,6 +39,7 @@ import { readJson, mutateJson } from '../json.mjs'
 import { thalamusPath } from '../paths.mjs'
 import * as field from '../field.mjs'
 import * as neuron from '../cell/neuron.mjs'
+import { swallow } from '../../lib/swallow.mjs'
 
 const MIN = 60_000
 
@@ -90,7 +91,7 @@ export function thresholds(now = Date.now()) {
     const f = field.evolve(now)
     fatigue = clamp(Number(f.dims.sleepDebt || 0) * 0.6 + Number(f.dims.fatigue || 0) * 0.6, 0, 1)
     ne = Number(f.dims.ne || 0.35)
-  } catch { }
+  } catch (e) { swallow(e, 'thalamus:thresholds') }
 
   const out = {}
   for (const [k, c] of Object.entries(CHANNELS)) {
@@ -177,7 +178,7 @@ export function admit({ channel = 'group', strength = 0.4, salience = 0, now = D
     try {
       st.suppressed = [...st.suppressed, { at: now, channel, strength: effective, threshold, why: why.slice(0, 80) }].slice(-40)
       save(st)
-    } catch { }
+    } catch (e) { swallow(e, 'thalamus:admit') }
   }
 
   return { pass, effective, threshold, why, thresholds: t.thresholds, fatigue: t.fatigue }
@@ -246,6 +247,6 @@ function save(st) {
     mutateJson(thalamusPath(), empty(), () => ({
       at: st.at, focus: st.focus, suppressed: (st.suppressed || []).slice(-40), lateral: st.lateral,
     }))
-  } catch { }
+  } catch (e) { swallow(e, 'thalamus:save') }
   return st
 }

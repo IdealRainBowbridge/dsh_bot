@@ -17,6 +17,7 @@ import { chooseKind, decorateText, pickCommentImage, describeKind } from '../lib
 import { apiGet, makeHeaders } from '../lib/bili-api.mjs'
 import { loadCred } from '../lib/cred.mjs'
 import { dataPath } from '../lib/paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const STATE = dataPath('replies-state.json')
 const OWN_STATE = dataPath('bili-own-engage.json')
@@ -56,14 +57,14 @@ async function ownWorks(maxLeft, go, log = console.log) {
   const wm = readJson(OWN_STATE, { seen: [] })
   if (!Array.isArray(wm.seen)) wm.seen = []
   if (!wm.repliedTo || typeof wm.repliedTo !== 'object') wm.repliedTo = {}
-  const save = () => { try { fs.mkdirSync(dataPath(), { recursive: true }); fs.writeFileSync(OWN_STATE, JSON.stringify(wm)) } catch {} }
+  const save = () => { try { fs.mkdirSync(dataPath(), { recursive: true }); fs.writeFileSync(OWN_STATE, JSON.stringify(wm)) } catch (e) { swallow(e, 'replies:save') } }
   let videos = []
   try { videos = await listOwnVideos({ ps: 10 }) } catch (e) { log('  ✗ 读不到自己的投稿：' + String(e.message).slice(0, 90)); return 0 }
   if (!videos.length) { log('  自己还没有投稿，评论区空着（投稿之后这条路径才有意义）'); return 0 }
   log(`  自己的投稿 ${videos.length} 个：${videos.slice(0, 3).map((v) => String(v.title).slice(0, 10)).join(' / ')}`)
   const cred = loadCred()
   let myMid = ''
-  try { const nav = await apiGet('https://api.bilibili.com/x/web-interface/nav', makeHeaders(cred)); myMid = String(nav?.data?.mid ?? '') } catch {}
+  try { const nav = await apiGet('https://api.bilibili.com/x/web-interface/nav', makeHeaders(cred)); myMid = String(nav?.data?.mid ?? '') } catch (e) { swallow(e, 'replies:save') }
   const news = []
   for (const v of videos.slice(0, 5)) {
     let rows = []
@@ -154,7 +155,7 @@ async function ownWorks(maxLeft, go, log = console.log) {
       try {
         const note = visible === false ? '（B站挂着审核，暂时只有我自己看得见）' : ''
         memory.addFact(n.uname || '网友', `B站 我自己的作品《${String(n.vtitle).slice(0, 20)}》评论区：对方说"${String(n.label || n.text).slice(0, 40)}"，我回了"${text.slice(0, 30)}"${note}`)
-      } catch {}
+      } catch (e) { swallow(e, 'replies:isOwnerRow') }
     } else {
       // 失败**什么都不记**：下一轮还看得见这条，不会因为一次额度/风控就永久失联
       log('  （这条没回成，水位不退不记，下轮再来）')
@@ -173,7 +174,7 @@ async function outreach(maxLeft, go) {
   const cred = loadCred()
   const H = makeHeaders(cred)
   let myMid = ''
-  try { const nav = await apiGet('https://api.bilibili.com/x/web-interface/nav', H); myMid = String(nav?.data?.mid ?? '') } catch {}
+  try { const nav = await apiGet('https://api.bilibili.com/x/web-interface/nav', H); myMid = String(nav?.data?.mid ?? '') } catch (e) { swallow(e, 'replies:outreach') }
   const mine = readJson(dataPath('my-comments.json'), [])
   const aids = [...new Set(mine.map((c) => c.aid))].slice(-5).reverse()
   let done = 0
@@ -218,7 +219,7 @@ async function outreach(maxLeft, go) {
       done++
       maxLeft--
       // 鱼友名录：聊过谁、在哪聊的、聊的什么 —— 下次再碰到接得上
-      try { memory.addFact(String(target.member?.uname ?? '网友'), `B站评论区聊过（aid ${aid}）：对方说"${String(target.content?.message).slice(0, 40)}"，我回了"${outText.slice(0, 30)}"`) } catch {}
+      try { memory.addFact(String(target.member?.uname ?? '网友'), `B站评论区聊过（aid ${aid}）：对方说"${String(target.content?.message).slice(0, 40)}"，我回了"${outText.slice(0, 30)}"`) } catch (e) { swallow(e, 'replies:isFishy') }
     }
   }
   return done

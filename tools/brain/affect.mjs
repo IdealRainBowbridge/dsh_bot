@@ -7,6 +7,7 @@
 //   3. 只有**兑现**给奖励（多巴胺），"嘴上答应"不给 —— 这是治空口承诺的根。
 import { readJson, mutateJson } from './json.mjs'
 import { affectPath } from './paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const empty = () => ({ valence: 0, arousal: 0.3, tension: 0, updatedAt: 0, log: [] })
 
@@ -32,7 +33,7 @@ export function feel({ valence = 0, arousal = 0.3 } = {}) {
     arousal: Math.max(0, Math.min(1, Number(((cur.arousal || 0.3) * 0.6 + Number(arousal) * 0.4).toFixed(2)))),
     updatedAt: Date.now(),
   }
-  try { mutateJson(affectPath(), empty(), () => next) } catch {}
+  try { mutateJson(affectPath(), empty(), () => next) } catch (e) { swallow(e, 'affect:feel') }
   return next
 }
 
@@ -50,7 +51,7 @@ export function reward({ weight = 1 } = {}) {
     updatedAt: Date.now(),
   }
   next.log = [...(cur.log || []), { at: Date.now(), kind: 'reward', weight }].slice(-50)
-  try { mutateJson(affectPath(), empty(), () => next) } catch {}
+  try { mutateJson(affectPath(), empty(), () => next) } catch (e) { swallow(e, 'affect:reward') }
   return next
 }
 
@@ -58,7 +59,7 @@ export function reward({ weight = 1 } = {}) {
 export function tension(n = 1) {
   const cur = state()
   const next = { ...cur, tension: Math.max(0, Number(cur.tension || 0) + Number(n)), updatedAt: Date.now() }
-  try { mutateJson(affectPath(), empty(), () => next) } catch {}
+  try { mutateJson(affectPath(), empty(), () => next) } catch (e) { swallow(e, 'affect:tension') }
   return next
 }
 
@@ -68,7 +69,7 @@ export function decay(rounds = 1) {
   let v = Number(cur.valence || 0), a = Number(cur.arousal || 0.3)
   for (let i = 0; i < rounds; i++) { v *= 0.9; a = 0.3 + (a - 0.3) * 0.85 }
   const next = { ...cur, valence: Number(v.toFixed(2)), arousal: Number(a.toFixed(2)), updatedAt: Date.now() }
-  try { mutateJson(affectPath(), empty(), () => next) } catch {}
+  try { mutateJson(affectPath(), empty(), () => next) } catch (e) { swallow(e, 'affect:decay') }
   return next
 }
 

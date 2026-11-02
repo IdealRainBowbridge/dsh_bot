@@ -40,6 +40,7 @@
 
 import { readJson, mutateJson, readJsonl } from './json.mjs'
 import { anchorPath, innerStreamPath } from './paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 const DAY = 86400_000
 
@@ -112,7 +113,7 @@ export function sample({ force = false, now = Date.now() } = {}) {
     rows = readJsonl(innerStreamPath())
       .filter((r) => r.role === 'self' && String(r.text || '').length >= RULES.minChars)
       .filter((r) => now - Number(r.at || 0) < 30 * DAY)
-  } catch { }
+  } catch (e) { swallow(e, 'anchor:sample') }
 
   if (!rows.length) {
     // 没有语料：保持原状（不要清空 —— 宁可留着旧的，也不要把锚变成空的）
@@ -199,6 +200,6 @@ function persist(st) {
     mutateJson(anchorPath(), empty(), () => ({
       at: st.at, items: st.items, frozenAt: st.frozenAt, samples: st.samples,
     }))
-  } catch { }
+  } catch (e) { swallow(e, 'anchor:persist') }
   return st
 }

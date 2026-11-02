@@ -65,10 +65,10 @@ import { fill } from '../lib/persona-voice.mjs'
 function logLine(level, args) {
   const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')
   const line = `${new Date().toISOString()} [${level}] ${msg}`
-  try { console.log(line) } catch {}
+  try { console.log(line) } catch (e) { swallow(e, 'qq-server:logLine') }
   try {
     if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > 2 * 1024 * 1024) fs.renameSync(LOG_FILE, LOG_FILE + '.1')
-  } catch {}
+  } catch (e) { swallow(e, 'qq-server:logLine') }
   fs.appendFile(LOG_FILE, line + '\n', () => {})
 }
 const log = (...a) => logLine('INFO', a)
@@ -122,7 +122,7 @@ export async function run(argv = []) {
     log('[qq] 本次启用的平台：' + on.join(', ') + (on.includes('qq') ? '' : '（QQ 关着，只跑其他平台）'))
   }
   if (!llm.apiKey()) { logErr('✗ 没有 LLM API key（设环境变量 DEEPSEEK_API_KEY，或填 llm.api_key）'); process.exit(1) }
-  try { const n = memory.sweepEpisodes(); if (n) log(`[qq] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch {}
+  try { const n = memory.sweepEpisodes(); if (n) log(`[qq] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch (e) { swallow(e, 'qq-server:run') }
   const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   const port = Number(argv[0]) || 8080
 
@@ -159,13 +159,13 @@ export async function run(argv = []) {
     try {
       if (!payload?.user_id) return
       await callApi('set_input_status', { user_id: payload.user_id, event_type: 1 })
-    } catch {}
+    } catch (e) { swallow(e, 'qq-server:showTyping') }
   }
   const stopTyping = async (payload) => {
     try {
       if (!payload?.user_id) return
       await callApi('set_input_status', { user_id: payload.user_id, event_type: 0 })
-    } catch {}
+    } catch (e) { swallow(e, 'qq-server:stopTyping') }
   }
 
   // 跨窗口去重（10-31）：同文本 5 秒内已在其他 chatId 发过 → 跳过
@@ -226,7 +226,7 @@ export async function run(argv = []) {
         ? payload.message.map((s) => (s?.type === 'text' ? s.data?.text ?? '' : s?.type === 'image' ? '【图片】' : '')).join('')
         : String(payload?.message ?? '')
       if (id) quoteIndex.remember(id, { text: txt || '（一条非文字消息）', who: 'me', name: '你' })
-    } catch {}
+    } catch (e) { swallow(e, 'qq-server:send') }
     return true
   }
 
@@ -294,9 +294,9 @@ export async function run(argv = []) {
               const desc = await describeFrames([dl], { query: '这是他引用的一张图。一两句话说明图里是什么/什么梗/情绪。' })
               if (desc) rec.text = `${rec.text}（图里是：${desc.slice(0, 100)}）`
             }
-            try { fs.rmSync(dl, { force: true }) } catch {}
+            try { fs.rmSync(dl, { force: true }) } catch (e) { swallow(e, 'qq-server:resolveQuote') }
           }
-        } catch {}
+        } catch (e) { swallow(e, 'qq-server:resolveQuote') }
       }
     }
     return quoteIndex.describe(rec, { selfQQ: selfId, ownerQQ })
@@ -410,7 +410,7 @@ export async function run(argv = []) {
           // 多轮里自然累积（每句都加一次）。
           try { neuron.act('attach', 0.5) } catch (e) { swallow(e, 'qq:attach') }
         }
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:handleInner') }
 
       // ── 自我改动审批闸（2026-11-02）──────────────────────────────────────
       // 老爸在私聊里说的话，先过一道指令词检查：
@@ -435,7 +435,7 @@ export async function run(argv = []) {
                   await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: bye } }] })
                   // 也记进记忆 —— 不然重启后她不记得自己刚说要重开（记忆断档）
                   memory.remember('qq', chatId, userId, 'assistant', bye, { isGroup: false })
-                } catch {}
+                } catch (e) { swallow(e, 'qq-server:best-effort') }
                 log('[qq][selfmod] 收到重启指令，3 秒后退出交给 im-gateway 拉起')
                 setTimeout(() => { process.exit(0) }, 3000)
                 return
@@ -613,7 +613,7 @@ export async function run(argv = []) {
         try {
           const g = memory.lastByRole(chatId).lastUser
           if (g) gapFrom = g
-        } catch {}
+        } catch (e) { swallow(e, 'qq-server:best-effort') }
       }
       const ownerGapMs = Math.max(0, Date.now() - gapFrom)
       const gapTxt = gapText(ownerGapMs)
@@ -633,7 +633,7 @@ export async function run(argv = []) {
         const last = messages[messages.length - 1]
         const content = [{ type: 'text', text: typeof last.content === 'string' ? last.content : '' }]
         for (const f of imageUris) {
-          try { content.push({ type: 'image_url', image_url: { url: visionDataUri(f) } }) } catch {}
+          try { content.push({ type: 'image_url', image_url: { url: visionDataUri(f) } }) } catch (e) { swallow(e, 'qq-server:best-effort') }
         }
         messages[messages.length - 1] = { role: 'user', content }
         log(`[qq] 🖼 图片已并入聊天请求（${imageUris.length}张）`)
@@ -675,7 +675,7 @@ export async function run(argv = []) {
         })
         if (r2.used && r2.text) answer = r2.text
       } catch (e) { logErr('[qq] 内省失败（不影响回复）：' + (e?.message ?? e)) }
-      try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch {}
+      try { fs.rmSync(dataPath('qq-img'), { recursive: true, force: true }) } catch (e) { swallow(e, 'qq-server:dynTemp') }
       // 情绪联动（10-31 优化）：**不再单独调一次 LLM**。
       // reply-gate 那次调用已经顺手把情绪写进 affect 了；这里只在 gate 没跑 LLM 的路径
       // （必回分支：问句/请求/情绪词）做一次轻量启发式补写 —— 零成本。
@@ -684,10 +684,10 @@ export async function run(argv = []) {
         const hitPos = /(开心|高兴|好事|哈哈|笑|太好了|喜欢|棒)/.test(String(userText))
         if (hitNeg || hitPos) {
           import('../brain/affect.mjs').then(async ({ feel }) => {
-            try { await feel({ valence: hitNeg ? -0.35 : 0.35, arousal: 0.5 }) } catch {}
+            try { await feel({ valence: hitNeg ? -0.35 : 0.35, arousal: 0.5 }) } catch (e) { swallow(e, 'qq-server:dynTemp') }
           }).catch(() => {})
         }
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:dynTemp') }
       let out = guard.clean(answer, config())
       // 群聊认人硬保险（10-26）：prompt 已经写到"这一轮不许出现主人"，但 11:54 她还是照群友的要求
       // 说了"主人早上好"。prompt 是软的，嘴是她的 —— 所以这里在出稿后再拦一道。
@@ -1159,7 +1159,7 @@ export async function run(argv = []) {
     }
   }
   const readProact = () => { try { return JSON.parse(fs.readFileSync(PROACT_FILE, 'utf8')) } catch { return {} } }
-  const writeProact = (st) => { try { fs.writeFileSync(PROACT_FILE, JSON.stringify(st)) } catch {} }
+  const writeProact = (st) => { try { fs.writeFileSync(PROACT_FILE, JSON.stringify(st)) } catch (e) { swallow(e, 'qq-server:writeProact') } }
 
   /**
    * 「她今天在网上干了什么」—— 从 web-log.md 当天段落取**最新** n 条（10-27 修）。
@@ -1208,7 +1208,7 @@ export async function run(argv = []) {
           return
         }
       }
-    } catch {}
+    } catch (e) { swallow(e, 'qq-server:seedOwnerLastMsgAt') }
     // 记忆里翻不到 → 按"刚刚聊过"算：宁可不提时间，也不许编一个天数出来
     ownerLastMsgAt = Date.now()
     log('[qq] 记忆里没有主人的消息 → 按刚聊过处理（先不提"多久没见"）')
@@ -1229,7 +1229,7 @@ export async function run(argv = []) {
         if (r && r.role === 'user' && String(r.chatId || '') === ownerChat
           && (!ownerQQ || String(r.userId || '') === ownerQQ) && r.isGroup !== true) return Number(r.ts) || 0
       }
-    } catch {}
+    } catch (e) { swallow(e, 'qq-server:lastOwnerMsgTs') }
     return 0
   }
 
@@ -1254,7 +1254,7 @@ export async function run(argv = []) {
           if (b.busy && b.activity && b.activity !== 'rest' && b.activity !== 'free') {
             return   // 她在专心，不打扰
           }
-        } catch {}
+        } catch (e) { swallow(e, 'qq-server:tryProactive') }
       }
       // 启动宽限（10-25）：刚拉起来就"你很久没理我"纯属噪音 —— 重启当天连发三条同义句的教训
       if (Date.now() - STARTED_AT < Number(pp.startupGraceMin ?? 10) * 60_000) return
@@ -1291,7 +1291,7 @@ export async function run(argv = []) {
           const rows = memory.readTail(dataPath('episodes.jsonl'), 60)
           const last = rows.slice(-3).map((l) => { try { const j = JSON.parse(l); return (j.role === 'assistant' ? '我说：' : '他说：') + String(j.summary || j.text || '').slice(0, 40) } catch { return '' } }).filter(Boolean)
           if (last.length) recentLine = last.join('；')
-        } catch {}
+        } catch (e) { swallow(e, 'qq-server:tryProactive') }
         const moodNow2 = (() => { try { return JSON.parse(fs.readFileSync(dataPath('mood.json'), 'utf8')) } catch { return {} } })()
         const dResp = await llm.chat([
           { role: 'system', content: fill('你是{name}。回答"现在要不要主动给{owner}发消息"。判据（自己权衡，不是规则）：你有真的想说的吗？现在时段合不合适？连续发过就别再发。输出 JSON：{"decision":"yes|later|no","hook":"想说的话头（yes 时给一句，20字内）","reason":"一句话理由"}。decision 必须诚实——没有想说的就说 no，别为了说话而说话。') },
@@ -1307,7 +1307,7 @@ export async function run(argv = []) {
           }
           if (j2.hook) hooks.push('你自己现在想说的（决策预检给的由头）：' + String(j2.hook).slice(0, 60))
         }
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:moodNow2') }
       if (!smartPass && Math.random() > Number(pp.chance ?? 0.12)) return
 
       const ownerQQ = String(cfgNow.owner?.qq || '')
@@ -1330,7 +1330,7 @@ export async function run(argv = []) {
           .map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
           .filter((r) => Date.now() - (r.ts || 0) < 86400_000 && ['bilibili', 'douyin'].includes(r.platform))
         if (rows.length) hooks.push('今天在外面：' + rows.slice(-3).map((r) => String(r.summary || r.text || '').slice(0, 28)).join('；'))
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:moodNow') }
       // 主人事实（10-27）：他今天已经说过的事 —— 有了这段，她才不会一天问十次"吃了没"
       {
         const known = ownerFacts.list()
@@ -1355,8 +1355,8 @@ export async function run(argv = []) {
       try {
         const dg = fs.readFileSync(dataPath('diary-owner.md'), 'utf8').split('\n').filter(Boolean).slice(-1)[0]
         if (dg) hooks.push('你最近写给主人的日记里那句：' + dg.replace(/^[-#\s]+/, '').slice(0, 50))
-      } catch {}
-      try { const li = memory.loreInterests(1); if (li.length) hooks.push('最近挂在心上：' + String(li[0]).slice(0, 40)) } catch {}
+      } catch (e) { swallow(e, 'qq-server:moodNow') }
+      try { const li = memory.loreInterests(1); if (li.length) hooks.push('最近挂在心上：' + String(li[0]).slice(0, 40)) } catch (e) { swallow(e, 'qq-server:moodNow') }
 
       // ── 智能钩子（10-31 升级）─────────────────────────────────────
       // ① brain 多路召回：按当前时段+情绪，从统一记忆里捞出真正相关的旧事
@@ -1364,14 +1364,14 @@ export async function run(argv = []) {
         const br = await import('../brain/recall.mjs')
         const B = br.bundle({ platform: 'qq', chatId: 'qq:' + ownerQQ, userId: ownerQQ, userText: '', limit: 3 })
         if (B.lines && B.lines.length) hooks.push('记忆里浮上来的（可自然提起）：' + B.lines.slice(0, 2).join('；').slice(0, 120))
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:moodNow') }
       // ② 梦境钩子：昨晚的梦（30% 概率以梦为由头）
       if (Math.random() < 0.3) {
         try {
           const { dreamToMention } = await import('./dream.mjs')
           const d = dreamToMention()
           if (d) hooks.push('你昨晚做了个梦（可以讲给他听，说明是梦不是真事）：' + d.text.replace(/^【梦】/, '').slice(0, 80))
-        } catch {}
+        } catch (e) { swallow(e, 'qq-server:moodNow') }
       }
       // ③ 时间语义：周几+节假日感
       {
@@ -1383,7 +1383,7 @@ export async function run(argv = []) {
       try {
         const tt = JSON.parse(fs.readFileSync(dataPath('tattle.json'), 'utf8'))
         if (tt.lastAt && Date.now() - Number(tt.lastAt) < 2 * 3600_000) return
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:moodNow') }
       const lastProact = readProact()
       const lastType = String(lastProact.lastType || '')
 
@@ -1405,9 +1405,9 @@ export async function run(argv = []) {
           didLine = o.ok
             ? `你刚真的看完了《${o.title}》${Number(o.watched) > 1 ? `第 ${o.epFirst}~${o.epLast} 集（一口气 ${o.watched} 集）` : `第 ${o.ep} 集`}：${String(o.plot || '').slice(0, 120)}（感受：${String(o.feel || '').slice(0, 60)}）`
             : `你刚试图看《${o.show}》，但没成：${String(o.via || '没有可用材料').slice(0, 80)} —— 这条推送要照实说做不到`
-          try { fs.writeFileSync(PROMISE_OUT(), JSON.stringify({ ...o, used: true }, null, 1) + '\n') } catch {}
+          try { fs.writeFileSync(PROMISE_OUT(), JSON.stringify({ ...o, used: true }, null, 1) + '\n') } catch (e) { swallow(e, 'qq-server:best-effort') }
         }
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:best-effort') }
       const msgs = [
         built[0],
         { role: 'user', content: `【主动搭话】现在是 ${nowText}。主人最后一条消息是 ${quietText} 前。${quietHint}\n`
@@ -1523,7 +1523,7 @@ export async function run(argv = []) {
   // 巩固要调 LLM，**不在这个进程里做** —— spawn 一个子进程，别把事件循环钉住
   // （douyin-dm-server.mjs:32 那条注释就是上一次的教训：execFileSync 钉了 40~180 秒）。
   let brainConsolidating = false
-  try { brain.configure(config()) } catch {}
+  try { brain.configure(config()) } catch (e) { swallow(e, 'qq-server:best-effort') }
   // [beat] 脑编排事务（消费 inbox / 意图补做 / 巩固判断）已移入 body.mjs
   // [beat] 脑编排事务：消费 inbox / 意图补做 / 判断该不该巩固。
   // 巩固要调 LLM，绝不在这里做 —— spawn 子进程，别钉事件循环
@@ -1574,7 +1574,7 @@ export async function run(argv = []) {
             text: `[任务 ${task.kind} ${ok ? '做完了' : '没做成'}] ${String(task.note || '').slice(0, 80)}`,
             act: 'action',
           })
-        } catch {}
+        } catch (e) { swallow(e, 'qq-server:pollTasks') }
       }
     } catch (e) { logErr('[qq] 任务轮询异常：' + (e?.message ?? e)) }
     finally { taskBusy = false }
@@ -1590,7 +1590,7 @@ export async function run(argv = []) {
   const GC_FILE = dataPath('qq-groupchat.json')
   const groupLastMsgAt = {}   // gid -> 最近一条群消息时间（内存，重启归零无妨）
   function readJsonSafe(f, d) { try { return JSON.parse(fs.readFileSync(f, 'utf8')) } catch { return d } }
-  function writeJsonSafe(f, v) { try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)) } catch {} }
+  function writeJsonSafe(f, v) { try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)) } catch (e) { swallow(e, 'qq-server:writeJsonSafe') } }
   let groupSpeak = readJsonSafe(GC_FILE, {})  // gid -> {day, count, lastAt}
   const writeGC = () => writeJsonSafe(GC_FILE, groupSpeak)
 
@@ -1605,7 +1605,7 @@ export async function run(argv = []) {
           const M = await import('../lib/mind.mjs')
           const b = M.busy()
           if (b.busy && b.activity && b.activity !== 'rest' && b.activity !== 'free') return
-        } catch {}
+        } catch (e) { swallow(e, 'qq-server:tryGroupChat') }
       }
       if (config().guard?.dryRun) return   // 干跑：群插话也不真发（10-25 统一闸门）
       const now = Date.now()
@@ -1701,18 +1701,18 @@ export async function run(argv = []) {
           const img = await generateStickerImage(caption, {})
           if (img) images = [(await import('../lib/onebot-file.mjs')).onebotFileValue(img)]
         }
-      } catch {}
+      } catch (e) { swallow(e, 'qq-server:tryQzone') }
       const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
       const post = async (body) => fetch(`${NAPCAT}/send_qzone_msg`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body), signal: AbortSignal.timeout(60000),
       })
       let r = await post(images ? { content: text, images, ugc_right: 1 } : { content: text, ugc_right: 1 })
-      let j = null; try { j = await r.json() } catch {}
+      let j = null; try { j = await r.json() } catch (e) { swallow(e, 'qq-server:post') }
       if ((!r.ok || j?.status === 'failed') && images) {
         log(`[qzone] 配图说说没成（${JSON.stringify(j ?? r.status).slice(0, 80)}），退回纯文字`)
         r = await post({ content: text, ugc_right: 1 })
-        j = null; try { j = await r.json() } catch {}
+        j = null; try { j = await r.json() } catch (e) { swallow(e, 'qq-server:post') }
         images = null
       }
       if (!r.ok || j?.status === 'failed') { log(`[qzone] 说说失败：${JSON.stringify(j ?? r.status).slice(0, 120)}`); return }

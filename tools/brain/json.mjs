@@ -7,10 +7,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { swallow } from '../lib/swallow.mjs'
 
 /** 确保目录存在（幂等）。 */
 export function ensureDir(dir) {
-  try { fs.mkdirSync(dir, { recursive: true }) } catch {}
+  try { fs.mkdirSync(dir, { recursive: true }) } catch (e) { swallow(e, 'json:ensureDir') }
   return dir
 }
 

@@ -17,6 +17,7 @@ import { dataPath } from './paths.mjs'
 import { emotionProfile, parseEmotionTag } from './emotion.mjs'
 import { scoreWavs, bestOf } from './prosody.mjs'
 import { voicedSeconds } from './video.mjs'
+import { swallow } from './swallow.mjs'
 
 const PASS_THROUGH = [
   'ref_audio_path', 'prompt_text', 'prompt_lang', 'text_split_method', 'batch_size',
@@ -64,7 +65,7 @@ export function refTextOf(refAudioPath) {
     }
     const any = fs.readdirSync(dir).find((f) => f.toLowerCase().endsWith('.txt'))
     if (any) return fs.readFileSync(path.join(dir, any), 'utf8').trim()
-  } catch {}
+  } catch (e) { swallow(e, 'tts:refTextOf') }
   return ''
 }
 
@@ -105,7 +106,7 @@ export function configRef(v = config().voice ?? {}) {
   let prompt = String(v.prompt_text || '')
   const truth = refTextOf(refAudio)
   if (truth && truth !== prompt.trim()) {
-    try { console.warn(`[tts] 参考文本与「${path.basename(String(refAudio))}」的转写不符，改用转写：${truth.slice(0, 40)}`) } catch {}
+    try { console.warn(`[tts] 参考文本与「${path.basename(String(refAudio))}」的转写不符，改用转写：${truth.slice(0, 40)}`) } catch (e) { swallow(e, 'tts:configRef') }
     prompt = truth
   }
   return { ref_audio_path: refAudio, prompt_text: prompt, from: 'config' }
@@ -162,7 +163,7 @@ function speechSeconds(file, dur = 0) {
   try {
     const v = voicedSeconds(file)
     if (v > 0.25 && v <= dur + 0.25) return v
-  } catch {}
+  } catch (e) { swallow(e, 'tts:speechSeconds') }
   return dur
 }
 
@@ -178,7 +179,7 @@ function probeSeconds(file) {
         { encoding: 'utf8', timeout: 20_000, windowsHide: true })
       const d = Number(String(buf).trim())
       if (d > 0) return d
-    } catch {}
+    } catch (e) { swallow(e, 'tts:probeSeconds') }
   }
   try {
     const buf = execFileSync(pythonPath(),
@@ -452,7 +453,7 @@ const fidelity = override.fidelity !== undefined ? !!override.fidelity : config(
 
   for (const f of all.map((x) => x.path)) {
     if (chosen.some((c) => c.file === f) || f === file) continue
-    try { fs.rmSync(f, { force: true }) } catch {}
+    try { fs.rmSync(f, { force: true }) } catch (e) { swallow(e, 'tts:synthDetailed') }
   }
 
   return {

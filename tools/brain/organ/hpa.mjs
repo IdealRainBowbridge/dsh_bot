@@ -39,6 +39,7 @@
 import { readJson, mutateJson } from '../json.mjs'
 import { hpaPath } from '../paths.mjs'
 import * as field from '../field.mjs'
+import { swallow } from '../../lib/swallow.mjs'
 
 const MIN = 60_000
 const HOUR = 3_600_000
@@ -310,7 +311,7 @@ export function perfuse(now = Date.now()) {
   try {
     // 直接把 field 的 cortisol 对齐到 HPA 的输出（不做"再 pok"，那样会双计）
     field.setDim('cortisol', clamp(0.15 + r.acute * 0.42 + r.chronic * 0.3, 0, 1), { why: 'hpa:perfuse', now })
-  } catch { }
+  } catch (e) { swallow(e, 'hpa:perfuse') }
   return r
 }
 
@@ -338,6 +339,6 @@ function persist(st) {
       at: st.at, crh: st.crh, acth: st.acth, cortisol: st.cortisol,
       fbSensitivity: st.fbSensitivity, load: st.load, setShift: st.setShift, log: (st.log || []).slice(-40),
     }))
-  } catch { }
+  } catch (e) { swallow(e, 'hpa:persist') }
   return st
 }
