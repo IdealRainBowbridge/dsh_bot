@@ -783,6 +783,7 @@ if (!FAST) {
   checkBareJsonParse(files)
   checkAtomicWrites(files)
   checkImportDirections(files)
+  checkZeroCallers(files)
   checkSize(files)
 }
 
