@@ -52,6 +52,23 @@ export async function run(argv = []) {
   const d = view.data
   const oid = d.aid
 
+  // ①.5 playurl **只取一次**，画面和声音共用。
+  //
+  // 踩过的坑（2026-11-02）：debrief 原来只有抽帧会用 playurl，现在加了听声音，
+  // 如果两处各请求一次，加上前面的 view，三秒内三个请求 → B站直接 -412，
+  // 表现是"画面没看成 + 声音没听成"，看起来像两条链路一起坏了，其实是被自己打死。
+  // 拿不到不是错误（受限视频/未登录都可能），后面两条路各自会照实说原因。
+  let playurl = null
+  try {
+    const pu = new URL('https://api.bilibili.com/x/player/wbi/playurl')
+    pu.searchParams.set('bvid', bvid)
+    pu.searchParams.set('cid', String(d.cid))
+    pu.searchParams.set('qn', '80')
+    pu.searchParams.set('fnval', '16')
+    pu.searchParams.set('fourk', '1')
+    playurl = await apiGet(pu.href, H)
+  } catch { /* 拿不到就让下游各自报原因 */ }
+
   // ② 字幕（player/v2 → subtitle 列表 → 拉第一条）
   let subtitles = []
   let subtitleLang = null
@@ -147,6 +164,42 @@ export async function run(argv = []) {
   } catch (e) { visionWhy = String(e.message || e).slice(0, 60) }
   if (!visionDesc && visionWhy && !json) process.stderr.write(`[debrief] 画面没看成：${visionWhy}\n`)
 
+  // ③.6 听声音（11-02）：**只在前面几路都不够用时**才听，理由同抽帧。
+  //
+  // 为什么要有这条（而不是"每条都听"）：一次 hearVideo 即使 GPU 也要 ~13 秒，
+  // 而 debrief 是轻路径（原来 3 秒）。所以判据要严，宁可不听。
+  // 值得听的两个条件（任一）：
+  //   ① 没有字幕，或字幕很少（<8 段）—— 文字材料本来就空
+  //   ② 字幕和标题对不上（coherence < 0.05）—— 有字幕但八成串片了，
+  //      这是番剧投稿最常见的坑，听声音比信字幕可靠
+  // 时长上限默认 20 分钟：再长就只转开头，并在结果里写明"只听了前 N 分钟"。
+  let hear = null
+  let hearWhy = ''
+  try {
+    const BA = await import('../lib/bili-audio.mjs')
+    const cfg = config()
+    const wantHear = cfg.vision?.debriefHear !== false
+    const coh = coherenceHint(String(d.title ?? ''), subtitles)
+    const subsThin = subtitles.length < 8
+    const subsWrong = subtitles.length > 0 && coh.ratio < 0.05
+    const minutes = Number(d.duration || 0) / 60
+    if (!wantHear) hearWhy = 'config.vision.debriefHear=false'
+    else if (!BA.asrReady()) hearWhy = 'ASR 没装好（ffmpeg/faster-whisper 缺）'
+    else if (!subsThin && !subsWrong) hearWhy = '字幕够用且对得上，省一次 ASR'
+    else if (minutes > Number(cfg.vision?.debriefHearMaxMin ?? 25)) hearWhy = `视频 ${Math.round(minutes)} 分钟太长，听完不划算`
+    else {
+      hear = await BA.hearVideo(bvid, {
+        playurl,
+        lang: 'zh',
+        at: [0.25, 0.5, 0.75],
+        maxMinutes: Number(cfg.vision?.debriefHearMaxMin ?? 25),
+        maxChars: Number(cfg.vision?.debriefHearChars ?? 3000),
+      })
+      if (!hear) hearWhy = BA.whyNoHear() || '不知道（ASR 返回 null 但没记原因）'
+    }
+  } catch (e) { hearWhy = String(e?.message || e).slice(0, 80) }
+  if (!hear && hearWhy && !json) process.stderr.write(`[debrief] 声音没听成：${hearWhy}\n`)
+
   // ④ 看过就留痕：上报 click + heartbeat，这条视频才会出现在账号的观看历史里
   //    （纯 API 读永远不进历史——手机端会以为她什么都没看。bilibili.reportHistory=false 可关）
   if (config().bilibili?.reportHistory !== false) {
@@ -177,7 +230,14 @@ export async function run(argv = []) {
     subtitleLines: subtitles.slice(0, 40),
     topComments,
     visionDesc: visionDesc || null,
-    seenVia: ['元信息', subtitles.length ? '官方字幕' : null, topComments.length ? '热评' : null, '简介', visionDesc ? '画面' : null].filter(Boolean),
+    hearText: hear?.text || null,
+    hearDevice: hear?.device || null,
+    hearSampled: hear?.sampled ?? null,
+    hearDur: hear?.dur ?? null,
+    hearAtPoints: hear?.atPoints || null,
+    hearVadFellBack: Boolean(hear?.vadFellBack),
+    seenVia: ['元信息', subtitles.length ? '官方字幕' : null, topComments.length ? '热评' : null,
+      '简介', visionDesc ? '画面' : null, hear?.text ? `台词${hear.segs}句` : null].filter(Boolean),
   }
   // 10-29：字幕串片第三次（10-27 两次、10-29 两次，全是"只有一条 ai-zh 轨"）。
   // 选轨顺序救不了"唯一一条就是错的"，所以补一道贴合度检查：标题+简介的中文二字组，
@@ -192,6 +252,17 @@ export async function run(argv = []) {
   console.log(`UP：${pack.owner} · ${pack.durationMin} 分钟 · 播放 ${pack.stat.view} · 弹幕 ${pack.stat.danmaku} · 赞 ${pack.stat.like}`)
   console.log(`理解路：${pack.seenVia.join(' + ')}\n`)
   if (pack.intro) console.log(`【简介】${pack.intro}\n`)
+  if (pack.hearText) {
+    // 说清楚"听了多少"和"跑在哪儿"——否则她以为听完了一小时
+    const partial = pack.hearSampled && pack.hearDur && pack.hearSampled < pack.hearDur - 5
+    const where = pack.hearDevice ? ` · ${pack.hearDevice.device}/${pack.hearDevice.compute_type}` : ''
+    const mm = (x) => `${Math.floor(x / 60)}:${String(Math.round(x % 60)).padStart(2, '0')}`
+    console.log(`【台词 · 真听了音轨转写的，不是猜的${where}${partial ? ` · ⚠ 只听到 ${mm(pack.hearSampled)} / 全长 ${mm(pack.hearDur)}` : ''}${pack.hearVadFellBack ? ' · 人声检测失效过，已重跑' : ''}】`)
+    console.log(pack.hearText + '\n')
+    if (pack.hearAtPoints?.length) {
+      console.log(`【声画对齐】${pack.hearAtPoints.map((p) => `${Math.round(p.ratio * 100)}%(${p.at})：${p.line || (p.why ? `（${p.why}）` : '（没对上）')}`).join('；')}\n`)
+    }
+  }
   if (pack.subtitleLines?.length) {
     console.log(`【字幕节选 · 轨 ${pack.subtitleLang ?? '?'} · 仅供参考，可能串片/由 AI 生成】`)
     if (typeof pack.subtitleCoherence === 'number') {

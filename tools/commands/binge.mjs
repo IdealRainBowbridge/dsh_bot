@@ -252,8 +252,8 @@ async function watchOne(bvid, opt = {}) {
            + (hear?.text
              ? `\n\n【台词 · 真听了音轨转写的，不是猜的】`
                + (hear.sampled && hear.dur && hear.sampled < hear.dur - 5
-                 ? `（⚠️ 只转了开头 ${Math.round(hear.sampled / 60)} 分钟 / 全长 ${Math.round(hear.dur / 60)} 分钟，后面的没听）`
-                 : '')
+                 ? `（⚠️ 只听到 ${Math.floor(hear.sampled / 60)}:${String(Math.round(hear.sampled % 60)).padStart(2, '0')} / 全长 ${Math.round(hear.dur / 60)} 分钟，后面没听到${hear.vadFellBack ? '；这条音乐/音效太密，人声检测失效过，已重跑' : ''}）`
+                 : (hear.vadFellBack ? '（这条音乐/音效太密，人声检测失效过，已关掉 VAD 重跑）' : ''))
                + hear.text
                + (hear.atPoints?.length
                  ? `\n\n【声画对齐】${hear.atPoints.map((p) => `约 ${Math.round(p.ratio * 100)}% 处（${p.at}）画面那一带说的：${p.line || '（这一处没对上）'}`).join('；')}`

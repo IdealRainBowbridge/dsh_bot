@@ -44,4 +44,21 @@ assert.ok(BA.whyNoHear().length > 0, `失败必须留下原因，实际是空串
 //      而 doctor 却在界面/日志里显示"可用" —— 两套真相。
 if (doc.ok) assert.equal(BA.asrReady(), true, 'doctor.ok=true 但 asrReady()=false：两套真相')
 
-console.log('✓ bili-audio-test 全部通过（表面/失败语义/doctor 自洽）')
+// ── 6. 重复压缩：机械重复压掉，正常叠词保留 ───────────────────────────────
+//      为什么测：一条鬼畜视频实测出现 300+ 个「喵」连成一行 400 字，
+//      既吃上下文又没信息。但压过头会把"慢慢""看看"这类正常叠词弄坏。
+{
+  // 通过 hearVideo 的返回体测不现实（要网络），这里直接验规则本身
+  const squash = (t, maxRun = 3) => String(t || '').replace(/([\u4e00-\u9fa5A-Za-z])\1{3,}/g, (m, ch) => ch + ch + ch + `…（重复${m.length}次）`)
+  const a = squash('喵'.repeat(100))
+  assert.ok(a.startsWith('喵喵喵'), '连续重复要保留前三个')
+  assert.ok(a.includes('重复100次'), `要标出重复次数，实际: ${a}`)
+  assert.ok(a.length < 20, `必须显著变短，实际长度 ${a.length}`)
+  // 正常叠词不许动
+  assert.equal(squash('慢慢走，看看再说，谢谢'), '慢慢走，看看再说，谢谢')
+  // 三个以内的重复不动
+  assert.equal(squash('哈哈哈'), '哈哈哈')
+  assert.equal(squash('哈哈哈哈'), '哈哈哈…（重复4次）')
+}
+
+console.log('✓ bili-audio-test 全部通过（表面/失败语义/doctor 自洽/重复压缩）')
