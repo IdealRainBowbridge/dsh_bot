@@ -4,10 +4,17 @@
 import * as selfcon from '../brain/organ/selfcon.mjs'
 import { dayIntrospect } from '../brain/organ/selfcon-day.mjs'
 
+/** chatFn: 用她自己的通道 (llm.chat) 提炼主张候选。失败由 selfcon-day 的 swallow 兜住,
+ *  退化为纯盘点 (只采集计数, 不出候选) -- 宁可少产出, 不编造。 */
+async function chatFn(messages) {
+  const { chat } = await import('../lib/llm.mjs')
+  return chat(messages, { maxTokens: 300, temperature: 0.8 })
+}
+
 export async function run(argv = []) {
   const sub = String(argv[0] || 'show')
   if (sub === 'introspect') {
-    const r = await dayIntrospect({ now: Date.now() })
+    const r = await dayIntrospect({ now: Date.now(), chatFn })
     console.log('[selfcon] ' + r.summary + (r.proposals ? ' (+' + r.proposals + ' 候选)' : ''))
     return
   }

@@ -14,15 +14,21 @@ const { dayIntrospect } = await import('../tools/brain/organ/selfcon-day.mjs')
 const DAY = 86400_000
 const NOW = Date.now()
 
-// 真语料: qq/episodes.jsonl (与 lib/memory.mjs 的文件口径一致)
+// 真语料: brain/ep/YYYY-MM.jsonl (主) + qq/episodes.jsonl (旧格式兜底)
+const month = new Date(NOW).getFullYear() + '-' + String(new Date(NOW).getMonth() + 1).padStart(2, '0')
+const epDir = path.join(TMP, 'brain', 'ep')
+fs.mkdirSync(epDir, { recursive: true })
+const mk = (role, text, agoH) => ({ ts: NOW - agoH * 3600_000, role, text })
+// 主路径形状 (v3 事件库): 她自己的话 = act:say + who.others 空; 别人的话带 others
+const epSelf1 = { at: NOW - 20 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [] }, quote: '我这个人记性不好，答应的事得当场写下来', gist: '我这个人记性不好，答应的事得当场写下来' }
+const epSelf2 = { at: NOW - 18 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [] }, quote: '我叫大肥鱼，这是主人给的名字', gist: '我叫大肥鱼，这是主人给的名字' }
+const epOwner = { at: NOW - 21 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [{ kind: 'owner', id: '1', name: '主人' }] }, quote: '你觉得自己是什么样的人', gist: '主人：你觉得自己是什么样的人' }
+fs.writeFileSync(path.join(epDir, month + '.jsonl'), [epSelf1, epOwner, epSelf2].map((x) => JSON.stringify(x)).join('\n') + '\n')
+// 兜底形状 (旧 episodes): assistant role
 const qqDir = path.join(TMP, 'qq')
 fs.mkdirSync(qqDir, { recursive: true })
 const lines = []
-const mk = (role, text, agoH) => ({ ts: NOW - agoH * 3600_000, role, text })
-lines.push(JSON.stringify(mk('user', '你觉得自己是什么样的人', 20)))
-lines.push(JSON.stringify(mk('assistant', '我啊，我这个人记性不好，答应的事得当场写下来', 20)))
 lines.push(JSON.stringify(mk('assistant', '今天看了三集番，白饭真好吃', 19)))
-lines.push(JSON.stringify(mk('assistant', '我叫大肥鱼，这是主人给的名字', 18)))
 lines.push(JSON.stringify(mk('user', '嗯嗯', 17)))
 fs.writeFileSync(path.join(qqDir, 'episodes.jsonl'), lines.join('\n') + '\n')
 

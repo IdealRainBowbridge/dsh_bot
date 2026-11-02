@@ -10,10 +10,27 @@ import { dataPath } from '../../lib/paths.mjs'
 import { swallow } from '../../lib/swallow.mjs'
 import * as selfcon from './selfcon.mjs'
 
-/** 从记忆文件里取她最近 24h 自己说过的话 (assistant role = 她的嘴)。
- *  文件名与 lib/memory.mjs 的口径一致: 通用 episodes.jsonl + qq/episodes.jsonl。 */
+/** 从记忆里取她最近 24h 自己说过的话。
+ *  主路径: 脑的事件库 brain/ep/YYYY-MM.jsonl (v3 迁移后的真语料) --
+ *  她自己的话 = act==='say' 且 who.others 为空 (别人的嘴都带 others), 原文在 quote。
+ *  兜底: 旧版 episodes 文件 (lib/memory.mjs 的口径, 部署差异时可能还在用)。 */
 function recentSelfLines(now, hours = 24) {
   const out = []
+  const months = new Set()
+  const mk = (t) => t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')
+  months.add(mk(new Date(now)))
+  months.add(mk(new Date(now - 40 * 86400_000)))
+  for (const m of months) {
+    try {
+      for (const e of readJsonl(dataPath('brain', 'ep', m + '.jsonl'), { limit: 500 })) {
+        if (e.act !== 'say') continue
+        if (Array.isArray(e.who?.others) && e.who.others.length) continue   // 别人的嘴
+        if (now - Number(e.at || e.ts || 0) > hours * 3600_000) continue
+        const t = String(e.quote || e.gist || '').replace(/\s+/g, ' ').trim()
+        if (t) out.push({ t, ts: Number(e.at || e.ts || 0) })
+      }
+    } catch (e) { swallow(e, 'selfcon-day:read ep ' + m) }
+  }
   for (const f of ['episodes.jsonl', 'qq/episodes.jsonl']) {
     try {
       for (const e of readJsonl(dataPath(f), { limit: 300 })) {
