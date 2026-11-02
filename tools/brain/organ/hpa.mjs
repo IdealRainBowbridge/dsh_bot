@@ -54,7 +54,20 @@ const HOUR = 3_600_000
  *
  * 所以 cortisol 的 tau 一定是三者最大 —— 这就是"事情过去了，人还沉在那儿"的来源。
  */
-export const LAYERS = {
+export // P2-1 (2026-11-03): CAR = cortisol awakening response. Awakening hands the
+// axis a ~35min decaying CRH inflow (real physiology: the post-awakening HPA
+// burst is sustained, not a single kick; that is what puts the cortisol peak
+// 30-45 min after wake instead of 10). Implemented as a DRIVE TERM on the
+// existing cascade - no new state: the wake marker is the log entry that
+// hpa.stress(..., why:'car:wake') already writes.
+const CAR_WINDOW = 35 * MIN
+// Integral form: total injected CRH over the whole window = CAR_RATE * W/2
+// (= 0.347). Injection between two calls is the exact area under the decaying
+// ramp inside that interval, so the curve is IDENTICAL for 30s heartbeats and
+// 5min test reads - dt-driven, never call-count-driven (M58 discipline).
+const CAR_RATE = 3.3e-7          // CRH units per ms at drive start (linear decay)
+
+const LAYERS = {
   crh:      { tau: 6 * MIN,   baseline: 0.18 },   // 下丘脑
   acth:     { tau: 22 * MIN,  baseline: 0.20 },   // 垂体
   cortisol: { tau: 70 * MIN,  baseline: 0.16 },   // 肾上腺
@@ -208,10 +221,37 @@ export function evolve(now = Date.now(), opts = {}) {
   }
 
   // 设定点自己恢复：时间常数 3 天。这解释"周末补觉不够，得连着几天没事才缓过来"。
+  // P2-1: CAR drive - while within the post-awakening window, feed the axis a
+  // decaying CRH inflow (capped at 5min of dt so an idle machine cannot dump
+  // the whole burst in one call). The peak timing grows out of the taus.
+  {
+    let carAt = null
+    for (let i = st.log.length - 1; i >= 0; i--) {
+      const L = st.log[i]
+      if (L && L.why === 'car:wake') { carAt = Number(L.at || 0); break }
+    }
+    if (carAt) {
+      // exact area under the linearly decaying ramp between the previous call
+      // and now, intersected with the post-awakening window
+      const a = Math.max(carAt, now - dt)
+      const b = Math.min(now, carAt + CAR_WINDOW)
+      if (b > a) {
+        const d1 = a - carAt
+        const d2 = b - carAt
+        const area = (d2 - d1) - (d2 * d2 - d1 * d1) / (2 * CAR_WINDOW)
+        st.crh = clamp(st.crh + CAR_RATE * area, 0, 3)
+      }
+    }
+  }
   st.setShift = clamp(relax(baseShift, 0, dt, 3 * 24 * HOUR), 0, 1.5)
 
   st.at = now
-  return st
+  // persist here (2026-11-03): evolve() is the ONLY place time moves forward.
+  // Without writing, every read() re-evolves from the same file state - the
+  // exact "looks alive, is frozen" bug field.mjs had (fixed there on 11-02):
+  // cascade products never survive a call, and repeated reads re-add the same
+  // CAR drive integral. Quiet hours must still age her.
+  return persist(st)
 }
 
 /**
