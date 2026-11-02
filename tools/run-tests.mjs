@@ -21,6 +21,7 @@ const TESTS = [
   'watchlog-test.mjs',
   'synapse-test.mjs',
   'neuron-wire-test.mjs',
+  'novelty-test.mjs',         // 新颖检测：陌生度/脱敏/见过池沉淀/习惯化（2026-11-02）
   'reply-attach-test.mjs',
   'stress-source-test.mjs',   // stress 三源 / 快慢两个尺度 / 同步性    // social→reply 下限 / attach→owner 门槛上限    // 五条通路接线：落盘/消耗/恢复/接入决策        // 突触标定：双脉冲易化/STD/恢复/通路隔离        // 看番账本：注入 / ok:false 标注 / 72h 边界（2026-11-02）
   'watch-slot-test.mjs',      // 槽位必须进实际聊天那条装配（shadow 模式也生效）

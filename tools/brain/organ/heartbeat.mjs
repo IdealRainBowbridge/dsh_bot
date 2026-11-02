@@ -62,6 +62,7 @@ export const BEAT = {
   quoteWarmEveryBeats: 20,  // 10 分钟 ← 原 warmQuoteIndex 10min
   qzoneEveryBeats: 60,      // 30 分钟 ← 原 tryQzone 30min
   brainEveryBeats: 1,       // 30s  ← 脑编排：消费 inbox → episode / 意图补做 / 巩固判断
+  noveltyEveryBeats: 10,    // 5 分钟 ← 探索感受器：扫最近的经历 → arousal（高了刺激 explore）
     // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但 heartbeat 从来没调过它。
     //
     // 故障是真的，两条路径要分开看：
@@ -182,6 +183,11 @@ export async function beat(now = Date.now()) {
     // 但心跳从来没调过它 —— 文档说收拢了，代码没收拢。
     if (_beatCount % BEAT.brainEveryBeats === 0 && ex.vitals?.brain) {
       try { await ex.vitals.brain(now); out.vital.push('brain') } catch (e) { swallow(e, 'beat:vital:brain') }
+    }
+    // 探索感受器（2026-11-02 晚）：她坐在那里，也一直在"感受"最近发生的事。
+    // arousal 高时由 body.mjs 的 vitals.novelty 去刺激 explore 通路 —— 这里只管节律。
+    if (_beatCount % BEAT.noveltyEveryBeats === 0 && ex.vitals?.novelty) {
+      try { await ex.vitals.novelty(now); out.vital.push('novelty') } catch (e) { swallow(e, 'beat:vital:novelty') }
     }
 
     // ── ③ 唯一的决策点 ─────────────────────────────────────────

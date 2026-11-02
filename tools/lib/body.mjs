@@ -16,6 +16,7 @@
 // 以后加微信/抖音通道，共用同一个 body，不会各自再长一套调度。
 import { swallow } from './swallow.mjs'
 import * as neuron from '../brain/cell/neuron.mjs'
+import * as novelty from './novelty.mjs'
 
 /**
  * 把 heartbeat 的决定接到具体能力上。
@@ -96,6 +97,18 @@ export async function bindBody(deps) {
       quotes: () => { try { void deps.warmQuoteIndex(40) } catch (e) { swallow(e, 'body:quotes') } },
       qzone: () => { try { void deps.tryQzone() } catch (e) { swallow(e, 'body:qzone') } },
       brain: () => { try { deps.brainTick() } catch (e) { swallow(e, 'body:brain') } },
+      novelty: () => {
+        // 探索的感受器（2026-11-02 晚）：每 10 拍（5 分钟）扫一次最近的经历，
+        // arousal 越过门槛 → 刺激 explore 通路 —— 新奇是真的会让她坐不住。
+        // 强度口径对齐 stimulate()：夹在 0.3~2。
+        try {
+          const a = novelty.tick(Date.now())
+          if (a.arousal >= a.trigger) {
+            neuron.act('explore', Math.max(0.3, Math.min(2, a.arousal * 1.5)))
+            deps.log('[body] 🧭 有东西挠着她（arousal ' + a.arousal + '）→ explore 通路被点燃')
+          }
+        } catch (e) { swallow(e, 'body:novelty') }
+      },
     },
 
     // ── 自主行动：只有被 decide() 选中才执行 ─────────────────────

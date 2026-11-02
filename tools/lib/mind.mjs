@@ -27,6 +27,7 @@ import { swallow } from './swallow.mjs'
 import * as promisesMod from './promises.mjs'
 import { writeJsonAtomic } from './atomic.mjs'
 import { fill } from './persona-voice.mjs'
+import * as novelty from './novelty.mjs'
 
 const PLAN_PATH = () => dataPath('mind-plan.json')
 
@@ -131,6 +132,13 @@ function gatherContext(now = Date.now()) {
 
   ctx.focus = readFocus()
   ctx.freedom = cfg.freedom || {}
+
+  // 新颖检测（2026-11-02 晚）：把"挠着你的新鲜事"摊进来，
+  // 让计划能顺着她真的好奇的方向走 —— 不再只是定时抽签。
+  try {
+    const a = novelty.assess(Date.now())
+    ctx.novelty = { arousal: a.arousal, items: (a.items || []).slice(0, 3).map((x) => x.text) }
+  } catch (e) { swallow(e, 'tools/lib/mind.mjs:novelty') }
   return ctx
 }
 
@@ -173,6 +181,7 @@ export async function plan({ now = Date.now(), force = false } = {}) {
     '',
     '规则（这是你自己权衡的时候，不是填空）：',
     '- 结合你最近的真实经历、情绪、没做完的承诺来选，别凭空选',
+    '- 最近发生的事里如果有挠着你的新鲜事，顺着好奇走是正当理由，不用掩饰',
     '- 一个人一次只能干一件事；刚做完一件事可以换，也可以接着做',
     '- 夜里（23点后）该歇就歇，别硬撑',
     fill('- 如果刚和{owner}聊完，别马上又去找他'),
@@ -191,6 +200,10 @@ export async function plan({ now = Date.now(), force = false } = {}) {
   if (ctx.lastPlan) lines.push(`你上一段在做：${labelOf(ctx.lastPlan.activity)}（理由：${ctx.lastPlan.why || '没说'}）。`)
   if (ctx.promises.length) lines.push('你答应过但还没做的：\n' + ctx.promises.map((p) => `  · ${p.text}（${p.due}）`).join('\n'))
   if (ctx.facts.length) lines.push('你记得关于他的事：' + ctx.facts.join('；'))
+  if (ctx.novelty?.items?.length) {
+    lines.push('最近有点挠着你的新鲜事（你的坐不住程度 ' + ctx.novelty.arousal + '，1 是满）：')
+    lines.push(ctx.novelty.items.map((x) => '  · ' + x).join('\n'))
+  }
   if (ctx.recent.length) lines.push('最近发生的事：\n' + ctx.recent.slice(-8).map((x) => '  · ' + x).join('\n'))
   lines.push('')
   lines.push('接下来你想做什么？')

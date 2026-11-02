@@ -107,9 +107,18 @@ export async function doWander() {
   const st = readState()
   const day = new Date().toLocaleDateString('sv-SE')
   if (st.day !== day) { st.day = day; st.count = 0 }
+  // 间隔随 arousal 收缩（2026-11-02 晚）：好奇是真的在催她 ——
+  // minGapMin 仍是基线，arousal 越高醒得越勤（最低 60 分钟）；
+  // dailyMax 只做护栏（防爆），不再是探索的引擎。探索频率由回报的边际递减决定。
   const max = Number(wf.dailyMax ?? 2)
   if (Number(st.count ?? 0) >= max) return null
-  if (st.lastAt && Date.now() - Number(st.lastAt) < Number(wf.minGapMin ?? 180) * 60_000) return null
+  let gapMin = Number(wf.minGapMin ?? 180)
+  try {
+    const nv = await import('../lib/novelty.mjs')
+    const a = nv.assess(Date.now())
+    gapMin = Math.max(60, Math.round(gapMin * (1 - Math.min(0.85, a.arousal))))
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:gate') }
+  if (st.lastAt && Date.now() - Number(st.lastAt) < gapMin * 60_000) return null
 
   const idea = await wander()
   if (!idea) return null
@@ -143,6 +152,14 @@ export async function doWander() {
       `自主探索：${idea.want}（${idea.reason}）→ ${results.map(r => r.ok ? '✓' : '✗').join('')}`,
       { kind: 'wander' })
   } catch (e) { swallow(e, 'tools/commands/wander.mjs:128') }
+
+  // 探索残余物（2026-11-02 晚）：这次探索的主题沉淀进新颖检测的见过池，
+  // 并记成 lastTopic —— 同主题的下一次好奇会脱敏。探索的先验由此被经历改变。
+  try {
+    const nv = await import('../lib/novelty.mjs')
+    const allOk = results.length > 0 && results.every((r) => r.ok)
+    nv.spark(idea.want + ' ' + idea.reason, { source: 'wander', surprise: allOk ? 0.8 : 0.3 })
+  } catch (e) { swallow(e, 'tools/commands/wander.mjs:spark') }
 
   try {
     const { emit } = await import('../brain/event.mjs')
