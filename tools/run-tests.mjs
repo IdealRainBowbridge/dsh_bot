@@ -118,6 +118,16 @@ if (!picked.length) {
 
 // 测试要用同一份"真 node"（Electron 主进程里 process.execPath 不是 node）
 const NODE = process.env.BOT_NODE || process.execPath
+// P0-6 (2026-11-03): pin test TMPDIR onto the app volume instead of /tmp.
+// Container /tmp sits on the overlay whose upperdir is on sda - the HDD with
+// an ATA-error history. Under batch load, ffmpeg writes and atomic renames in
+// test sandboxes randomly hit 'Input/output error', which looked like 1-7
+// random test failures per full run (video/wanvid/browser-engine/intents...).
+// Every suite builds its sandbox via os.tmpdir(); pointing TMPDIR at a fresh
+// per-run dir here moves all of them onto reliable disk without touching the
+// individual test files.
+const RUN_TMP = path.join(HERE, '..', '.tmp', 'run-' + process.pid + '-' + Date.now())
+try { fs.mkdirSync(RUN_TMP, { recursive: true }) } catch (e) { /* fall back to system tmp */ }
 let bad = 0
 for (const t of picked) {
   const file = path.join(HERE, '..', 'test', t)
@@ -132,6 +142,7 @@ for (const t of picked) {
   const r = spawnSync(NODE, [file], {
     stdio: 'inherit', windowsHide: true, cwd: path.join(HERE, '..'),
     timeout: 300_000, killSignal: 'SIGKILL',
+    env: { ...process.env, TMPDIR: RUN_TMP },
   })
   const cleaned = cleanupNewTmp(tmpBefore)
   if (cleaned) console.log(`  （清掉 ${cleaned} 个测试临时产物）`)
@@ -141,5 +152,6 @@ for (const t of picked) {
     bad++
   }
 }
+try { fs.rmSync(RUN_TMP, { recursive: true, force: true }) } catch (e) { /* best effort */ }
 console.log(bad ? `\n✗ ${bad}/${picked.length} 套没过` : `\n✓ 全部 ${picked.length} 套通过`)
 process.exit(bad ? 1 : 0)
