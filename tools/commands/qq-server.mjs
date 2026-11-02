@@ -945,7 +945,11 @@ export async function run(argv = []) {
   async function checkNapcat() {
     try {
       const r = await fetch(`${NAPCAT}/get_status`, { signal: AbortSignal.timeout(3000) })
-      napcatOk = r.ok
+      // 2026-11-03 实测坑：3000 被 new-api 占走的那几个小时，这里拿到的是 SPA 兜底页的
+      // HTML —— 也是 HTTP 200，只看 r.ok 会一直假绿，出站全断也没人知道。
+      // 探活必须认 OneBot 语义：JSON + retcode===0（HTML 解析失败就是不通）。
+      const j = await r.json().catch(() => null)
+      napcatOk = !!(j && (j.retcode === 0 || j.status === 'ok'))
     } catch {
       napcatOk = false
     }
