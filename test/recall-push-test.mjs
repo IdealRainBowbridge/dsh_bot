@@ -5,7 +5,7 @@
 // 真正的对话被挤出窗口，回起来就像忘了刚说过什么。
 //
 // 隔离做法：先把 USERPROFILE 指到临时目录，再 import memory.mjs（paths.mjs 在 import 时读 env），
-// 这样不会碰真实的 ~/.bot-ai。
+// 这样不会碰真实的 ~/.data。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'

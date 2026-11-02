@@ -209,7 +209,9 @@ export async function run(argv = []) {
       let dups = 0, ownerBad = 0
       for (const l of rows) {
         let j; try { j = JSON.parse(l) } catch { continue }
-        const key = (j.where?.platform || '') + '|' + String(j.gist || '').slice(0, 48)
+        // 2026-11-02：key 里带上 msgId。两条不同的表情包消息 gist 会退化成
+        // 同一句"（QQ 标记为表情包）"，只按 platform+gist 判重会误报成重复。
+        const key = (j.where?.platform || '') + '|' + String(j.meta?.msgId || '') + '|' + String(j.gist || '').slice(0, 48)
         const prev = seen.get(key)
         // 只算"机械重复"：同 key 在 5 分钟内再次写入（重连/重放/双写）。
         // 隔半小时又刷到同一条视频是真实经历，不该算脏数据。

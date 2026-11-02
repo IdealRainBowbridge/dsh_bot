@@ -44,7 +44,7 @@ function recordModel(name, pth, index) {
   writeRun(run)
 }
 
-/** 长任务日志：训练全程写 ~/.bot-ai/rvc/train-<name>.log，随时可翻。 */
+/** 长任务日志：训练全程写 ~/.data/rvc/train-<name>.log，随时可翻。 */
 function logFile(name) { return dataPath('rvc', `train-${name}.log`) }
 const stamp = () => new Date().toISOString().slice(11, 19)
 function appendLog(name, line) {

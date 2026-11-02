@@ -74,7 +74,7 @@ export function available() {
   if (!hasFfmpeg()) return { ok: false, why: 'ffmpeg 不可用' }
   if (!hasDrawtext()) return { ok: false, why: 'ffmpeg 没有 drawtext 滤镜（缺 libfreetype）' }
   const font = findFont()
-  if (!font) return { ok: false, why: '找不到中文字体（试过 ~/.bot-ai/fonts 与系统路径）' }
+  if (!font) return { ok: false, why: '找不到中文字体（试过 ~/.data/fonts 与系统路径）' }
   return { ok: true, font, why: '' }
 }
 

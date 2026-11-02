@@ -4,7 +4,7 @@
 // "片子出来了但音画不同步"这种最难发现的毛病，所以这里把算术和真实渲染都测一遍。
 //
 // 隔离：先把 USERPROFILE 指到临时目录，再动态 import —— social-log / debut 全写沙箱里，
-// 绝不碰主人真的 ~/.bot-ai。
+// 绝不碰主人真的 ~/.data。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'

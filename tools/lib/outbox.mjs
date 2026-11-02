@@ -1,6 +1,6 @@
 // outbox —— 她的公开发言台账（B站）：评论/回评/弹幕/动态/图片评论，主人随时翻。
 // 动机（10-25 用户）：她在 B站 说了什么、回了谁，主人很难自己去翻 —— 一个文件看尽她的社交进化。
-// 位置 ~/.bot-ai/bili-outbox.md，按天分组、最新在上，带视频链接点进去就看得到上下文。
+// 位置 ~/.data/bili-outbox.md，按天分组、最新在上，带视频链接点进去就看得到上下文。
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'

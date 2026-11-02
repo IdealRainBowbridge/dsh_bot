@@ -3,7 +3,7 @@
 // 以前只有两处痕迹：bili-outbox.md（人读的散文台账）和 quota.json（只有计数）。
 // 主人要看"她今天到底跟谁说了什么、点了谁、转了什么"，散文不好筛，计数更不够。
 // 所以这里再记一份 append-only 的 JSONL（机器可查、可统计、可生成摘要推给他）：
-//   ~/.bot-ai/bili-social.jsonl
+//   ~/.data/bili-social.jsonl
 //
 // 记录两类：
 //   说话 —— 评论 / 分享评论 / 回评 / 弹幕 / 动态 / 图片评论（带正文、视频标题、回给谁）
@@ -160,7 +160,7 @@ export function markdown(recs = [], o = {}) {
   return head.join('\n')
 }
 
-/** 落一份 Markdown 到 ~/.bot-ai/bili-social-<day>.md */
+/** 落一份 Markdown 到 ~/.data/bili-social-<day>.md */
 export function writeMarkdown(recs = [], day = new Date().toLocaleDateString('sv-SE')) {
   const f = dataPath(`bili-social-${day}.md`)
   fs.mkdirSync(dataPath(), { recursive: true })

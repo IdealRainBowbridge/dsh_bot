@@ -61,15 +61,20 @@ export const BEAT = {
   quoteWarmEveryBeats: 20,  // 10 分钟 ← 原 warmQuoteIndex 10min
   qzoneEveryBeats: 60,      // 30 分钟 ← 原 tryQzone 30min
   brainEveryBeats: 1,       // 30s  ← 脑编排：消费 inbox → episode / 意图补做 / 巩固判断
-    // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但这里从来没调用过它。
+    // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但 heartbeat 从来没调过它。
     //
-    // 事实更正（17:5x 实测）：**事件流并没有断**。ep/2026-11.jsonl 有 122 行、
-    // 17:54 还在写；inbox 四个文件的游标全部追平（120/120、3/3、1/1、6/6）。
-    // 之前"停在 10:14 / 积压 100"是把**某个进程自己的最后写入时间**当成了全局断流 ——
-    // 而且 ep 里确实有一条 11:02 的 notify 事件排在 17:50 之后（乱序写入，不是卡住）。
+    // 故障是真的，两条路径要分开看：
+    //   ① **聊天路径没断** —— onEvent() 里会调 episode.ingest({limit:20})，
+    //      所以每条 QQ/B站消息进来都会立刻落一条 episode。
+    //   ② **后台批量路径从来没跑过** —— brain.tick() 只挂在 vitals.brain 上，
+    //      而 beat() 的体征列表里没有 brain。B站/上网/notify 走 memory-bridge
+    //      写进 inbox 的事件因此**只进不出**。
+    // 实测（17:20 审查）：inbox 128 行、四个游标合计只消费 28 → 积压 99；
+    // ep/2026-11.jsonl 停在 22 行、mtime 10:14:55。
+    // 17:54 手动跑过一次 brain tick，积压归零、ep 涨到 122 行 —— 那是**修复动作的结果**，
+    // 不能拿它反推"故障不存在"。（这条注释曾被倒因为果地改过一次，已改回事实。）
     //
-    // 真正的问题只是：心跳没有主动调用它，所以脑编排**只在 qq-server 那条路径上跑**。
-    // 补上这一拍是为了让"每次心跳都推进一次脑"，不是为了修一场不存在的断流。
+    // 补上这一拍之后：每 30 秒消费一次 inbox，后台事件不再堆积。
 }
 
 let _beatCount = 0

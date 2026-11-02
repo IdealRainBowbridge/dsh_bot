@@ -5,7 +5,7 @@
 //   ② 片段时长和时间轴对不上（成片音画不同步，最难排查的那种）。
 // 所以这里用一条**带音轨的假成片**当素材：如果 output 里还有 audio 流，测试就该红。
 //
-// 隔离：USERPROFILE / DSH_HOME / BOT_CONFIG 全指到临时目录，绝不碰主人真的 ~/.bot-ai。
+// 隔离：USERPROFILE / DSH_HOME / BOT_CONFIG 全指到临时目录，绝不碰主人真的 ~/.data。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'

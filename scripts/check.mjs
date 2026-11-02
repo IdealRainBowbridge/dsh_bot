@@ -161,7 +161,35 @@ function checkDataPathPrefix(files) {
     if (m) {
       const line = src.slice(0, m.index).split('\n').length
       push('dataPath 双前缀', `${rel(f)}:${line}`,
-        "dataPath 已指向 ~/.bot-ai，再拼 'bot-ai/' 会变成 ~/.bot-ai/bot-ai/…（读不到且静默）")
+        "dataPath 已指向 ~/.data，再拼 'bot-ai/' 会变成 ~/.data/bot-ai/…（读不到且静默）")
+    }
+  }
+}
+
+// ── 3.5 数据目录：禁止绕过 dataDir 直接拼旧目录名（2026-11-02）─────────────
+// 事故：数据目录改名 .feiyu-ai → .data 时，把代码里的 .feiyu-ai 批量换成了 .bot-ai
+// （另一个旧名），而 homePath() 不走 dataDir 的回退链 → 18 处读空目录：
+// 人格文件 0 字、1,386 张贴纸一张看不到、锚/线索/头像全空，而门禁一直是全绿。
+// 规则：运行代码里出现 homePath('.bot-ai' 或 homePath('.feiyu-ai' 一律报错。
+// 唯一例外：迁移/恢复脚本（它们的工作就是读旧目录）。
+const MIGRATION_ALLOW = [
+  'scripts/check.mjs',              // 规则自身含有这些字面量
+  'tools/lib/paths.mjs',            // dataDir 回退链本身，必须能提旧目录
+  'tools/migrate-memory-10-27.mjs',
+  'tools/restore-memory-10-27.mjs',
+  'tools/drill-promise.mjs',
+  'tools/fix-owner-profile.mjs',
+]
+function checkLegacyDataDir(files) {
+  for (const f of files) {
+    const r = rel(f)
+    if (MIGRATION_ALLOW.includes(r)) continue
+    const src = stripComments(fs.readFileSync(f, 'utf8'))
+    const m = /homePath\(\s*['"](?:\.bot-ai|\.feiyu-ai)['"]/.exec(src)
+    if (m) {
+      const line = src.slice(0, m.index).split('\n').length
+      push('旧数据目录', `${r}:${line}`,
+        "homePath('.bot-ai'/'.feiyu-ai') 绕过了 dataDir 回退链（会读空目录且静默）—— 改用 dataPath(...)")
     }
   }
 }
@@ -744,6 +772,7 @@ checkSyntax(files)
 if (!FAST) {
   checkSpecifiers(files)
   checkDataPathPrefix(files)
+  checkLegacyDataDir(files)
   checkCommandRegistry()
   checkPerms()
   checkEmptyCatch(files)

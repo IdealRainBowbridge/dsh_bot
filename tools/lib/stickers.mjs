@@ -4,10 +4,10 @@
 //   1. 颜文字 / emoji   —— 哪儿都能用（评论也行）
 //   2. B站自带表情码     —— 评论区的"表情包"：写 [大笑] [doge] [吃瓜]，B站会渲染成图
 //   3. 图片表情          —— 只有 QQ/微信 能发：
-//        · [表情:开心]      → ~/.bot-ai/stickers/开心/ 里随机一张（AI 画好的那套）
+//        · [表情:开心]      → ~/.data/stickers/开心/ 里随机一张（AI 画好的那套）
 //        · [自制表情:困死了] → 当场用 PIL 画一张文字贴纸（不联网、不花额度）
 //
-// 图片目录：~/.bot-ai/stickers/<标签>/<任意名>.png|gif|webp
+// 图片目录：~/.data/stickers/<标签>/<任意名>.png|gif|webp
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'

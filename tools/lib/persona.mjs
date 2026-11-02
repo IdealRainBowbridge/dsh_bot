@@ -1,5 +1,5 @@
 // 三段式 prompt 装配 —— 移植 dabot brain/persona.py。
-//   [身份层] 人设文件（~/.bot-ai/persona.md，与 B站会话共用同一份）+ identity 三件套
+//   [身份层] 人设文件（~/.data/persona.md，与 B站会话共用同一份）+ identity 三件套
 //   [记忆层] 关于对方的 facts + 相关旧记忆（memory 三层记忆）
 //   [状态层] 情绪/饥饿/时段/今日轮次（mood 状态机）
 import fs from 'node:fs'
@@ -37,7 +37,7 @@ const CLI_INVOKE = (() => {
   } catch { return 'node tools/bot.mjs' }
 })()
 
-/** 人设文件（与 B站会话共用同一份，换机器连 ~/.bot-ai 一起拷）。 */
+/** 人设文件（与 B站会话共用同一份，换机器连 ~/.data 一起拷）。 */
 export function personaText() {
   try {
     const t = fs.readFileSync(dataPath('persona.md'), 'utf8').trim()
@@ -54,7 +54,7 @@ export function personaText() {
 
 /**
  * 「我是谁」快照（照 dsh-world 的 keepSelfCopy）：每次她要改写人设之前，先把当天原样存一份。
- * 她的人设一旦改坏，没有回退点是很难受的事 —— 存到 ~/.bot-ai/persona.history/<YYYY-MM-DD>.md。
+ * 她的人设一旦改坏，没有回退点是很难受的事 —— 存到 ~/.data/persona.history/<YYYY-MM-DD>.md。
  * 同一天只留第一份（那才是"改之前的原样"）。
  * @returns {string} 快照路径，失败返回空串
  */
@@ -439,7 +439,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // ── 她自己的头像（2026-11-02）────────────────────────────────────────────
   // 以前她只有 persona.md 的文字描述（"蓝色鲸鱼娘"），那是**设定**不是**现状**：
   // 她不知道自己在 QQ 上实际挂的是哪张脸。用户问"你能识别自己头像吗"——
-  // 现在头像已缓存到 ~/.bot-ai/avatar/，这里告诉她"你有这张脸，路径在哪"，
+  // 现在头像已缓存到 ~/.data/avatar/，这里告诉她"你有这张脸，路径在哪"，
   // 被问起时她可以自己看图确认（走 vision），而不是凭设定编。
   if (platform === 'qq' && !isGroup) {
     try {

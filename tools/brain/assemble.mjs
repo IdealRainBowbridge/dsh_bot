@@ -22,6 +22,7 @@ import * as working from './working.mjs'
 import * as recall from './recall.mjs'
 import * as memchannel from './memchannel.mjs'
 import { dreamToMention, recentDreams } from '../lib/dream-read.mjs'
+import * as watchlog from '../lib/watchlog.mjs'
 import * as facts from './facts.mjs'
 import * as intents from './intents.mjs'
 import * as affect from './affect.mjs'
@@ -317,6 +318,31 @@ function slotList(ctx) {
       }
     }
   } catch (e) { swallow(e, 'assemble:dream') }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // 【我在B站看了什么】—— 2026-11-02 用户要求：「在做一个个子通道，
+  //   作为专门看b站的眼睛，看完后直接注入进记忆里并在上下文里注入进她在b站上看了什么」
+  // ══════════════════════════════════════════════════════════════════════
+  //
+  // 为什么必须是**独立槽**而不是靠 recall：
+  //   recall 是按当前这句话去检索的。他问"你在看什么"时才可能召回；
+  //   而他问"今天干嘛了"、或者她主动想聊刚看的番时，召不回来 ——
+  //   于是她会说"我没在看什么"，明明两小时前刚看完一集。
+  //   这是"记忆断线"的同一类问题（anchor / 【此刻】/ 【梦】都犯过）。
+  //
+  // 为什么优先级 21（跟 recall 一档，比 dream 的 12 高）：
+  //   这是**最近发生的、且会持续几天**的事，聊起来最容易用到。
+  //   但它不该挤掉 persona/anchor，所以不进 keep。
+  //
+  // 为什么只在私聊加：
+  //   群里说"我最近在看某某番"很像广告/刷屏；而且群聊里别人未必关心。
+  //   私聊才是"跟主人聊我在干嘛"的场景。
+  if (!isGroup) {
+    try {
+      const wb = watchlog.promptBlock({ now, hours: Number(cfg.binge?.watchRecallHours ?? 72), maxShows: 2 })
+      if (wb) add('watch', wb, 21)
+    } catch (e) { swallow(e, 'assemble:watchlog') }
+  }
 
   const fb = facts.promptBlock({ limit: 4, now })
   if (fb) add('facts', fb, 22)

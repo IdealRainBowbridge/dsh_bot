@@ -6,7 +6,7 @@
 //
 // 做法：QQ 头像有公开 CDN 规则，不需要任何 API/登录：
 //   https://q1.qlogo.cn/g?b=qq&nk=<QQ号>&s=640
-// 容器内可直连（实测 200 / 40KB）。下载后缓存到 ~/.bot-ai/avatar/，
+// 容器内可直连（实测 200 / 40KB）。下载后缓存到 ~/.data/avatar/，
 // 文件存在就不重复下（除非超过 7 天）。图片本体可以随消息一起给视觉模型看。
 import fs from 'node:fs'
 import path from 'node:path'

@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
-import { homePath } from '../tools/lib/paths.mjs'
+import { homePath, dataPath } from '../tools/lib/paths.mjs'
 
 const REPO = 'lmy414/ai-girl-stickers'
 const BRANCH = 'main'
@@ -30,7 +30,7 @@ const PROXY = process.env.BOT_PROXY !== undefined
 const argv = process.argv.slice(2)
 const getArg = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : null }
 const LIMIT = Number(getArg('--limit') || 0)
-const OUT = getArg('--dir') || homePath('.bot-ai', 'sticker-src')
+const OUT = getArg('--dir') || dataPath('sticker-src')
 
 function curlTo(url, outPath, timeoutSec = 90) {
   return new Promise((resolve) => {

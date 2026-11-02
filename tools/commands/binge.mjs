@@ -30,6 +30,7 @@ import { dataPath } from '../lib/paths.mjs'
 import * as memory from '../lib/memory.mjs'
 import * as promises from '../lib/promises.mjs'
 import * as jsontext from '../lib/jsontext.mjs'
+import * as watchlog from '../lib/watchlog.mjs'
 
 const DIR = dataPath('binge')
 const arg = (argv, name) => {
@@ -309,6 +310,29 @@ async function watchOne(bvid, opt = {}) {
     memory.remember('bilibili', `binge:${slug(name)}`, 'me', 'assistant',
       `看完了《${d.title}》第 ${ep} 集${part ? '（' + part + '）' : ''}：${rec.plot}${rec.feel ? ' 感受：' + rec.feel : ''}`)
   }
+  // ④.5 「专门看 B 站的眼睛」的账本（2026-11-02，用户要求）
+  //
+  // 和上面那条 memory.remember 的分工：
+  //   · memory  = 对话流里的一条自然语言（她"想起来"时用）
+  //   · watchlog = 结构化状态（上下文每次稳定注入"我现在在看什么"时用）
+  // 两个都写，但**写在同一处**，避免分裂成两份各自演化的真相。
+  //
+  // 注意：`watched=false` 也要记（ok:false）——"这次没真看懂"本身是有用的事实，
+  // 否则她下次会把"只扫到简介"当成看过。
+  try {
+    watchlog.record({
+      show: name,
+      ep,
+      bvid,
+      title: d.title,
+      plot: rec.plot,
+      feel: rec.feel,
+      via: rec.via,
+      durMin: Math.round(Number(d.duration || 0) / 60),
+      ok: watched,
+      at: rec.at,
+    })
+  } catch { /* 账本写失败不能把"看完"这件事也弄丢 */ }
 
   // ⑤ 承诺结清
   if (opt.promise) {

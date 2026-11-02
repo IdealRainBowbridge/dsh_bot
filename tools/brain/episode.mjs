@@ -259,12 +259,23 @@ export function ingest({ limit = 500, now = Date.now() } = {}) {
     const FP_WINDOW = 10 * 60_000
     const fpOf = (r) => String(r.gist || r.quote || '').slice(0, 48)
     const evFp = fpOf({ gist: gistOf(ev), quote: ev.text })
-    const dup = ev.src?.msgId
+    // 2026-11-02 修：这里原来只有两条互斥的分支，漏掉了**跨写者双写**：
+    //   qq-server 既调 memory.remember()（brain-bridge 发一条**无 msgId** 的事件），
+    //   又调 brain.onEvent()（发一条**有 msgId** 的）。两条内容一模一样。
+    //   bridge 的事件游标先消费 → 先落一条；带 msgId 的那条进来时，msgId 分支
+    //   只找"已有行里有没有同 msgId"，而先落的那条没有 msgId → 比不中 → 再落一条。
+    //   实测 127 条 episode 里有 4 条是这么来的（同一毫秒、同文本）。
+    // 现在：msgId 分支照旧，另外**总是**再跑一道 30 秒窗口的指纹比对，
+    // 时间窗比原来的 10 分钟收紧到 30 秒 —— 只抓"两个写者同时写同一条"，
+    // 不会把她隔几分钟又说了同一句话（例如连着两声"嗯"）当重复吃掉。
+    const dupByMsg = ev.src?.msgId
       ? rows.slice(-60).some((r) => r.srcEv === ev.ev || (r.meta?.msgId && String(r.meta.msgId) === String(ev.src.msgId)))
-      : rows.slice(-40).some((r) =>
-        r.where?.platform === ev.where?.platform &&
-        Math.abs(Number(r.at) - Number(ev.at)) < FP_WINDOW &&
-        fpOf(r) === evFp)
+      : false
+    const dupByFp = rows.slice(-40).some((r) =>
+      r.where?.platform === ev.where?.platform &&
+      Math.abs(Number(r.at) - Number(ev.at)) < 30_000 &&
+      fpOf(r) === evFp)
+    const dup = dupByMsg || dupByFp
     if (dup) { seen.add(ev.ev); skipped++; continue }
     const ep = makeEpisode(ev, { recentGists, knownNames: known })
     if (!appendJsonl(epFile(new Date(ep.at)), ep)) { skipped++; continue }

@@ -16,6 +16,7 @@ const TESTS = [
   'client-render.mjs',
   'stickers-test.mjs',
   'memory-test.mjs',
+  'episode-dedup-test.mjs',   // 跨写者双写去重（2026-11-02）
   'memory-recall-test.mjs',
   'qq-human-test.mjs',
   'group-persona-test.mjs',

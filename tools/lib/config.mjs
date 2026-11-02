@@ -10,7 +10,7 @@ export { configPath } from './paths.mjs'
 
 /** 中性默认值：换个账号也能跑；所有"个人化"的东西请写进配置文件。 */
 export const DEFAULTS = {
-  // 身份三件套（拼成一行注入提示）+ 专属人设文件（~/.bot-ai/persona.md，优先级更高）
+  // 身份三件套（拼成一行注入提示）+ 专属人设文件（~/.data/persona.md，优先级更高）
   identity: {
     name: '大肥鱼',      // 她叫什么
     ownerTitle: '主人',  // 她怎么称呼你
@@ -97,7 +97,7 @@ export const DEFAULTS = {
   },
 
   // 专业唱歌（10-25）：RVC 翻唱——真歌干声换她的音色再混伴奏（AI 孙燕姿同款管线）。
-  // 依赖 D:/rvc（RVC 仓库+venv，见 rvc.mjs）；她的歌单在 ~/.bot-ai/songs/。
+  // 依赖 D:/rvc（RVC 仓库+venv，见 rvc.mjs）；她的歌单在 ~/.data/songs/。
   rvc: {
     root: 'D:/rvc/RVC',
     python: 'D:/rvc/venv/Scripts/python.exe',

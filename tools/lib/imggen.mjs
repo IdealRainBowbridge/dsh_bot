@@ -4,9 +4,9 @@
 // 必须走本机 Clash 代理；而 node fetch（undici）不认系统代理环境变量 ——
 // spawn curl -x 代理 是版本无关、行为最确定的通道（实测 200 / 31KB / ~4s）。
 //
-// 生成结果按文案 md5 缓存进表情库：标签模式存 ~/.bot-ai/stickers/<标签>/ai-*.jpg
+// 生成结果按文案 md5 缓存进表情库：标签模式存 ~/.data/stickers/<标签>/ai-*.jpg
 // （图库自己长大，下次同样式直接从图库拿）；自制模式存 自制/ 目录。
-// 日额度账本 ~/.bot-ai/imggen.json（0 = 不限），防 Pollinations 免费档被刷限流。
+// 日额度账本 ~/.data/imggen.json（0 = 不限），防 Pollinations 免费档被刷限流。
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -57,7 +57,7 @@ const STYLE = 'flat 2D anime chibi sticker illustration, cute whale-girl, long w
 const TAG_CAP = 12   // 每个标签目录最多留几张 ai- 生成图（老的删掉，只删自己生成的）
 
 // ── 图生图参考图（10-25）：形象锚定用主人给的参考图集，img2img 才"像" ─────────
-// ~/.bot-ai/sticker-refs/ref-<情绪>.jpg（哭/举手/得意/微笑）—— 按文案情绪自动挑最贴的一张；
+// ~/.data/sticker-refs/ref-<情绪>.jpg（哭/举手/得意/微笑）—— 按文案情绪自动挑最贴的一张；
 // Pollinations 的 &image= 参数要一个公网可达的图片 URL —— 本地图自动传 tmpfiles.org
 // （60 分钟过期）并按文件缓存 URL，过期自动重传。
 const REF_UPLOAD_PROXY = () => config().imageGen?.proxy || 'http://127.0.0.1:7897'
