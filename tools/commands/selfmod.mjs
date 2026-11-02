@@ -69,6 +69,13 @@ export async function run(argv = []) {
     return
   }
 
+  if (sub === 'rollback') {
+    const r = SM.rollback(argv[1])
+    if (!r.ok) { console.error('没回滚：' + r.reason); process.exit(1) }
+    console.log('✓ 已回滚【' + r.id + '】' + r.file + (r.removed ? '（新建文件已删除）' : '（已写回备份）') + '。重启后生效。')
+    return
+  }
+
   if (sub === 'snapshot') {
     const r = await SM.snapshot()
     if (!r.ok) { console.error('快照失败：' + r.reason); process.exit(1) }
@@ -76,5 +83,5 @@ export async function run(argv = []) {
     return
   }
 
-  console.log('用法：selfmod propose <文件> <为什么> --from <新内容文件> | selfmod selfApply [id] | selfmod snapshot | selfmod status')
+  console.log('用法：selfmod propose <文件> <为什么> --from <新内容文件> | selfmod selfApply [id] | selfmod rollback [id] | selfmod snapshot | selfmod status')
 }

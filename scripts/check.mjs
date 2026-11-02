@@ -747,6 +747,25 @@ const ZERO_CALL_SKIP_FILES = new Set(['lib/index.js', 'client.js', 'tools/lib/_d
 const ZERO_CALL_ALLOW = {
   // 'tools/xxx.mjs:fnName': 'reason (ticket)'
 }
+// 2026-11-03 高压修缮：读她的自改提案（selfmod.json，env 链与 paths.mjs 同口径）。
+// 用途：新建文件（create:true）在"还没接线"的窗口期，导出必然全仓 0 引用 ——
+// 这条死路以前逼得她只能直写盘绕过备份/门禁链（presence.mjs 就这么进的库）。
+// 口径：新文件只在 lib/ 下 + 存在同路径的未作废 create 提案时，"新文件导出零调用"
+// 降级为提示；豁免只认提案在案的文件，不外溢到旧代码。
+function selfmodCreatesSet() {
+  try {
+    const home = process.env.BOT_DATA_DIR || process.env.USERPROFILE || process.env.HOME || ''
+    if (!home) return new Set()
+    const j = JSON.parse(fs.readFileSync(path.join(home, 'selfmod.json'), 'utf8'))
+    const set = new Set()
+    for (const it of [...(j.pending || []), ...(j.history || [])]) {
+      if (it && it.create === true && typeof it.file === 'string'
+          && it.state !== 'rejected' && it.state !== 'rolledback') set.add(it.file)
+    }
+    return set
+  } catch { return new Set() }
+}
+
 function checkZeroCallers(files) {
   const corpus = []
   for (const f of files) {
@@ -756,6 +775,7 @@ function checkZeroCallers(files) {
     try { src = fs.readFileSync(f, 'utf8') } catch (e) { continue }
     corpus.push({ r, s: stripComments(src) })
   }
+  const createdFiles = selfmodCreatesSet()
   const names = new Map()
   for (const c of corpus) {
     if (ZERO_CALL_SKIP_FILES.has(c.r)) continue
@@ -779,7 +799,13 @@ function checkZeroCallers(files) {
       cnt = Math.max(0, cnt - decl)
       if (cnt > 0) { uses += cnt; if (!c.r.startsWith('test/')) info.testsOnly = false }
     }
-    if (uses === 0) push('导出零调用', info.file, n + '() 全仓 0 处引用（含自身） —— 入库未接线?')
+    if (uses === 0) {
+      if (createdFiles.has(info.file) && /^lib\//.test(info.file)) {
+        notes.push(`新建文件待接线（selfmod --new 提案在案，接线后此提示消失）：${info.file} ${n}()`)
+      } else {
+        push('导出零调用', info.file, n + '() 全仓 0 处引用（含自身） —— 入库未接线?')
+      }
+    }
   }
 }
 

@@ -246,18 +246,18 @@ export function apply(id) {
 
   // ⑤ 记账
   s.pending = s.pending.filter((x) => x.id !== item.id)
-  s.history.unshift({ ...item, abs: undefined, state: 'applied', appliedAt: Date.now(), backup: bk.dir, checks })
+  s.history.unshift({ ...item, abs: undefined, state: 'applied', appliedAt: Date.now(), backup: bk ? bk.dir : null, checks })
   s.history = s.history.slice(0, 50)
   writeState(s)
 
   // ⑥ 写 selfup 日志（她自己的手术记录）
   try {
     execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
-      `【${item.id}】改 ${item.file}：${item.why}（语法✓ 门禁✓，备份 ${path.basename(bk.dir)}）`],
+      `【${item.id}】改 ${item.file}：${item.why}（语法✓ 门禁✓，备份 ${(bk ? path.basename(bk.dir) : "新建无备份")}）`],
       { timeout: 20000, stdio: 'pipe', cwd: ROOT })
   } catch (e) { swallow(e, 'selfmod:selfup-log') }
 
-  return { ok: true, id: item.id, checks, backup: bk.dir, needRestart: true }
+  return { ok: true, id: item.id, checks, backup: bk ? bk.dir : null, needRestart: true }
 }
 
 
@@ -265,7 +265,7 @@ export function apply(id) {
  *  单飞行：上一轮没跑完就跳过本轮（下次自改会连着一起测）。
  *  挂了自动还原——但只还原"文件还是她改完的样子"的情况；期间又被改过就不动（别把新改动一起擦掉）。 */
 let testInFlight = false
-async function runFullTests(item, file, before, afterText) {
+async function runFullTests(item, file, before, afterText, appliedMtimeMs = 0) {
   if (testInFlight) {
     try {
       execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
@@ -288,7 +288,10 @@ async function runFullTests(item, file, before, afterText) {
     } catch (e) { swallow(e, 'selfmod:fulltest-log') }
   } catch (e) {
     let untouched = false
-    try { untouched = fs.readFileSync(file, 'utf8') === afterText } catch { }
+    try {
+      untouched = fs.readFileSync(file, 'utf8') === afterText
+        && fs.statSync(file).mtimeMs === appliedMtimeMs   // 内容相同但被后续落地重写过（mtime 变了）→ 不还（2026-11-03 幽灵还原修复）
+    } catch { }
     const why = String(e.tail || e.message).slice(0, 150)
     try {
       execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
@@ -364,12 +367,12 @@ export function selfApply(id) {
 
   // ⑤ 记账 + 手术日志
   s.pending = s.pending.filter((x) => x.id !== item.id)
-  s.history.unshift({ ...item, abs: undefined, state: 'applied-self', appliedAt: Date.now(), backup: bk.dir, checks })
+  s.history.unshift({ ...item, abs: undefined, state: 'applied-self', appliedAt: Date.now(), backup: bk ? bk.dir : null, checks })
   s.history = s.history.slice(0, 50)
   writeState(s)
   try {
     execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
-      `【${item.id}】自主改 ${item.file}：${item.why}（语法✓ 门禁✓，备份 ${path.basename(bk.dir)}）`],
+      `【${item.id}】自主改 ${item.file}：${item.why}（语法✓ 门禁✓，备份 ${(bk ? path.basename(bk.dir) : "新建无备份")}）`],
       { timeout: 20000, stdio: 'pipe', cwd: ROOT })
   } catch (e) { swallow(e, 'selfmod:selfApply-log') }
 
@@ -379,9 +382,9 @@ export function selfApply(id) {
   try { fs.writeFileSync(dataPath('selfmod-restart.flag'), JSON.stringify({ id: item.id, file: item.file, at: Date.now() })) } catch (e) { swallow(e, 'selfmod:restart-flag') }
 
   // 全量测试异步兜底（不阻塞落地；挂了自动还原并通知老爸）
-  void runFullTests(item, file, before, item.change)
+  void runFullTests(item, file, before, item.change, fs.statSync(file).mtimeMs)
 
-  return { ok: true, id: item.id, checks, backup: bk.dir, needRestart: true }
+  return { ok: true, id: item.id, checks, backup: bk ? bk.dir : null, needRestart: true }
 }
 
 /** 整容器快照（2026-11-03）：代码+记忆数据打成一份包，放 data/snapshots/。她自己也能拍。 */
