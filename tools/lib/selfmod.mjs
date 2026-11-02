@@ -309,9 +309,14 @@ export async function snapshot() {
   fs.mkdirSync(dir, { recursive: true })
   const name = 'self-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   const out = path.join(dir, name + '.tar.gz')
-  const dataRoot = path.dirname(dataPath('x'))            // 容器内 /home/feiyu
+  const dataRoot = path.resolve(dataPath('x'), '..', '..') // dataDir 的上级：容器内 /home/feiyu（dataDir 本身就是 .data）
+  // 可重建的大块不进快照：asr-venv 2.6G / asr-models 464M / pyenv 都是环境；
+  // 记忆、贴纸、浏览器登录态、账本这些真资料全保留。
   const args = ['-czf', out,
     '--exclude', 'node_modules', '--exclude', '.git', '--exclude', '.data/snapshots',
+    '--exclude', '.data/asr-venv', '--exclude', '.data/asr-models',
+    '--exclude', '.data/pyenv', '--exclude', '.data/pyenv3',
+    '--exclude', '.data/stickers-backup-*.tar.gz',
     '-C', path.dirname(ROOT), path.basename(ROOT),
     '-C', dataRoot, '.data']
   await new Promise((res, rej) => {
