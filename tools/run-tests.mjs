@@ -20,7 +20,8 @@ const TESTS = [
   'episode-dedup-test.mjs',   // 跨写者双写去重（2026-11-02）
   'watchlog-test.mjs',
   'synapse-test.mjs',
-  'neuron-wire-test.mjs',    // 五条通路接线：落盘/消耗/恢复/接入决策        // 突触标定：双脉冲易化/STD/恢复/通路隔离        // 看番账本：注入 / ok:false 标注 / 72h 边界（2026-11-02）
+  'neuron-wire-test.mjs',
+  'reply-attach-test.mjs',    // social→reply 下限 / attach→owner 门槛上限    // 五条通路接线：落盘/消耗/恢复/接入决策        // 突触标定：双脉冲易化/STD/恢复/通路隔离        // 看番账本：注入 / ok:false 标注 / 72h 边界（2026-11-02）
   'watch-slot-test.mjs',      // 槽位必须进实际聊天那条装配（shadow 模式也生效）
   'tail-read-test.mjs',        // readTail：只读尾部 / 不返回半截行 / 边界
   'shard-test.mjs',            // 记忆分片：part2 能读回 / 不串台

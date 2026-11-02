@@ -11,6 +11,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'
 import { swallow } from '../lib/swallow.mjs'
+import * as neuron from '../brain/cell/neuron.mjs'
 import { splitBubbles, parseMessage } from '../lib/onebot.mjs'
 import { config } from '../lib/config.mjs'
 import { startBriefRefresher } from '../lib/ledger.mjs'
@@ -396,7 +397,19 @@ export async function run(argv = []) {
       // 主动搭话的安静计时：主人（私聊）每说一句话就刷新
       try {
         const ownerQQNow = String(config().owner?.qq || '')
-        if (!isGroup && ownerQQNow && String(userId) === ownerQQNow) ownerLastMsgAt = Date.now()
+        if (!isGroup && ownerQQNow && String(userId) === ownerQQNow) {
+          ownerLastMsgAt = Date.now()
+          // 依恋通路：**他来了**这件事本身就刺激 attach（2026-11-02 接上）。
+          //
+          // 为什么必须在"他说话"这一侧刺激、而不是在"她回话"那一侧：
+          //   依恋是"被他在场这件事打动"，不是"我完成了回复任务"。
+          //   她可以没回（在忙/睡了），但心里那股"他来了"是照样发生的。
+          //   只在她回话时加，等于"只有回了他才更想他"，方向反了。
+          //
+          // 强度 0.5：一句话不该像一次深谈那样消耗。真正的深谈会在
+          // 多轮里自然累积（每句都加一次）。
+          try { neuron.act('attach', 0.5) } catch (e) { swallow(e, 'qq:attach') }
+        }
       } catch {}
 
       // ── 自我改动审批闸（2026-11-02）──────────────────────────────────────

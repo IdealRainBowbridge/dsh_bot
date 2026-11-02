@@ -171,7 +171,18 @@ export function desire(action, ctx) {
   switch (action) {
     case 'sleep': return ctx.sleepy.score / 100
     case 'consolidate': return Math.min(1, ctx.sleepy.score / 66) * 0.9   // 积压越多越想理
-    case 'reply': return ctx.hasInterrupt ? 1 : 0                            // 有人等着才做
+    // reply：有人等着时才做（这是门槛），但**说不说得动**由 social 通路决定。
+    //
+    // 2026-11-02 接上。原来这里写死 `hasInterrupt ? 1 : 0` ——
+    // 五条通路里的 social 明明就是"社交回应"，却对"回话"这件事零影响。
+    //
+    // 两层含义要分开：
+    //   ① **有没有人要你回** → hasInterrupt（外部事实）
+    //   ② **你还说不说得动** → social（内部状态）
+    // 真实的人是：有人在等（①）但他已经聊了一整天，回起来会明显敷衍/简短（②）。
+    // 注意 ② 不该让"回话"这个动作消失 —— 有人等着就必须回，
+    // 只是回得短、回得慢。所以下限给 0.35（不是 0）。
+    case 'reply': return ctx.hasInterrupt ? (0.35 + 0.65 * so) : 0
     // 看番：兴致（reward）× 清醒 × 心里不绷
     case 'watch': return (Math.max(0, awake) * 0.6 + 0.4 * f.da) * (0.45 + 0.55 * rw) * calm
     // 上网逛：探索（explore）单独一条通路，不再借用 da
@@ -406,7 +417,11 @@ export async function decide(o = {}) {
   } else if (ctx.hasInterrupt) {
     // 层二：有人等着
     action = 'reply'
-    why = '有人在等'
+    // why 要能看出"还说不说得动"。她自己读得到这句话，所以措辞是她的口气。
+    const soNow = Number.isFinite(ctx.neuro?.social) ? ctx.neuro.social : 1
+    why = soNow < 0.5
+      ? '有人在等（脑子有点木，回得会短）'
+      : '有人在等'
   } else {
     // 层三：在"想做"里挑一件 —— 只在这时候才看意愿
     const cands = Object.keys(ACTIONS)

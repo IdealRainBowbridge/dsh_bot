@@ -118,7 +118,29 @@ export function thresholds(now = Date.now()) {
 export function admit({ channel = 'group', strength = 0.4, salience = 0, now = Date.now() } = {}) {
   const cfg = CHANNELS[channel] || CHANNELS.group
   const t = thresholds(now)
-  const base = t.thresholds[channel] ?? 0.5
+  let base = t.thresholds[channel] ?? 0.5
+
+  // ── 依恋通路：影响"想不想应他"（2026-11-02 接上）─────────────────
+  //
+  // 为什么是**改门槛**而不是改信号强度：
+  //   channel 的 base 本来就是"这个通道要多响才进得来"。
+  //   attach 高 = 她正想他 → 他的声音更容易进来（门槛降低）；
+  //   attach 低 = 刚闹过别扭/很久没见，心里有点远 → 门槛抬高。
+  //
+  // 幅度刻意做小（±25%）：attach 是"想不想黏"，不是"听不听得见"。
+  // 如果让它能把门槛推到 3 倍，"他说话她完全听不见"就变成了冷暴力，
+  // 那不是依恋，那是断了。真实的人即使生气，也听得见对方在叫他。
+  //
+  // 读失败 → 不动（不惩罚）。和 self.desire 里同一个原则。
+  if (channel === 'owner') {
+    let at = 1
+    try {
+      const r = neuron.readiness(now)
+      if (Number.isFinite(r?.attach)) at = r.attach
+    } catch { /* 读不到就按满算 */ }
+    // at=1 → ×1.00；at=0.5 → ×1.125；at=0 → ×1.25（最多抬 25%）
+    base = Number((base * (1 + (1 - Math.max(0, Math.min(1, at))) * 0.25)).toFixed(4))
+  }
 
   // 显著性折价：salience=1 时阈值乘 0.12（几乎全开）
   const s = clamp(Number(salience) || 0, 0, 1)
