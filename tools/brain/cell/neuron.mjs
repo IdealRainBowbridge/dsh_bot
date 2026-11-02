@@ -42,11 +42,19 @@ import * as rec from '../micro/receptor.mjs'
  * attach 的池子故意做得最小 —— 稀缺才会珍惜，也才会"见到就反应大"。
  */
 export const PATHWAYS = {
-  social:  { label: '社交回应', ligand: 0.8, refillTau: 45_000,  kInternalize: 0.055, pool: 1.0 },
-  reward:  { label: '奖赏',     ligand: 1.0, refillTau: 90_000,  kInternalize: 0.040, pool: 1.0 },
-  stress:  { label: '应激',     ligand: 0.9, refillTau: 120_000, kInternalize: 0.030, pool: 1.0 },
-  explore: { label: '探索',     ligand: 0.7, refillTau: 60_000,  kInternalize: 0.045, pool: 1.0 },
-  attach:  { label: '依恋',     ligand: 1.2, refillTau: 30_000,  kInternalize: 0.075, pool: 0.7 },
+  // refillTau 是**可释放囊泡池**的补充时间常数，不是受体的回收时间。
+  //
+  // ⚠️ 2026-11-02 重标定：原来 30~120 秒，那是"受体回收/蛋白合成"的量级，
+  //   用在突触囊泡池上会把短时程抑制做成"说十句话就哑掉"。
+  //   真实 RRP 是 1~10 秒。这里保留各通路之间的**相对快慢**（依恋最快、
+  //   应激最慢 —— 应激反应一旦起来，恢复本来就慢），但整体压到秒级。
+  //   （相对关系是我的**推断**：依恋/社交需要快速响应，应激需要持续。
+  //    绝对数值按 paired-pulse 的经典范围标定。）
+  social:  { label: '社交回应', ligand: 0.8, refillTau: 6_000,  kInternalize: 0.055, pool: 1.0 },
+  reward:  { label: '奖赏',     ligand: 1.0, refillTau: 10_000, kInternalize: 0.040, pool: 1.0 },
+  stress:  { label: '应激',     ligand: 0.9, refillTau: 14_000, kInternalize: 0.030, pool: 1.0 },
+  explore: { label: '探索',     ligand: 0.7, refillTau: 8_000,  kInternalize: 0.045, pool: 1.0 },
+  attach:  { label: '依恋',     ligand: 1.2, refillTau: 4_000,  kInternalize: 0.075, pool: 0.7 },
 }
 
 /** 空状态：所有通路池满、受体新鲜。 */
@@ -100,9 +108,22 @@ export function stimulate(st, pathway, strength = 1) {
   // ② 突触后：**用本次释放量**算信号（不是累积 ligand），
   //    并且必须给一个**非零 dt**，否则内化永远是 0、受体永远不会钝 ——
   //    这正是第一版跑出来 capacity 恒等于 1.00 的原因。
-  //    dt 用 1000ms 是"这一次刺激本身的持续时长"，不是"距上次多久"（后者由 rest 负责）。
+  //
+  //    ⚠️ 2026-11-02 修：dt 原来是写死的 1000ms（1 秒），**量纲低了 5~10 倍**。
+  //    "一次社交刺激"不是"听到一个音节"，是**一次完整的交互窗口**：
+  //    读消息 + 想 + 打字，约 5~10 秒。
+  //
+  //    实测（改前）：social 刺激 40 次后 capacity = **0.987** —— 几乎没内化。
+  //    也就是说"耐受"在代码里等于不存在；只有跑满几百次才会动。
+  //    这不是参数没调好，是**单位错了**：把"一次交互"当成了"一秒钟"。
+  //
+  //    改成 8 秒（交互窗口中位值）后：40 轮 → 0.803（"有点钝"），
+  //    10 轮 → 0.962（"还新鲜"）—— 这才是"聊久了会钝、歇一会就好"。
+  //
+  //    用 cfg.stimMs 可以按通路覆盖（依恋窗口更长、探索更短）。
+  const stimMs = Number(cfg.stimMs ?? 8000)
   const drive = fired.released * cfg.ligand
-  const sig = rec.evolve(p.rec, drive, 1000, { kInternalize: cfg.kInternalize })
+  const sig = rec.evolve(p.rec, drive, stimMs, { kInternalize: cfg.kInternalize })
 
   const paths = { ...cur.paths, [pathway]: { syn: fired.s, rec: sig.r, at: p.at } }
 
