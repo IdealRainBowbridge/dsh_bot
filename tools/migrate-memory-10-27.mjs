@@ -11,8 +11,8 @@ import path from 'node:path'
 import { dataPath, homePath } from './lib/paths.mjs'
 
 const GO = process.argv.includes('--go')
-const LORE = homePath('.feiyu-ai', 'lore.json')
-const FACTS = homePath('.feiyu-ai', 'facts.json')
+const LORE = homePath('.bot-ai', 'lore.json')
+const FACTS = homePath('.bot-ai', 'facts.json')
 
 const OPS_TAGS = new Set(['运维', '排障', '调试', '工具', 'bug', 'Bug', 'BUG', '工程'])
 const isInterest = (x) => x.kind === 'interest' || x.tag === '兴趣'

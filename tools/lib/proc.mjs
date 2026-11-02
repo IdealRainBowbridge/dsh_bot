@@ -49,7 +49,7 @@ export function killPortListeners(port, tag = '', { log = () => {} } = {}) {
       const tl = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true, timeout: 10_000 })
       if (!/node\.exe/i.test(String(tl.stdout || ''))) continue
       spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, timeout: 10_000 })
-      try { log(`[feiyu] 清掉占用 ${port} 的旧${tag}实例 pid=${pid}`) } catch { /* ignore */ }
+      try { log(`[bot] 清掉占用 ${port} 的旧${tag}实例 pid=${pid}`) } catch { /* ignore */ }
     }
   } catch (e) { swallow(e, 'proc:killPort') }
 }

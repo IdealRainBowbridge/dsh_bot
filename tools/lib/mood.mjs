@@ -1,7 +1,7 @@
-// 情绪状态机 —— dafeiyu 骨架 brain/persona.py 的 JS 移植（tick_mood + state_block）。
+// 情绪状态机 —— dabot 骨架 brain/persona.py 的 JS 移植（tick_mood + state_block）。
 //
 // 「活」的来源：情绪会自己漂移；饭点会饿；饿过头心情掉；偶尔无理由波动。
-// 状态持久化在 ~/.feiyu-ai/mood.json —— CLI（每次新进程）与宿主生物钟共用同一份 ✓
+// 状态持久化在 ~/.bot-ai/mood.json —— CLI（每次新进程）与宿主生物钟共用同一份 ✓
 //
 // ⚠️ 10-27 大修（主人报"中午到下午连问十次吃没吃饭、整下午[[困倦]]"）：
 //   旧版 `饭点 +7 / 非饭点 -0.5` + `饿过头每 tick 心情 -4`，而 tick 是**每次推送前都跑**
@@ -19,7 +19,7 @@ import { config } from './config.mjs'
 
 const MOOD_FILE = dataPath('mood.json')
 
-/** 饭点：到点了坐不住（与 dafeiyu 一致：午饭 11-12 点、晚饭 17-18 点）。 */
+/** 饭点：到点了坐不住（与 dabot 一致：午饭 11-12 点、晚饭 17-18 点）。 */
 const HUNGRY_HOURS = new Set([11, 12, 17, 18])
 
 /** 默认参数（config.mood 可覆盖）。 */
@@ -32,7 +32,7 @@ const DEFAULTS = {
 }
 
 function opts() {
-  // 参数从 feiyu.config.json 的 `mood` 段热读（config() 每次重新读文件，改完不用重启）
+  // 参数从 bot.config.json 的 `mood` 段热读（config() 每次重新读文件，改完不用重启）
   try {
     return { ...DEFAULTS, ...(config()?.mood || {}) }
   } catch { return { ...DEFAULTS } }
@@ -113,7 +113,7 @@ export function fed(level = 20) {
 
 export function mood() { return readState() }
 
-/** 时段 phase —— 同一句话在 7 点和 2 点必须不一样（dafeiyu 的核心设计）。 */
+/** 时段 phase —— 同一句话在 7 点和 2 点必须不一样（dabot 的核心设计）。 */
 function phaseText(now = new Date()) {
   const h = now.getHours()
   // 只描述状态，不夹带"要短""话多"这类长度指令 —— 长度应由对话场景决定（10-31）
@@ -127,7 +127,7 @@ function phaseText(now = new Date()) {
 }
 
 /**
- * 注入提示的【当下状态】块 —— dafeiyu persona.py state_block 的移植。
+ * 注入提示的【当下状态】块 —— dabot persona.py state_block 的移植。
  * @returns {string}
  */
 const PLATFORM_STATE = {
@@ -208,7 +208,7 @@ export function stateBlock(turnsToday = 0, platform = 'bilibili', isGroup = fals
 }
 
 /**
- * 走神注入 —— 8% 概率嘀咕一句，多了就成噪音（dafeiyu：别超过 10%）。
+ * 走神注入 —— 8% 概率嘀咕一句，多了就成噪音（dabot：别超过 10%）。
  * ⚠️ 10-27：原来三条**全是吃的**，等于每天几十次给她"想想吃的"的心理暗示，
  * 跟"连问吃没吃饭"是一条绳上的。现在只有三分之一跟吃有关，其余是别的生活小事。
  */

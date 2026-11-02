@@ -11,9 +11,9 @@ import os from 'node:os'
 import path from 'node:path'
 
 // ⚠️ 必须在 import memory.mjs **之前**把数据目录指到临时目录。
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-mem-'))
-process.env.FEIYU_DATA_DIR = TMP
-delete process.env.FEIYU_DEBUG          // 避免触发"调试必须隔离"的抛错（我们本来就隔离了）
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-mem-'))
+process.env.BOT_DATA_DIR = TMP
+delete process.env.BOT_DEBUG          // 避免触发"调试必须隔离"的抛错（我们本来就隔离了）
 
 const memory = await import('../tools/lib/memory.mjs')
 

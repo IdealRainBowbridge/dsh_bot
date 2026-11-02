@@ -3,7 +3,7 @@
 // 2026-10-24 起：复盘还会产出一句「对自己的新认识」追加进 persona.md（自我迭代）——
 // 只追加、最多留 10 条、带日期，主人随时在面板里删（最终编辑权在主人）。
 //
-//   node feiyu.mjs review [--days 1]
+//   node bot.mjs review [--days 1]
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath, diaryPath, homePath } from '../lib/paths.mjs'
@@ -16,7 +16,7 @@ const SELF_HEADER = '## 她的自我迭代（复盘自动追加，主人可随�
 
 /** 把一句自我认识追加进 persona.md 的自我迭代区（最多留 10 条；区里有手写内容就只追加不动旧文）。 */
 function appendSelfNote(date, note) {
-  const file = homePath('.feiyu-ai', 'persona.md')
+  const file = homePath('.bot-ai', 'persona.md')
   let text = ''
   try { text = fs.readFileSync(file, 'utf8') } catch {}
   const line = `- [${date}] ${note}`
@@ -80,7 +80,7 @@ export async function run(argv = []) {
 
   const out = diaryPath('private')
   const entry = `\n## ${date} 复盘\n${text}\n`
-  fs.mkdirSync(path.dirname(out), { recursive: true })   // 换机/新装时 feiyu-work 可能还不存在
+  fs.mkdirSync(path.dirname(out), { recursive: true })   // 换机/新装时 bot-work 可能还不存在
   fs.appendFileSync(out, entry, 'utf8')
   console.log(`[review] 复盘已写进 ${out}`)
   console.log(text)

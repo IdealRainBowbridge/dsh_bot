@@ -1,6 +1,6 @@
 // brain/doctor —— 体检：把 8 条不变量变成能打印的东西（v3 §15）。
 //
-// 没有它，"她记得什么/说到做到没有"只能靠吵。`feiyu brain doctor` 一条命令全摊开。
+// 没有它，"她记得什么/说到做到没有"只能靠吵。`bot brain doctor` 一条命令全摊开。
 import fs from 'node:fs'
 import { listFiles, readJsonl, fileInfo } from './json.mjs'
 import { BRAIN, metaDir, deliveryPath, claimsPath } from './paths.mjs'

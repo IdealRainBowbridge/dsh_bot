@@ -36,7 +36,7 @@ const pick = (u, ...keys) => {
   return 0
 }
 
-export function collectUsage(sessionsDir, mineWorkspace = 'feiyu-work') {
+export function collectUsage(sessionsDir, mineWorkspace = 'bot-work') {
   const days = new Map()
   const lifetime = { input: 0, output: 0, cached: 0, total: 0 }
   let sessions = 0

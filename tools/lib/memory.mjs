@@ -1,9 +1,9 @@
-// 三层记忆 —— dafeiyu 骨架 brain/memory.py 的 JS 移植（SQLite+FTS5 → JSONL/JSON）。
+// 三层记忆 —— dabot 骨架 brain/memory.py 的 JS 移植（SQLite+FTS5 → JSONL/JSON）。
 //
 //   · 情节 episodes  每次"看视频/分享/评论"的事件流（jsonl，append-only）
 //   · 关系 facts     关于主人/网友的长期事实（去重）
 //   · 世界 lore      她自己的设定与名场面
-// 检索：2-gram 分词 + 关键词命中（十万条以内够用 —— dafeiyu 的原则：
+// 检索：2-gram 分词 + 关键词命中（十万条以内够用 —— dabot 的原则：
 // 「别一开始就上向量库，人格才是瓶颈」）。
 //
 // v5 重构要点：
@@ -39,7 +39,7 @@ function writeJson(file, value) {
   fs.renameSync(temp, file)
 }
 
-/** 极简分词：中文按 2-gram 切，英文按字符组 —— dafeiyu memory.py _tokens 的移植。 */
+/** 极简分词：中文按 2-gram 切，英文按字符组 —— dabot memory.py _tokens 的移植。 */
 export function tokens(text) {
   const out = []
   let buf = ''
@@ -380,7 +380,7 @@ export function recallAll(chatId, opts = {}) {
 }
 
 /**
- * 全文检索她自己的一生（`feiyu mem grep 关键词`）。
+ * 全文检索她自己的一生（`bot mem grep 关键词`）。
  * 照 dsh-world 的思路：不做向量库，靠"原文全留 + 按原话找"。
  */
 export function grepEpisodes(pattern, { days = 0, limit = 30, role = '' } = {}) {

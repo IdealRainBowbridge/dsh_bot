@@ -11,7 +11,7 @@ import { inboundToken, isLoopback, inboundTokenOk, requireInboundToken } from '.
 
 const req = ({ ip = '10.1.2.3', host = 'example:8081', auth = '', token = '', url = '/' } = {}) => ({
   socket: { remoteAddress: ip },
-  headers: { host, ...(auth ? { authorization: auth } : {}), ...(token ? { 'x-feiyu-token': token } : {}) },
+  headers: { host, ...(auth ? { authorization: auth } : {}), ...(token ? { 'x-bot-token': token } : {}) },
   url,
 })
 const cfg = (t) => ({ qq: { inboundToken: t } })
@@ -19,9 +19,9 @@ const cfg = (t) => ({ qq: { inboundToken: t } })
 // ── 1. 定长比较：token 长度不同也必须 false（不能崩） ───────────────────────
 assert.equal(inboundToken(cfg('abc')), 'abc')
 assert.equal(inboundToken({}), '')
-process.env.FEIYU_INBOUND_TOKEN = 'from-env'
+process.env.BOT_INBOUND_TOKEN = 'from-env'
 assert.equal(inboundToken(cfg('abc')), 'from-env', '环境变量优先')
-delete process.env.FEIYU_INBOUND_TOKEN
+delete process.env.BOT_INBOUND_TOKEN
 
 // ── 2. 回环判定 ─────────────────────────────────────────────────────────────
 assert.equal(isLoopback(req({ ip: '127.0.0.1' })), true)

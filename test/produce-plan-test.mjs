@@ -8,7 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 
-const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-plan-'))
+const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-plan-'))
 process.env.USERPROFILE = SANDBOX
 process.env.HOME = SANDBOX
 process.env.DSH_HOME = path.join(SANDBOX, '.dsh')

@@ -16,24 +16,24 @@
 // 跑法：node test/group-persona-test.mjs
 //
 // ⚠️ 隔离：paths.mjs 在 import 时就把 HOME 定死，所以必须先改环境变量再 import，
-// 并且用 FEIYU_CONFIG 指到临时配置（要造一个 owner.qq 才能测"私聊主人"分支）。
+// 并且用 BOT_CONFIG 指到临时配置（要造一个 owner.qq 才能测"私聊主人"分支）。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-group-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-group-'))
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 process.env.DSH_HOME = path.join(tmp, '.dsh')
-fs.mkdirSync(path.join(tmp, '.feiyu-ai'), { recursive: true })
+fs.mkdirSync(path.join(tmp, '.bot-ai'), { recursive: true })
 fs.mkdirSync(path.join(tmp, '.dsh'), { recursive: true })
-const cfgFile = path.join(tmp, 'feiyu.config.json')
+const cfgFile = path.join(tmp, 'bot.config.json')
 fs.writeFileSync(cfgFile, JSON.stringify({
   identity: { name: '大肥鱼', ownerTitle: '主人', selfClaim: '我' },
   owner: { qq: '10001', name: '主人' },
   platforms: { qq: true, wechat: false, bilibili: false, douyin: false },
 }))
-process.env.FEIYU_CONFIG = cfgFile
+process.env.BOT_CONFIG = cfgFile
 
 const paths = await import('../tools/lib/paths.mjs')
 const memory = await import('../tools/lib/memory.mjs')

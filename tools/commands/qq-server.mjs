@@ -3,7 +3,7 @@
 // 支持语音条（GPT-SoVITS + record 段，NapCat 自动转 silk）。
 // 无第三方依赖，node 内置 http 即可。
 //
-//   node feiyu.mjs qq-server [port]     # 默认 8080
+//   node bot.mjs qq-server [port]     # 默认 8080
 //   SnowLuma WebUI → OneBot配置 → HTTP服务器(3000) + HTTP上报 → http://127.0.0.1:8080/onebot
 //   上报格式 messagePostFormat 选 array
 import http from 'node:http'
@@ -36,9 +36,9 @@ import * as brain from '../brain/index.mjs'
 import { execFile, spawnSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-/** 项目根（起子进程时用来定位 tools/feiyu.mjs，不能依赖 cwd）。 */
-const FEIYU_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-function FEiyuRoot() { return FEIYU_ROOT }
+/** 项目根（起子进程时用来定位 tools/bot.mjs，不能依赖 cwd）。 */
+const BOT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+function FEiyuRoot() { return BOT_ROOT }
 import { promisify } from 'node:util'
 
 // 图片下载必须异步：execFileSync 会把事件循环钉住最多 35 秒，期间 /health 不通、群里所有
@@ -101,7 +101,7 @@ export { splitBubbles, parseMessage } from '../lib/onebot.mjs'
 export async function run(argv = []) {
   const cfg = config()
   // 账本：每 10 分钟刷一版（persona 的【账本】块读这份缓存，同步、不打网络）
-  if (cfg.ledger?.enabled !== false) startBriefRefresher(10, (m) => console.log('[feiyu] ' + m))
+  if (cfg.ledger?.enabled !== false) startBriefRefresher(10, (m) => console.log('[bot] ' + m))
   const QQ = cfg.qq ?? {}
   // 10-31：platforms.qq 以前是纯装饰 —— 面板关了它，qq-server 照样收发消息（假开关）。
   // 现在这里也认它：两个开关任一说"关"就不启动，并且说清是哪个。
@@ -114,7 +114,7 @@ export async function run(argv = []) {
     const dialogs = PLATFORMS.PLATFORMS.map((p) => ({ id: p.id, ...PLATFORMS.enabled(cfg, p.id) }))
     const anyOn = dialogs.some((d) => d.on)
     if (!anyOn) {
-      logErr('✗ 所有对话平台都关着（' + dialogs.map((d) => d.id + ':' + (d.on ? '开' : '关')).join(' / ') + '）—— 面板上打开至少一个，或改 feiyu.config.json')
+      logErr('✗ 所有对话平台都关着（' + dialogs.map((d) => d.id + ':' + (d.on ? '开' : '关')).join(' / ') + '）—— 面板上打开至少一个，或改 bot.config.json')
       process.exit(1)
     }
     const on = dialogs.filter((d) => d.on).map((d) => d.id)
@@ -772,7 +772,7 @@ export async function run(argv = []) {
       const aiWanted = aiOn && ((tag && !pickSticker(tag)) || (caption && !stickerFile))
       if (!plain && !stickerFile && !aiWanted) return
 
-      // 干跑：只打印不真发（dafeiyu 铁律：第一周先观察）
+      // 干跑：只打印不真发（dabot 铁律：第一周先观察）
       if (config().guard?.dryRun) {
         log(`[qq][干跑] ${isGroup ? '群' + groupId : '私聊' + userId} → ${plain}${stickerFile ? ' [表情图]' : ''}${aiWanted ? ` +AI表情「${tag || caption}」` : ''}`)
         // v5 修 P0：**绝不能**把没发出去的话记成"她说过"。
@@ -1108,8 +1108,8 @@ export async function run(argv = []) {
    */
   function runCli(args = [], timeoutMs = 180000) {
     try {
-      const feiyu = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', 'feiyu.mjs')
-      const r = spawnSync(process.execPath, [feiyu, ...args], {
+      const bot = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', 'bot.mjs')
+      const r = spawnSync(process.execPath, [bot, ...args], {
         encoding: 'utf8', timeout: timeoutMs, windowsHide: true,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       })
@@ -1125,8 +1125,8 @@ export async function run(argv = []) {
    *  那段时间她连主人发的消息都回不了。所以看番一律走这条。 */
   async function runCliAsync(args = [], timeoutMs = 900000) {
     try {
-      const feiyu = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', 'feiyu.mjs')
-      const { stdout } = await execFileAsync(process.execPath, [feiyu, ...args], {
+      const bot = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', 'bot.mjs')
+      const { stdout } = await execFileAsync(process.execPath, [bot, ...args], {
         encoding: 'utf8', timeout: timeoutMs, windowsHide: true, maxBuffer: 32 * 1024 * 1024,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       })
@@ -1632,7 +1632,7 @@ export async function run(argv = []) {
       if (ok) await spokeDone('group')
         if (!ok) continue
         guard.commit(chatId, out)
-        memory.remember('qq', chatId, config().identity?.name ?? 'feiyu', 'assistant', out, { isGroup: true })   // 推送即记忆
+        memory.remember('qq', chatId, config().identity?.name ?? 'dsh_bot', 'assistant', out, { isGroup: true })   // 推送即记忆
         groupSpeak[gid] = { day, count: Number(g.count) + 1, lastAt: now }
         writeGC()
         log(`[qq] 🗣️ 群${gid} 自主插话：${out.slice(0, 40)}`)
@@ -1694,7 +1694,7 @@ export async function run(argv = []) {
       if (!r.ok || j?.status === 'failed') { log(`[qzone] 说说失败：${JSON.stringify(j ?? r.status).slice(0, 120)}`); return }
       st.count = Number(st.count) + 1; st.lastAt = now
       writeJsonSafe(QZ_FILE, st)
-      memory.remember('qq', 'qq:qzone-self', config().identity?.name ?? 'feiyu', 'assistant', `（发了说说：${String(text).slice(0, 60)}${images ? ' [配图]' : ''}）`)
+      memory.remember('qq', 'qq:qzone-self', config().identity?.name ?? 'dsh_bot', 'assistant', `（发了说说：${String(text).slice(0, 60)}${images ? ' [配图]' : ''}）`)
       log(`[qzone] ✍️ 说说已发布${images ? '（配图）' : ''}：${String(text).slice(0, 40)}`)
     } catch (e) { logErr('[qzone] 自主说说失败：' + (e?.message ?? e)) }
   }
@@ -1706,7 +1706,7 @@ export async function run(argv = []) {
       spawn, log, logErr, checkNapcat, pollTasks, runDuePromises, warmQuoteIndex,
       tryQzone, tryProactive, tryGroupChat, brainTick,
       isBusy: () => brainConsolidating, setBusy: (v) => { brainConsolidating = !!v },
-      feiyuPath: () => path.join(FEiyuRoot(), 'tools', 'feiyu.mjs'),
+      botPath: () => path.join(FEiyuRoot(), 'tools', 'bot.mjs'),
       queued: () => { try { return Number(CHANNEL.snapshot()?.queuedTotal || 0) } catch { return 0 } },
     })
     log('[beat] ' + JSON.stringify(st))

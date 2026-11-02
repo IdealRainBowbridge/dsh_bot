@@ -28,9 +28,9 @@ const VOICES = [
   { name: 'mute', ref_audio_path: 'D:/GPT-SoVITS/models/mute/mute.wav', prompt_text: '', has_prompt: false },
 ]
 const RESPONSES = {
-  '/dsh-feiyu/api/config': { ok: true, config: CONFIG, voices: VOICES, configPath: 'C:/Users/x/.dsh/feiyu.config.json' },
-  '/dsh-feiyu/api/persona': { ok: true, text: '我是大肥鱼。' },
-  '/dsh-feiyu/api/memory': {
+  '/dsh_bot/api/config': { ok: true, config: CONFIG, voices: VOICES, configPath: 'C:/Users/x/.dsh/bot.config.json' },
+  '/dsh_bot/api/persona': { ok: true, text: '我是大肥鱼。' },
+  '/dsh_bot/api/memory': {
     ok: true,
     stats: { episodes: 12, lore: 3, facts: 4 },
     recent: [
@@ -38,12 +38,12 @@ const RESPONSES = {
       { role: 'assistant', text: '在的，主人。', chatId: 'qq:3082864371', platform: 'qq' },
     ],
   },
-  '/dsh-feiyu/api/status': {
+  '/dsh_bot/api/status': {
     ok: true, today: '2026-10-24', scheduler: { ok: true, reason: '已启动' },
     sharesToday: 1, sharesMax: 3, commentsToday: 4, mood: { value: 62, hunger: 12 },
-    dryRun: false, selftestPassed: true, ownerSet: true, configPath: 'C:/Users/x/.dsh/feiyu.config.json',
+    dryRun: false, selftestPassed: true, ownerSet: true, configPath: 'C:/Users/x/.dsh/bot.config.json',
   },
-  '/dsh-feiyu/api/services': { ok: true, services: { qq: { running: true, pid: 1234 }, wechat: { running: false, pid: null } } },
+  '/dsh_bot/api/services': { ok: true, services: { qq: { running: true, pid: 1234 }, wechat: { running: false, pid: null } } },
 }
 
 // ── 极小 React ────────────────────────────────────────────────────────────
@@ -178,7 +178,7 @@ assert.equal(switches.filter((n) => n.props.className.includes("on")).length, 2,
 const allSwitches = collect(tree, (n) => String(n.props.className || '').includes('fy-switch'))
 assert.equal(allSwitches.length, 22, "全页开关应为 22 个（抖音已移除，10-31）")
 
-assert.ok(fetchCalls.includes('/dsh-feiyu/api/config'), '没有请求 /config')
+assert.ok(fetchCalls.includes('/dsh_bot/api/config'), '没有请求 /config')
 assert.ok(styleTags.length >= 1, '样式没注入')
 
 console.log('client-render ✓  渲染通过：9 个区块 · 3 个平台开关 · 请求', fetchCalls.length, '次')

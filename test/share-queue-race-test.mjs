@@ -9,8 +9,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-sq-'))
-process.env.FEIYU_DATA_DIR = TMP
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-sq-'))
+process.env.BOT_DATA_DIR = TMP
 
 const SQ = await import('../tools/lib/share-queue.mjs')
 
@@ -29,7 +29,7 @@ fs.writeFileSync(QFILE, '[]')
 // v5：同样不能硬编码宿主机路径（容器里完全不同）
 const SQ_URL = new URL('../tools/lib/share-queue.mjs', import.meta.url).href
 const worker = `
-process.env.FEIYU_DATA_DIR = ${JSON.stringify(TMP)}
+process.env.BOT_DATA_DIR = ${JSON.stringify(TMP)}
 const { enqueue } = await import(${JSON.stringify(SQ_URL)})
 for (let i = 0; i < 5; i++) enqueue({ kind: 'race', title: 'w' + process.pid + '-' + i })
 `

@@ -10,9 +10,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-cfg-'))
-process.env.FEIYU_DATA_DIR = TMP
-process.env.FEIYU_CONFIG = path.join(TMP, 'feiyu.config.json')
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-cfg-'))
+process.env.BOT_DATA_DIR = TMP
+process.env.BOT_CONFIG = path.join(TMP, 'bot.config.json')
 
 const { DEFAULTS, config } = await import('../tools/lib/config.mjs')
 
@@ -40,7 +40,7 @@ assert.equal(typeof DEFAULTS.qq.inboundToken, 'string', 'qq.inboundToken 必须�
 assert.equal(DEFAULTS.qq.inboundToken, '', '默认空 token = 只允许本机回环（安全默认）')
 
 // ── 4. 配置合并：用户没写的键必须能从 DEFAULTS 拿到 ────────────────────────
-fs.writeFileSync(process.env.FEIYU_CONFIG, JSON.stringify({ qq: { enabled: true } }))
+fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({ qq: { enabled: true } }))
 const c = config()
 assert.equal(c.qq.enabled, true)
 assert.equal(c.qq.channel.debounceMs, DEFAULTS.qq.channel.debounceMs, '用户没写 channel，要能回落到默认')
@@ -48,7 +48,7 @@ assert.equal(c.guard.dryRun, true, 'dryRun 默认必须是 true（安全默认�
 assert.equal(c.platforms.qq, true, 'platforms 默认开（否则新装用户永远起不来）')
 
 // ── 5. 用户配置里的多余键不能"污染"默认值结构 ──────────────────────────────
-fs.writeFileSync(process.env.FEIYU_CONFIG, JSON.stringify({ qq: { enabled: true, 历史残留键: 1 }, platforms: { qq: false } }))
+fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({ qq: { enabled: true, 历史残留键: 1 }, platforms: { qq: false } }))
 const c2 = config()
 assert.equal(c2.qq.enabled, true)
 assert.equal(c2.platforms.qq, false)

@@ -5,14 +5,14 @@
 //   ② 片段时长和时间轴对不上（成片音画不同步，最难排查的那种）。
 // 所以这里用一条**带音轨的假成片**当素材：如果 output 里还有 audio 流，测试就该红。
 //
-// 隔离：USERPROFILE / DSH_HOME / FEIYU_CONFIG 全指到临时目录，绝不碰主人真的 ~/.feiyu-ai。
+// 隔离：USERPROFILE / DSH_HOME / BOT_CONFIG 全指到临时目录，绝不碰主人真的 ~/.bot-ai。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
 import assert from 'node:assert/strict'
 
-const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-wanvid-'))
+const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-wanvid-'))
 process.env.USERPROFILE = SANDBOX
 process.env.HOME = SANDBOX
 process.env.DSH_HOME = path.join(SANDBOX, '.dsh')
@@ -68,7 +68,7 @@ BASE = `http://127.0.0.1:${server.address().port}`
 
 // 配置：让它指向假服务器（key 随便，假服务器只认 Bearer 头在不在）
 fs.mkdirSync(path.join(SANDBOX, '.dsh'), { recursive: true })
-fs.writeFileSync(path.join(SANDBOX, '.dsh', 'feiyu.config.json'), JSON.stringify({
+fs.writeFileSync(path.join(SANDBOX, '.dsh', 'bot.config.json'), JSON.stringify({
   llm: { base_url: `${BASE}/compatible-mode/v1`, api_key: 'sk-fake-for-test', model: 'x' },
   video: { animate: { enabled: true, resolution: '720P', pollSec: 1, maxWaitSec: 30, retries: 0, pricePerSecond: 0.5 } },
 }))

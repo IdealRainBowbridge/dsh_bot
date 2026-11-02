@@ -3,17 +3,17 @@
 // 跑法：node test/memory-recall-test.mjs
 //
 // ⚠️ 隔离：路径模块在 **import 时**就把 HOME 定死了（paths.mjs: USERPROFILE || HOME || os.homedir()），
-// 而且要读 ~/.feiyu-ai 里的人都是这么解析的。所以必须在任何 import 之前把 USERPROFILE / DSH_HOME
+// 而且要读 ~/.bot-ai 里的人都是这么解析的。所以必须在任何 import 之前把 USERPROFILE / DSH_HOME
 // 指到临时目录 —— 否则测试会往她真实的记忆里写假数据（10-25 踩过一次，还误删了真实的行）。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-mem-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-mem-'))
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 process.env.DSH_HOME = path.join(tmp, '.dsh')
-fs.mkdirSync(path.join(tmp, '.feiyu-ai'), { recursive: true })
+fs.mkdirSync(path.join(tmp, '.bot-ai'), { recursive: true })
 
 const { normalizeMemoryText, hasPlaceholder } = await import('../tools/lib/normalize.mjs')
 const paths = await import('../tools/lib/paths.mjs')

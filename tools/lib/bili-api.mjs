@@ -1,7 +1,7 @@
 // B站 API 层：WBI 签名 + 24h 缓存 + 风控熔断 + 300ms 节流。
 // 复用 dsh-bili-whale 的 tools/lib/bili-api.mjs（MIT）的完整实现 ——
 // 这层是它被 B站 风控反复教育后的成果（缓存/退避/节流/playurl 的 -412 误伤判定），
-// 别自己另写一套 ✗。改动：数据路径 → ~/.feiyu-ai，环境变量 → FEIYU_NO_CACHE，
+// 别自己另写一套 ✗。改动：数据路径 → ~/.bot-ai，环境变量 → BOT_NO_CACHE，
 // 并为 feed 增加 search/type 的 WBI 映射。
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -80,8 +80,8 @@ const isNav = (url) => {
   return u.hostname === 'api.bilibili.com' && u.pathname === '/x/web-interface/nav'
 }
 
-// FEIYU_NO_CACHE=1 → 关掉缓存与熔断（测试/排障用）
-const noCacheEnv = () => process.env.FEIYU_NO_CACHE === '1'
+// BOT_NO_CACHE=1 → 关掉缓存与熔断（测试/排障用）
+const noCacheEnv = () => process.env.BOT_NO_CACHE === '1'
 
 let lastRequestAt = 0
 let requestQueue = Promise.resolve()

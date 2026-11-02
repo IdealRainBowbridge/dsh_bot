@@ -1,10 +1,10 @@
 // ledger —— 账本：今天吃了多少饭钱、还剩多少额度、钱包还能撑几天。
 //
-//   node feiyu.mjs ledger                # 人看的表格
-//   node feiyu.mjs ledger --days 14      # 多几天明细
-//   node feiyu.mjs ledger --json         # 原始数据（给程序读）
-//   node feiyu.mjs ledger --brief        # 一行摘要（提示语注入用）
-//   node feiyu.mjs ledger --fresh        # 不吃缓存，重扫会话日志
+//   node bot.mjs ledger                # 人看的表格
+//   node bot.mjs ledger --days 14      # 多几天明细
+//   node bot.mjs ledger --json         # 原始数据（给程序读）
+//   node bot.mjs ledger --brief        # 一行摘要（提示语注入用）
+//   node bot.mjs ledger --fresh        # 不吃缓存，重扫会话日志
 //
 // 她的用法（闭环的关键）：**她自己就能查**，不用问主人。
 import * as L from '../lib/ledger.mjs'

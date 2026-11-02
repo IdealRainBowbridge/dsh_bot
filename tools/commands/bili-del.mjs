@@ -1,5 +1,5 @@
 // bili-del —— 删除她自己的投稿（B站稿件）。归属：糖鲸大肥鱼的号，她管自己的稿。
-// 用法：node feiyu.mjs bili-del <BV号或aid> [--go]（默认干跑，--go 真删）
+// 用法：node bot.mjs bili-del <BV号或aid> [--go]（默认干跑，--go 真删）
 import { loadCred } from '../lib/cred.mjs'
 import { makeHeaders } from '../lib/bili-api.mjs'
 import * as W from '../lib/bili-write.mjs'

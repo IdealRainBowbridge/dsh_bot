@@ -1,7 +1,7 @@
 // sleep —— 睡眠：积累驱动的自我维护（整理 + 三审 + 优化增强），不是定时任务。
 // 什么时候睡由积累决定：记忆积压、事件积压、代码改动，加权成"睡意"0-100。
 // 睡 = 整理数据(巩固记忆) -> 三次全方位审查 -> 优化增强(git归档) -> 醒来。
-// 用法：node feiyu.mjs sleep check | sleep [--force]
+// 用法：node bot.mjs sleep check | sleep [--force]
 import fs from "node:fs"
 import path from "node:path"
 import { execFile } from "node:child_process"
@@ -36,7 +36,7 @@ const runCmd = async (cmd, args, opts) => {
  *
  * 两份算法同时活着，后果是：
  *   · 心跳用 night.assess() 判定"该睡了"（含睡眠债）
- *   · 而 `feiyu sleep` 命令用这份旧的（不含睡眠债）
+ *   · 而 `bot sleep` 命令用这份旧的（不含睡眠债）
  *   → 同一具身体，两个睡意数字。刚才实测就撞上了：
  *     sleep 说"睡意 100"，而 night.assess 说 34 —— 谁也不认谁。
  *
@@ -138,7 +138,7 @@ export async function sleepNow(opts = {}) {
   // ══════════════════════════════════════════════════════════════════════
   // 改前：`stage.sleep()` 只由 body.mjs 的 beginSleep 调。
   // 主链路（心跳决定睡 → spawn 这个命令）时没问题；
-  // 但**手动跑 `feiyu sleep`、或容器重启后补跑**时，sleepstage 里
+  // 但**手动跑 `bot sleep`、或容器重启后补跑**时，sleepstage 里
   // inSleep 是 false → 结束时 stage.wake() 直接返回 {sleptMin:0, resets:{note:'没在睡'}}
   // → 还债/脱敏/HPA 回落**全部不发生**，而报告照常打勾。
   //
@@ -220,7 +220,7 @@ export async function sleepNow(opts = {}) {
   //   · maintenance = N3/60  → 决定维护通道跑到哪一步（全量 / 只整理 / 跳过）
   //   · dream       = REM/35 → 决定梦境通道做几幕
   //
-  // 读不到 plan（老数据、或直接跑 `feiyu sleep`）时退回"按真实睡过的时长算"，
+  // 读不到 plan（老数据、或直接跑 `bot sleep`）时退回"按真实睡过的时长算"，
   // 再不行才用满额 —— 三级兜底，绝不因为读不到就什么都不做。
   let DEPTH = { maintenance: 1, dream: 1, source: "默认满额" }
   try {
@@ -275,7 +275,7 @@ export async function sleepNow(opts = {}) {
   const { execFile } = await import("node:child_process")
   const { promisify } = await import("node:util")
   const execFileAsync = promisify(execFile)
-  const FEIYU = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "feiyu.mjs")
+  const FEIYU = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "bot.mjs")
 
   const spawnJob = async (job) => {
     const t0 = Date.now()
@@ -391,7 +391,7 @@ export async function sleepNow(opts = {}) {
           const status = await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "status", "--porcelain"])
           if (status.trim()) {
             await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "add", "-A"])
-            await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "-c", "user.name=sleep", "-c", "user.email=sleep@feiyu", "commit", "-qm", "睡眠归档 " + stamp + "：" + String(note || '').slice(0, 60)])
+            await runCmd("git", ["-C", repo, "-c", "safe.directory=*", "-c", "user.name=sleep", "-c", "user.email=sleep@bot", "commit", "-qm", "睡眠归档 " + stamp + "：" + String(note || '').slice(0, 60)])
             done.push(repo)
           }
         } catch (e) { swallow(e, 'sleep:git-commit') }

@@ -33,7 +33,7 @@ import { swallow } from './swallow.mjs'
  * @param {Function} deps.brainTick
  * @param {Function} deps.isBusy    ()=>bool  整理子进程是否在跑
  * @param {Function} deps.setBusy   (bool)=>void
- * @param {Function} deps.feiyuPath ()=>string feiyu.mjs 的绝对路径
+ * @param {Function} deps.botPath ()=>string bot.mjs 的绝对路径
  * @param {Function} [deps.queued]  ()=>number 待处理消息数
  */
 export async function bindBody(deps) {
@@ -73,7 +73,7 @@ export async function bindBody(deps) {
         NIGHT.beginSleep({ reason: d.why, backlog: 0 })
         // 维护：整理/三审/归档，交给子进程（不钉住事件循环）
         const p = deps.spawn(process.execPath,
-          [deps.feiyuPath(), 'sleep', '--force'],
+          [deps.botPath(), 'sleep', '--force'],
           { detached: true, stdio: 'ignore', windowsHide: true })
         p.on('exit', () => deps.setBusy(false))
         p.on('error', () => deps.setBusy(false))
@@ -91,7 +91,7 @@ export async function bindBody(deps) {
       deps.setBusy(true)
       try {
         const p = deps.spawn(process.execPath,
-          [deps.feiyuPath(), 'brain', 'consolidate'],
+          [deps.botPath(), 'brain', 'consolidate'],
           { detached: true, stdio: 'ignore', windowsHide: true })
         p.on('exit', () => deps.setBusy(false))
         p.on('error', () => deps.setBusy(false))
@@ -112,7 +112,7 @@ export async function bindBody(deps) {
     //   假的执行器（说"我去写了"然后什么都不做）确实更糟。
     //   但**真的有东西可写**这件事早就成立了 —— 只是一直没人接线：
     //     · 日记命令 `diary --book private --append` 早就能用，
-    //       feiyu-diary-private.md 已经写了 13KB（她一直在写，只是在聊天时写）
+    //       bot-diary-private.md 已经写了 13KB（她一直在写，只是在聊天时写）
     //     · inner.mjs 里就攒着她"心里正转着的"念头（loudest/innerBlock）
     //     · field.sense() 给得出她此刻身体是什么样
     //     · segment/index.json 有她最近经历的事
@@ -213,7 +213,7 @@ async function composeAndWrite({ deps, d, book }) {
 
   // 真的写进日记文件（走已有的 diary 命令，不自己拼路径）
   const p = deps.spawn(process.execPath,
-    [deps.feiyuPath(), 'diary', '--book', book, '--append', text],
+    [deps.botPath(), 'diary', '--book', book, '--append', text],
     { stdio: 'ignore', windowsHide: true })
   p.on('error', () => { })
   return { chars: text.length, why: '素材：身体/念头/' + (recent ? '最近' : '仅身体') }

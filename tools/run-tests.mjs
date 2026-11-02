@@ -67,7 +67,7 @@ if (!picked.length) {
 }
 
 // 测试要用同一份"真 node"（Electron 主进程里 process.execPath 不是 node）
-const NODE = process.env.FEIYU_NODE || process.execPath
+const NODE = process.env.BOT_NODE || process.execPath
 let bad = 0
 for (const t of picked) {
   const file = path.join(HERE, '..', 'test', t)

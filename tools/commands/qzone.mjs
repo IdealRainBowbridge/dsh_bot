@@ -1,7 +1,7 @@
 // qzone —— 发 QQ 空间说说（NapCat 扩展 API send_qzone_msg）。
 // 不是标准 OneBot v11，是 NapCat 扩展；部分版本未暴露（调用会失败，看错误）。
 //
-//   node feiyu.mjs qzone --content "今天吃了三碗白饭…吧" [--image URL] [--permission 1]
+//   node bot.mjs qzone --content "今天吃了三碗白饭…吧" [--image URL] [--permission 1]
 //     permission: 1=所有人可见(默认) 4=好友可见 64=仅自己
 import { config } from '../lib/config.mjs'
 
@@ -13,11 +13,11 @@ function arg(argv, name) {
 export async function run(argv = []) {
   const cfg = config()
   const QQ = cfg.qq ?? {}
-  if (!QQ.enabled) { console.error('✗ qq.enabled=false —— 先在 feiyu.config.json 里开 QQ 开关'); process.exit(1) }
+  if (!QQ.enabled) { console.error('✗ qq.enabled=false —— 先在 bot.config.json 里开 QQ 开关'); process.exit(1) }
   const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
 
   const content = arg(argv, '--content') || argv.find(a => !a.startsWith('--')) || ''
-  if (!content) { console.error('用法：node feiyu.mjs qzone --content "…" [--image URL] [--permission 1|4|64]'); process.exit(2) }
+  if (!content) { console.error('用法：node bot.mjs qzone --content "…" [--image URL] [--permission 1|4|64]'); process.exit(2) }
 
   const images = argv.filter((a, i) => argv[i - 1] === '--image').map(s => s.trim()).filter(Boolean)
   const perm = Number(arg(argv, '--permission')) || 1

@@ -10,24 +10,24 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-mem-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-mem-'))
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 delete process.env.DSH_HOME
-const cfgPath = path.join(tmp, 'feiyu.config.json')
+const cfgPath = path.join(tmp, 'bot.config.json')
 fs.writeFileSync(cfgPath, JSON.stringify({
   identity: { name: '大肥鱼', ownerTitle: '主人', selfClaim: '我' },
   owner: { qq: '3082864371', name: '友利奈绪', mid: '3493288510228945' },
   llm: { api_key: 'x' },
 }))
-process.env.FEIYU_CONFIG = cfgPath
+process.env.BOT_CONFIG = cfgPath
 
 const memory = await import('../tools/lib/memory.mjs')
 const qqMemory = await import('../tools/lib/qq-memory.mjs')
 const persona = await import('../tools/lib/persona.mjs')
 
-// ⚠️ 2026-11-02：数据目录改名 .feiyu-ai → .data。
-//    这里原来写死 `path.join(tmp, '.feiyu-ai')` —— 测试自己造路径，
+// ⚠️ 2026-11-02：数据目录改名 .bot-ai → .data。
+//    这里原来写死 `path.join(tmp, '.bot-ai')` —— 测试自己造路径，
 //    而代码已经改读 .data，于是断言「应该有 episodes 文件」失败。
 //
 //    但**不能简单换成 '.data'** —— 那样下次再改名它还会挂。

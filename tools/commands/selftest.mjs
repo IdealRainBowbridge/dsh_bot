@@ -1,8 +1,8 @@
 // selftest —— 启动体检：装完立刻跑这一条（bili-whale 实战里"绝大多数人卡住的地方"）。
 // 检查：配置 / 凭据 / 格式 / 登录态（真打一次 nav）/ 数据目录可写 / 熔断状态 / ffmpeg（可选）。
-// 通过后写 ~/.feiyu-ai/selftest-passed.json，结尾打印"接下来要做的两件事"。
+// 通过后写 ~/.bot-ai/selftest-passed.json，结尾打印"接下来要做的两件事"。
 //
-//   node feiyu.mjs selftest [--json]
+//   node bot.mjs selftest [--json]
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -64,7 +64,7 @@ export async function run(argv = []) {
   // ④ 数据目录可写（记忆/账本/情绪都住这里）
   // 10-31：这一项以前只说"能不能写"，但最常见的失败是 **DSH 沙箱**而不是文件权限：
   //   宿主上 docker exec 跑 selftest 全绿，她自己的会话里却 EACCES —— 因为 DSH 的
-  //   workspace-write 只允许写 session.cwd（~/.dsh/feiyu-work），而记忆在 ~/.feiyu-ai。
+  //   workspace-write 只允许写 session.cwd（~/.dsh/bot-work），而记忆在 ~/.bot-ai。
   // 现在把原因写清楚，并告诉人怎么修（面板「修复记忆写入」或 session 权限设 danger-full-access）。
   try {
     fs.mkdirSync(dataPath(), { recursive: true })
@@ -78,7 +78,7 @@ export async function run(argv = []) {
     const hint = sandboxish
       ? (hasDsh
         ? ' —— 这是 DSH 文件沙箱（workspace-write 只允许写会话工作目录）；把 panel「修复记忆写入」点一下，或把该会话权限设成 danger-full-access'
-        : ' —— 文件权限问题：检查 ~/.feiyu-ai 的属主与 mode（应 700/600）')
+        : ' —— 文件权限问题：检查 ~/.bot-ai 的属主与 mode（应 700/600）')
       : ''
     add('数据目录', false, msg + hint)
   }
@@ -105,7 +105,7 @@ export async function run(argv = []) {
   const ownerOk = !!(cfg.owner?.mid && cfg.owner?.name)
   add('主人信息', ownerOk, ownerOk ? `${cfg.owner.name}（mid ${cfg.owner.mid}）—— 分享评论会 @ TA` : 'owner.mid / owner.name 没填 —— @ 不了人，务必补上')
 
-  // ⑩ 干跑状态（dafeiyu 铁律：第一周 DRY_RUN）
+  // ⑩ 干跑状态（dabot 铁律：第一周 DRY_RUN）
   add('风控模式', true, cfg.guard?.dryRun ? 'DRY_RUN 开着 ✓ —— 所有发送只打印不真发，观察满意后改 false' : '⚠️ DRY_RUN 已关 —— 真发了，注意额度与风控')
 
   // ── 可选平台依赖（不影响 B站核心体检；缺了 B站那条线照常用）─────────────
@@ -149,7 +149,7 @@ export async function run(argv = []) {
     const lib = emotionRefs()
     const keys = Object.keys(lib)
     if (!keys.length) {
-      add('情绪参考段', true, '还没建（可选：node feiyu.mjs voice emo build）—— 现在用默认音色 + 择优')
+      add('情绪参考段', true, '还没建（可选：node bot.mjs voice emo build）—— 现在用默认音色 + 择优')
     } else {
       const missing = keys.filter((k) => !lib[k]?.wav || !fs.existsSync(lib[k].wav))
       const flat = keys.filter((k) => Number(lib[k]?.sd) < 3.6)
@@ -223,7 +223,7 @@ export async function run(argv = []) {
     const st = S.stats(recs)
     const invisible = recs.filter((r) => !r.toOwner).length
     if (!st.length) {
-      add('B站社交记录', true, '流水还是空的（她还没在 B站 发过言；跑 feiyu social --backfill 可补历史台账）')
+      add('B站社交记录', true, '流水还是空的（她还没在 B站 发过言；跑 bot social --backfill 可补历史台账）')
     } else {
       const today = new Date().toLocaleDateString('sv-SE')
       const t = st.find((d) => d.day === today)
@@ -247,7 +247,7 @@ export async function run(argv = []) {
   console.log('')
   console.log('  ① 【找到她的会话】')
   console.log('     插件启动时会自动开一个会话，位置在：')
-  console.log('       左侧「工作区」→ 展开「未分组」→ 里面那个 feiyu')
+  console.log('       左侧「工作区」→ 展开「未分组」→ 里面那个 bot')
   console.log('     ⚠️ 不点开「未分组」是看不见它的 —— 这一步最容易漏')
   console.log('')
   console.log('  ② 【给她完全权限】')
@@ -256,7 +256,7 @@ export async function run(argv = []) {
   console.log('')
   if (cfg.guard?.dryRun) {
     console.log('  ③ 【观察一周再关 DRY_RUN】')
-    console.log('     feiyu.config.json → guard.dryRun: true → false 之后她才会真发评论')
+    console.log('     bot.config.json → guard.dryRun: true → false 之后她才会真发评论')
     console.log('')
   }
   process.exit(allOk ? 0 : 1)

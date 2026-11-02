@@ -7,8 +7,8 @@
 //         但同参数连合 8 条会在 3.5~5.2 之间抽奖，所以还要"多合几条按起伏挑最好"（prosody.mjs 打分）。
 //      L1 情绪标签：她的回复带 [[撒娇]] 这类标签 → 换成对应参数/参考段，标签本身不发给主人。
 //      L2 情绪参考段：参考音频的起伏就是输出的天花板（yinlang 4.78 → 输出 4.82；sunshine 3.45 → 输出 2.83），
-//         所以每种情绪准备一段"她自己的声音 + 有情绪的韵律"放在 ~/.feiyu-ai/voice-emo/，
-//         由 `node feiyu.mjs voice emo build` 生成（多合多条挑最活的一条当参考）。
+//         所以每种情绪准备一段"她自己的声音 + 有情绪的韵律"放在 ~/.bot-ai/voice-emo/，
+//         由 `node bot.mjs voice emo build` 生成（多合多条挑最活的一条当参考）。
 import fs from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
@@ -206,8 +206,8 @@ export function refPool(emotionKey, v = config().voice ?? {}, override = {}) {
   // 主参考不合格 → 换成她自己的情绪参考段（嗓子是同一个人，只是文本配得上音频）
   const fb = bestEmotionRef(emotionKey)
   if (fb) {
-    if (!globalThis.__feiyuRefWarned) {
-      globalThis.__feiyuRefWarned = true
+    if (!globalThis.__botRefWarned) {
+      globalThis.__botRefWarned = true
       console.warn('[tts] 这条参考段的文本配不上音频，已改用她的情绪参考段（嗓子不变）')
     }
     return [fb]

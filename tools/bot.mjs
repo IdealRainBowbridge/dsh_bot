@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// feiyu —— 大肥鱼·私享版 工具链总入口。
+// bot —— 大肥鱼·私享版 工具链总入口。
 // 结构仿 dsh-bili-whale 的 tools/bili.mjs：命令分发到 tools/commands/*.mjs。
 //
-//   node feiyu.mjs <命令> [参数]
+//   node bot.mjs <命令> [参数]
 // 常用：
-//   node feiyu.mjs selftest          # 装完立刻跑
-//   node feiyu.mjs nav               # 我是谁 / 登录验证
-//   node feiyu.mjs feed [--json]     # 选题 ≤5 条
-//   node feiyu.mjs debrief --bvid BV1xx   # 看懂一条
-//   node feiyu.mjs comment --share --bvid BV1xx --message "…" --reason "…" --score 15 --rank 1   # 干跑；--go 真发
-//   node feiyu.mjs quota show        # 今天额度
-//   node feiyu.mjs diary --book owner --append "…"   # 写日记
-//   node feiyu.mjs mem stats         # 记忆库
+//   node bot.mjs selftest          # 装完立刻跑
+//   node bot.mjs nav               # 我是谁 / 登录验证
+//   node bot.mjs feed [--json]     # 选题 ≤5 条
+//   node bot.mjs debrief --bvid BV1xx   # 看懂一条
+//   node bot.mjs comment --share --bvid BV1xx --message "…" --reason "…" --score 15 --rank 1   # 干跑；--go 真发
+//   node bot.mjs quota show        # 今天额度
+//   node bot.mjs diary --book owner --append "…"   # 写日记
+//   node bot.mjs mem stats         # 记忆库
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -68,7 +68,7 @@ const cmd = process.argv[2]
 if (!cmd || !(cmd in COMMANDS)) {
   console.log('大肥鱼·私享版 v' + (JSON.parse(await import('node:fs').then(m => m.readFileSync(path.join(HERE, '..', 'package.json'), 'utf8')))).version)
   console.log('')
-  console.log('用法：node feiyu.mjs <命令> [参数]')
+  console.log('用法：node bot.mjs <命令> [参数]')
   for (const [name, desc] of Object.entries(COMMANDS)) console.log(`  ${name.padEnd(10)} ${desc}`)
   process.exit(cmd ? 1 : 0)
 }

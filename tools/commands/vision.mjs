@@ -1,7 +1,7 @@
 // vision —— 视觉理解探针：拿一张/几张图问多模态模型（provider 配齐才启用）。
 // 用户填好 vision 配置后，先用这里验通再开 watch 采样。
 //
-//   node feiyu.mjs vision --image <图片路径> [--query "图里有什么"]
+//   node bot.mjs vision --image <图片路径> [--query "图里有什么"]
 import path from 'node:path'
 import { visionOn, visionCfg, describeFrames } from '../lib/vision.mjs'
 
@@ -23,7 +23,7 @@ export async function run(argv = []) {
     const img = arg(argv, '--image')
     if (!img) { console.log('用法：vision probe --image <图片路径> [--query "问题"]'); process.exit(2) }
     if (!visionOn()) {
-      console.error('✗ 视觉未启用：先在 feiyu.config.json 配 vision.provider/base_url/model/api_key（见 config.mjs DEFAULTS 注释）')
+      console.error('✗ 视觉未启用：先在 bot.config.json 配 vision.provider/base_url/model/api_key（见 config.mjs DEFAULTS 注释）')
       process.exit(1)
     }
     console.log('👁 描述中…')

@@ -48,14 +48,14 @@ globalThis.document = {
 require(clientPath)
 
 assert.ok(loaded, 'client.js 没有调用 window.__ModuleLoader__.load')
-assert.equal(loaded.id, 'dsh-feiyu', '模块 id 必须是包名 dsh-feiyu')
+assert.equal(loaded.id, 'dsh_bot', '模块 id 必须是包名 dsh_bot')
 
 const mod = loaded.factory((name) => {
   if (name === 'react') return reactStub
   throw new Error('未预期的 require：' + name)
 })
 
-assert.equal(mod.name, 'dsh-feiyu')
+assert.equal(mod.name, 'dsh_bot')
 assert.deepEqual(mod.inject, ['slots'], 'inject 只要 slots（不要再加不存在的服务）')
 assert.equal(typeof mod.apply, 'function')
 
@@ -79,7 +79,7 @@ assert.equal(registered.length, 1, '应该只注册一个槽位')
 
 const { spec, Component } = registered[0]
 assert.equal(spec.name, 'settings.section')
-assert.equal(spec.id, 'dsh-feiyu', '二建插件的槽位 id 必须全局唯一')
+assert.equal(spec.id, 'dsh_bot', '二建插件的槽位 id 必须全局唯一')
 assert.equal(typeof spec.label, 'function')
 assert.equal(spec.label(), '大肥鱼')
 assert.equal(typeof spec.order, 'number')

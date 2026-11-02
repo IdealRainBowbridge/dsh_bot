@@ -3,12 +3,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-brain-prompt-'))
-process.env.FEIYU_DATA_DIR = tmp
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-brain-prompt-'))
+process.env.BOT_DATA_DIR = tmp
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 process.env.DSH_HOME = path.join(tmp, '.dsh')
-process.env.FEIYU_BRAIN_MIRROR = '0'
+process.env.BOT_BRAIN_MIRROR = '0'
 
 let bad = 0
 const ok = (name, pass, detail = '') => {

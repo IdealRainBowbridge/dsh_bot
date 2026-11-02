@@ -1,5 +1,5 @@
 // imggen 离线测试 —— 不出网：prompt 兜底 / 图片魔数校验 / 额度账本 / 标签图上限清理。
-// 真正的出网生成用实机命令验：node feiyu.mjs sticker gen "本鱼饿了" --tag 生气
+// 真正的出网生成用实机命令验：node bot.mjs sticker gen "本鱼饿了" --tag 生气
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'

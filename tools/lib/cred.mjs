@@ -1,5 +1,5 @@
 // 凭据的共用层。
-// 复用 dsh-bili-whale 的 tools/lib/cred.mjs（MIT）的设计与错误码翻译，路径改为 ~/.feiyu-ai。
+// 复用 dsh-bili-whale 的 tools/lib/cred.mjs（MIT）的设计与错误码翻译，路径改为 ~/.bot-ai。
 // ① 读凭据统一 trim ② 缺字段说缺哪个 ③ 把常见错误码翻译成人话（-101/-111/12015/10031/12051/-352）
 import fs from 'node:fs'
 import { credentialsPath } from './paths.mjs'

@@ -4,9 +4,9 @@
 // 之前她只有一个 42 条的命令列表，没有任何读文件的能力 ——
 // 你让她改某处，她只能凭想象编，改出来的东西必然对不上。
 //
-//   node feiyu.mjs selfsrc tree                    # 项目结构
-//   node feiyu.mjs selfsrc grep <关键词> [--dir tools]  # 搜代码
-//   node feiyu.mjs selfsrc read <相对路径> [--from 1 --lines 120]   # 读一段
+//   node bot.mjs selfsrc tree                    # 项目结构
+//   node bot.mjs selfsrc grep <关键词> [--dir tools]  # 搜代码
+//   node bot.mjs selfsrc read <相对路径> [--from 1 --lines 120]   # 读一段
 //
 // 只读，不写。写仍然走 selfmod 的审批链。
 import fs from 'node:fs'

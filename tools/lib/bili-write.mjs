@@ -429,7 +429,7 @@ export async function postReply(bvid, rootRpid, parentRpid, rawMessage, { go = f
 // 以前 B站 只有「别人回复了我的评论」这一条被动路径，自己作品下的评论根本没人管。
 /** 我自己的投稿（最近 N 个）。三路来源，从最稳到最容易风控：
  *   ① config.bilibili.ownBvids（主人手填，永远最准）
- *   ② 本地产出记录：~/.feiyu-ai/bili-debut.json 的 bvid + bili-posts/*​/bvid.txt
+ *   ② 本地产出记录：~/.bot-ai/bili-debut.json 的 bvid + bili-posts/*​/bvid.txt
  *   ③ /x/space/wbi/arc/search（WBI 签名空间接口，最容易被 412 挡；失败就静默退回）
  * 为什么要有 ②（10-27 实测）：space 接口对脚本很凶，第一次试就吃了 HTTP 412 并被熔断 5 分钟 ——
  * 为了读个投稿列表把整个 B站 通道堵住不值得。本地记过的 bvid 一样能查评论（走 /x/v2/reply 不限流）。

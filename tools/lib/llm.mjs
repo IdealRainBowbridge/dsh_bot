@@ -1,4 +1,4 @@
-// LLM 直连客户端 —— 移植 dafeiyu brain/llm.py（requests → fetch）。
+// LLM 直连客户端 —— 移植 dabot brain/llm.py（requests → fetch）。
 // QQ/抖音的实时响应用：直连 OpenAI 兼容端点，按 token 计费。
 // 与 B站那套「塞回 DSH 会话」是两条路：那边零费但慢，这边快但按量付费。
 //

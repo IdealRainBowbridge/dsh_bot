@@ -4,13 +4,13 @@
 // "片子出来了但音画不同步"这种最难发现的毛病，所以这里把算术和真实渲染都测一遍。
 //
 // 隔离：先把 USERPROFILE 指到临时目录，再动态 import —— social-log / debut 全写沙箱里，
-// 绝不碰主人真的 ~/.feiyu-ai。
+// 绝不碰主人真的 ~/.bot-ai。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 
-const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-social-'))
+const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-social-'))
 process.env.USERPROFILE = SANDBOX
 process.env.HOME = SANDBOX
 
@@ -340,8 +340,8 @@ await ok('produce：走视频引擎、有首条锁、不再自己拼 zoompan', (
   assert.doesNotMatch(s, /zoompan/, 'produce 里不该再出现 zoompan（都收到 video.mjs 了）')
 })
 
-await ok('命令表：produce + social 都在，且都导出 run（feiyu.mjs 只认 run）', () => {
-  const s = read('tools/feiyu.mjs')
+await ok('命令表：produce + social 都在，且都导出 run（bot.mjs 只认 run）', () => {
+  const s = read('tools/bot.mjs')
   assert.match(s, /produce:/)
   assert.match(s, /social:/)
   const sp = read('tools/commands/social.mjs')

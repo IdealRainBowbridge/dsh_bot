@@ -2,17 +2,17 @@
 //
 // 灵感来自 dsh-world 的 src/life/alarm.ts：她说完"我先读到几点"，到点再决定继续还是换一件。
 // 我们的自由唤醒原来是固定间隔 + 概率（还会摇空一整轮），本质是**没让她表达意愿**。
-// 现在她可以说：`node feiyu.mjs selfwake 23:40 --note "把那篇小说收尾"`，
+// 现在她可以说：`node bot.mjs selfwake 23:40 --note "把那篇小说收尾"`，
 // 调度器（lib/scheduler.js freedomTick）到点会真的把她叫起来，优先于概率。
 //
-//   node feiyu.mjs selfwake 23:40 [--note "…"]   定时间（HH:MM，跨天自动算明天）
-//   node feiyu.mjs selfwake --show               看现在定的几点
-//   node feiyu.mjs selfwake --clear              取消
+//   node bot.mjs selfwake 23:40 [--note "…"]   定时间（HH:MM，跨天自动算明天）
+//   node bot.mjs selfwake --show               看现在定的几点
+//   node bot.mjs selfwake --clear              取消
 import fs from 'node:fs'
 import path from 'node:path'
 import { homePath } from '../lib/paths.mjs'
 
-const FILE = () => path.join(process.env.DSH_HOME || homePath('.dsh'), 'feiyu-next-wake.json')
+const FILE = () => path.join(process.env.DSH_HOME || homePath('.dsh'), 'bot-next-wake.json')
 const pad = (n) => String(n).padStart(2, '0')
 
 function readIt() {
@@ -40,7 +40,7 @@ export function run(argv = []) {
     return
   }
   const spec = argv.find(a => /^\d{1,2}[:：]\d{2}$/.test(a))
-  if (!spec) { console.error('用法：node feiyu.mjs selfwake 23:40 [--note "…"] ｜ --show ｜ --clear'); process.exit(2) }
+  if (!spec) { console.error('用法：node bot.mjs selfwake 23:40 [--note "…"] ｜ --show ｜ --clear'); process.exit(2) }
   const [hh, mm] = spec.replace('：', ':').split(':').map(Number)
   if (hh > 23 || mm > 59) { console.error('✗ 时间不合法（HH:MM，0-23 / 0-59）'); process.exit(2) }
   const now = new Date()

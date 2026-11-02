@@ -115,14 +115,14 @@ export const CHAT_TOOLS = [
   },
 ]
 
-/** 跑一条 feiyu CLI（限时、限输出）。 */
+/** 跑一条 bot CLI（限时、限输出）。 */
 async function runCli(args, timeoutMs = 60000) {
   const node = process.execPath
-  const cli = dshPath('..', 'plugins', 'dsh-feiyu', 'tools', 'feiyu.mjs')
+  const cli = dshPath('..', 'plugins', 'dsh_bot', 'tools', 'bot.mjs')
   // 用插件自身路径更稳
-  const FEIYU = process.env.FEIYU_CLI || '/home/feiyu/plugins/dsh-feiyu/tools/feiyu.mjs'
+  const BOT_CLI_PATH = process.env.BOT_CLI || new URL('../bot.mjs', import.meta.url).pathname
   try {
-    const r = await execFileAsync(node, [FEIYU, ...args], { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true })
+    const r = await execFileAsync(node, [BOT_CLI_PATH, ...args], { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true })
     return { ok: true, out: String(r.stdout || '').trim() }
   } catch (e) {
     return { ok: false, out: String(e?.stdout || '').trim(), err: String(e?.stderr || e?.message || '').slice(0, 400) }

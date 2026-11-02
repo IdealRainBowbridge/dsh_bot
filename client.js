@@ -1,5 +1,5 @@
 /**
- * dsh-feiyu —— 浏览器半边（DSH 原生设置页）
+ * dsh_bot —— 浏览器半边（DSH 原生设置页）
  *
  * 和 dsh-purge / 官方 dsh-client-ui-* 同一套契约：
  *   · 本文件由 dsh-client-modules 通过 package.json 的 exports["./client"] +
@@ -7,10 +7,10 @@
  *   · inject: ["slots"] —— 等 slots 服务就绪再 apply；
  *   · 只注册一个槽位 settings.section，于是「设置」左栏多出一行「大肥鱼」。
  *
- * 所有请求走同源 /dsh-feiyu/api/*，凭据由宿主会话自带，不需要任何 token。
+ * 所有请求走同源 /dsh_bot/api/*，凭据由宿主会话自带，不需要任何 token。
  */
 window.__ModuleLoader__.load({
-	id: "dsh-feiyu",
+	id: "dsh_bot",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -20,11 +20,11 @@ window.__ModuleLoader__.load({
 		const h = react.createElement;
 		const { useState, useEffect, useCallback, useRef } = react;
 
-		const name = "dsh-feiyu";
+		const name = "dsh_bot";
 		const inject = ["slots"];
 
 		// ── 接口层 ────────────────────────────────────────────────────────────
-		const API = "/dsh-feiyu/api";
+		const API = "/dsh_bot/api";
 
 		async function api(path, init) {
 			// 2026-11-02：门禁补扫 client.js 时抓到 —— 原来没有超时。后端卡住（比如 /services
@@ -147,11 +147,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 
 		function useStyles() {
 			useEffect(() => {
-				const id = "dsh-feiyu/client";
+				const id = "dsh_bot/client";
 				if (document.getElementById(id)) return undefined;
 				const tag = document.createElement("style");
 				tag.id = id;
-				tag.dataset.pluginCss = "dsh-feiyu/client";
+				tag.dataset.pluginCss = "dsh_bot/client";
 				tag.textContent = CSS;
 				document.head.appendChild(tag);
 				return () => { try { tag.remove() } catch { /* ignore */ } };
@@ -468,7 +468,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				return h("div", { className: "fy-panel" },
 					h("div", { className: "fy-notice err" }, "载入失败：" + error),
 					h("div", { className: "fy-hint" },
-						"确认插件已在 DSH 里加载（宿主半边 dsh-feiyu 活着），然后点这里重试。"),
+						"确认插件已在 DSH 里加载（宿主半边 dsh_bot 活着），然后点这里重试。"),
 					h("div", { className: "fy-row" }, h("button", { className: "fy-btn primary", onClick: load }, "重试")));
 			}
 
@@ -476,7 +476,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const schedulerOn = !!(status && status.scheduler && status.scheduler.ok);
 			// 通道是否真的通：进程活着不等于能收发
 			const napcatOk = !!(status && status.qqChannel && status.qqChannel.napcat && status.qqChannel.napcat.ok);
-			// 10-31：她的记忆在 ~/.feiyu-ai，不在 session workspace 里。preset 不是
+			// 10-31：她的记忆在 ~/.data，不在 session workspace 里。preset 不是
 			// danger-full-access 时，她写得进日记、写不进记忆 —— 且完全静默。
 			const perm = (status && status.permission) || null;
 			const permOk = !!(perm && perm.ok === true);
@@ -517,7 +517,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							h("span", { className: "fy-hint", style: { marginLeft: 6 } }, "说话音色在下面「音色」里，两套独立")),
 						h("div", { className: "fy-chip" + ((status && status.dryRun) ? "" : " bad") },
 							"干跑 ", h("b", null, (status && status.dryRun) ? "开（只演练）" : "关（真发）"))),
-					// 干跑总闸（10-25 补上 UI）：以前面板只能看不能改，改它必须手动编辑 feiyu.config.json
+					// 干跑总闸（10-25 补上 UI）：以前面板只能看不能改，改它必须手动编辑 bot.config.json
 					h(Row, { label: "干跑（总闸）" },
 						h(Switch, {
 							on: !!(status && status.dryRun),
@@ -538,7 +538,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							"QQ 进程 ", h("b", null, svc && svc.qq && svc.qq.running ? "在跑" : "没跑")),
 						h("div", { className: "fy-chip" + (beatFresh ? "" : " bad") },
 							"微信 ", h("b", null, beatAge === null ? "无心跳" : beatFresh ? beatAge + "s 前心跳 · " + (beat.state || "") : "心跳停了 " + beatAge + "s")),
-						h("div", { className: "fy-chip" + (permOk ? "" : " bad"), title: "她写记忆需要完全访问：记忆库在 ~/.feiyu-ai，不在会话工作目录里" },
+						h("div", { className: "fy-chip" + (permOk ? "" : " bad"), title: "她写记忆需要完全访问：记忆库在 ~/.data，不在会话工作目录里" },
 							"记忆写入 ", h("b", null, permOk ? "可写" : (perm && perm.ok === false ? "被沙箱拦住" : "未确认")))),
 					h("div", { className: "fy-row", style: { marginTop: 8, marginBottom: 0 } },
 						!napcatOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 260px" } },
@@ -546,7 +546,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(napcatQr.ageSec / 60)) + " 分钟前刚刷新，用手机 QQ 扫 " + (napcatQr.path || "网关目录里的 qrcode.png") + "。已开快速登录，正常只需要扫这一次。"
 								: "⚠️ QQ 网关（NapCat）不通：服务在跑，但收不到也发不出任何 QQ 消息。点右边按钮，UAC 点一次「是」即可；网关随 DSH 启停。") : null,
 						!permOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 300px", color: "#c0392b" } },
-							"⚠️ 记忆写入被 DSH 沙箱拦住：她能写日记（会话目录内），但写不进 ~/.feiyu-ai 的记忆（这一项完全静默）。点右边修复。") : null,
+							"⚠️ 记忆写入被 DSH 沙箱拦住：她能写日记（会话目录内），但写不进 ~/.data 的记忆（这一项完全静默）。点右边修复。") : null,
 						!permOk ? h("button", {
 							className: "fy-btn primary",
 							disabled: busy === "perm:fix",
@@ -932,7 +932,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							onChange: (e) => setDraft(Object.assign({}, draft, { dykRepliesMax: e.target.value })),
 							onBlur: () => save({ bilibili: { replies: { dailyMax: String(draft.dykRepliesMax).trim() === "" ? 10 : Math.max(0, Number(draft.dykRepliesMax) || 0) } } }, "回评日上限已保存（0 = 不限）"),
 						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，node feiyu.mjs replies（0 = 不限）")),
+						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，node bot.mjs replies（0 = 不限）")),
 					h(Row, { label: "鱼圈社交" },
 						h(Switch, {
 							on: draft.dykFish,
@@ -974,7 +974,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 									: (v ? "已放她出去：自由上网+B站自由刷在跑，会话按她的意愿被唤醒" : "已收回：自由上网和 B站自由刷已停"), errs.length > 0);
 							},
 						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "唤醒间隔/概率在 feiyu.config.json 的 freedom（默认 75 分钟 · 55%）"))),
+						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "唤醒间隔/概率在 bot.config.json 的 freedom（默认 75 分钟 · 55%）"))),
 
 // 上网与进化（给足自由度：她在网上瞎溜达/玩/学习/自我升级，全部有日志和备份）
 				h(Card, {
@@ -1009,7 +1009,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							label: "webSelfUp",
 							onChange: (v) => { setDraft(Object.assign({}, draft, { webSelfUp: v })); save({ web: { selfUpgrade: { enabled: v } } }, v ? "自我升级已开：改代码前强制备份，改完强制测试+日志" : "自我升级已关（只看只学不改）"); },
 						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "允许她改自己的代码（备份在 ~/.feiyu-ai/selfup-backups/）")),
+						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "允许她改自己的代码（备份在 ~/.data/selfup-backups/）")),
 					h(Row, { label: "人格进化" },
 						h(Switch, {
 							on: draft.evoOn,
@@ -1062,7 +1062,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 
 				// 页脚
 				h("div", { className: "fy-hint", style: { paddingLeft: 2 } },
-					"配置文件：", cfgPath || "~/.dsh/feiyu.config.json",
+					"配置文件：", cfgPath || "~/.dsh/bot.config.json",
 					"（面板改动即时写入，下次唤醒/重启生效）"));
 		}
 
@@ -1070,7 +1070,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		function apply(ctx) {
 			ctx.slots.inject("settings.section", () => ctx.slots.register({
 				name: "settings.section",
-				id: "dsh-feiyu",
+				id: "dsh_bot",
 				order: 460,
 				label: () => "大肥鱼",
 			}, FeiyuSection));

@@ -13,6 +13,21 @@ import { dataPath } from '../lib/paths.mjs'
 import { readJsonl } from '../brain/json.mjs'
 import { swallow } from '../lib/swallow.mjs'
 
+/**
+ * 本插件的命令行入口（tools/bot.mjs）的绝对路径。
+ *
+ * ⚠️ 2026-11-02：这里原来写死 '/home/bot/plugins/dsh_bot/tools/bot.mjs'。
+ *    插件改名 dsh_bot 之后那个路径不存在了，而外面的 catch 会把它当成
+ *    "这一步失败了" 记进去 —— 看起来像"探索做了但没成"，
+ *    实际是**路径根本没指对**。这类错很难从日志上看出来。
+ *
+ *    改成从本文件的相对位置推，跟插件装在哪无关。
+ */
+function BOT_CLI() {
+  return new URL('../bot.mjs', import.meta.url).pathname
+}
+
+
 const STATE = () => dataPath('wander-state.json')
 
 function readState() {
@@ -101,19 +116,19 @@ export async function doWander() {
 
   const results = []
   for (const step of idea.steps.slice(0, 3)) {
-    if (step.includes('feiyu.mjs')) {
+    if (step.includes('bot.mjs')) {
       try {
         const { execFile } = await import('node:child_process')
         const { promisify } = await import('node:util')
-        const cmd = step.replace(/^["']node["']?\s*/, '').match(/feiyu\.mjs\s*(.+)/)
+        const cmd = step.replace(/^["']node["']?\s*/, '').match(/bot\.mjs\s*(.+)/)
         if (cmd) {
           const args = cmd[1].trim().split(/\s+/)
           const { stdout } = await promisify(execFile)('node',
-            ['/home/feiyu/plugins/dsh-feiyu/tools/feiyu.mjs', ...args],
+            [BOT_CLI(), ...args],
             { timeout: 120000 })
           results.push({ step, ok: true, out: String(stdout).slice(0, 100) })
         } else {
-          results.push({ step, ok: false, out: 'not feiyu.mjs' })
+          results.push({ step, ok: false, out: 'not bot.mjs' })
         }
       } catch (e) { results.push({ step, ok: false, out: String(e.message).slice(0, 80) }) }
     } else {

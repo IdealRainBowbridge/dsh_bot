@@ -5,12 +5,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-brain-cons-'))
-process.env.FEIYU_DATA_DIR = tmp
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-brain-cons-'))
+process.env.BOT_DATA_DIR = tmp
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 process.env.DSH_HOME = path.join(tmp, '.dsh')
-process.env.FEIYU_BRAIN_MIRROR = '0'
+process.env.BOT_BRAIN_MIRROR = '0'
 
 let bad = 0
 const ok = (name, pass, detail = '') => {

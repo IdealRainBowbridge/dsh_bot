@@ -74,7 +74,7 @@ DSH (Electron 宿主)
 └── dsh-feiyu 插件（D:\dsh-feiyu）
     ├── lib\           ← 插件层（scheduler.js 的 freedomTick、persona 挂钩等），改完需重启 DSH
     └── tools\
-        ├── feiyu.mjs        CLI 入口
+        ├── bot.mjs        CLI 入口
         ├── commands\        qq-server.mjs / douyin-dm-server.mjs / binge.mjs / selfwake.mjs …
         └── lib\             memory.mjs（流水账+检索）/ persona.mjs（提示词装配）/
                              promises.mjs（承诺）/ owner-facts.mjs / qq-memory.mjs / mood.mjs …
@@ -129,7 +129,7 @@ Invoke-WebRequest 'http://127.0.0.1:8080/health' -UseBasicParsing
 
 # 重启 qq-server（先杀旧进程）
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ? { $_.CommandLine -match 'qq-server' } | % { Stop-Process -Id $_.ProcessId -Force }
-cmd /c "start /b "" ""$node"" D:\dsh-feiyu\tools\feiyu.mjs qq-server 8080 >> %USERPROFILE%\.feiyu-ai\qq-server.log 2>&1"
+cmd /c "start /b "" ""$node"" D:\dsh-feiyu\tools\bot.mjs qq-server 8080 >> %USERPROFILE%\.feiyu-ai\qq-server.log 2>&1"
 
 # 看状态
 node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.log(JSON.parse(fs.readFileSync(R+'promises.json','utf8')).items.map(x=>x.state+':'+x.what))"
@@ -229,7 +229,7 @@ node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.
 - `tools/lib/notify.mjs`：推送成功 → 记交付 + 发事件（"我刚说过"有账）。
 - `tools/commands/qq-server.mjs`：用户/她自己每条消息 `brain.onEvent`；装配 `brain.assembleFor(...) ?? buildMessages(...)`；出站前过声称闸；发出后 `brain.onSent`；60s 心跳（catchUp + 该巩固时**spawn 子进程**，不钉事件循环）；`/health` 带脑摘要；新增 `POST /event`、`POST /sent`。
 - `tools/commands/douyin-dm-server.mjs`：抖音私信同样进脑（`scope=private`）+ 交付记账。
-- `tools/commands/brain.mjs` + `tools/feiyu.mjs`：`feiyu brain …` 12 个子命令。
+- `tools/commands/brain.mjs` + `tools/bot.mjs`：`feiyu brain …` 12 个子命令。
 - `lib/index.js`：只读路由 `GET /dsh-feiyu/api/brain`（面板用，不调模型不写盘）。
 - `tools/run-tests.mjs`：注册 5 套脑测试，30 套全绿。
 

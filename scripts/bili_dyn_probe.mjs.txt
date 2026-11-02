@@ -8,14 +8,14 @@ const text = (process.argv[2] || '').trim() || '【潜水日志】测试'
 const useUI = process.argv.includes('--ui')
 
 // 临时 storage state：把 B站凭据转成 playwright storageState
-const cred = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.feiyu-ai', 'credentials.json'), 'utf8'))
+const cred = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.bot-ai', 'credentials.json'), 'utf8'))
 const cookies = [
   { name: 'SESSDATA', value: cred.sessdata, domain: '.bilibili.com', path: '/' },
   { name: 'bili_jct', value: cred.bili_jct, domain: '.bilibili.com', path: '/' },
   { name: 'buvid3', value: cred.buvid3, domain: '.bilibili.com', path: '/' },
   { name: 'DedeUserID', value: '3690984711915865', domain: '.bilibili.com', path: '/' },
 ]
-const stateFile = path.join(os.tmpdir(), 'feiyu-bili-state.json')
+const stateFile = path.join(os.tmpdir(), 'bot-bili-state.json')
 fs.writeFileSync(stateFile, JSON.stringify({ cookies }))
 
 const { chromium } = await import('playwright').catch(() => import('patchright'))

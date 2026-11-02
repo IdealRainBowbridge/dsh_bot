@@ -1,7 +1,7 @@
 // feed —— 选题：从热门 + 关键词搜索里筛一批候选。
 // 权重思路来自 bili-whale：偏好命中 + 弹幕密度，**不看播放量**（冷门但对的也可以看）。
 //
-//   node feiyu.mjs feed [--n 5] [--json]
+//   node bot.mjs feed [--n 5] [--json]
 import { apiGet, makeHeaders } from '../lib/bili-api.mjs'
 import { loadCred } from '../lib/cred.mjs'
 import { config } from '../lib/config.mjs'
@@ -159,5 +159,5 @@ export async function run(argv = []) {
     console.log(`   偏好：${v.why}`)
     console.log(`   BV：${v.bvid}\n`)
   }
-  console.log('下一步：挑 2–3 条深读 —— node feiyu.mjs debrief --bvid <BV>')
+  console.log('下一步：挑 2–3 条深读 —— node bot.mjs debrief --bvid <BV>')
 }

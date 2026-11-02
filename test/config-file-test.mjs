@@ -9,14 +9,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-cfgfile-'))
-process.env.FEIYU_DATA_DIR = TMP
-process.env.FEIYU_CONFIG = path.join(TMP, 'feiyu.config.json')
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-cfgfile-'))
+process.env.BOT_DATA_DIR = TMP
+process.env.BOT_CONFIG = path.join(TMP, 'bot.config.json')
 
 // 先落一个"很薄"的用户配置（模拟真实情况：只写了自己关心的几个键）
 // 注意：identity.name 的默认值**就是** '大肥鱼'，所以它会被 stripDefaults 剔掉 ——
 // 这是对的（读回来仍然是大肥鱼）。要验证"用户的值必须保留"，得用一个非默认值。
-fs.writeFileSync(process.env.FEIYU_CONFIG, JSON.stringify({
+fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({
   identity: { name: '大肥鱼', ownerTitle: '笨蛋老爸' },
   qq: { enabled: true },
 }))
@@ -34,11 +34,11 @@ assert.equal(cfg.qq.channel.debounceMs, DEFAULTS.qq.channel.debounceMs)
 assert.equal(cfg.qq.startWithDsh, false, 'startWithDsh 缺省必须是 false，不能 undefined')
 
 // ── 2. 写：默认值不许落盘 ───────────────────────────────────────────────────
-const before = JSON.parse(fs.readFileSync(process.env.FEIYU_CONFIG, 'utf8'))
+const before = JSON.parse(fs.readFileSync(process.env.BOT_CONFIG, 'utf8'))
 assert.equal('guard' in before, false, '写之前文件里本来就没有 guard')
 const r = cf.writeConfigFile(cfg)
 assert.equal(r.ok, true)
-const after = JSON.parse(fs.readFileSync(process.env.FEIYU_CONFIG, 'utf8'))
+const after = JSON.parse(fs.readFileSync(process.env.BOT_CONFIG, 'utf8'))
 assert.equal('guard' in after, false, '**默认值不许被写进配置文件**（否则以后升级默认值不再生效）')
 assert.equal(after.identity.ownerTitle, '笨蛋老爸', '用户改过的值必须保留')
 assert.equal('name' in (after.identity || {}), false, '与默认值相同的键会被剔掉（读回来仍然一样）')
@@ -52,12 +52,12 @@ assert.equal(reread.identity.ownerTitle, '笨蛋老爸')
 cfg.qq.voice_enabled = true          // 与默认值不同
 cfg.guard.dryRun = false             // 显式关掉干跑
 cf.writeConfigFile(cfg)
-const after2 = JSON.parse(fs.readFileSync(process.env.FEIYU_CONFIG, 'utf8'))
+const after2 = JSON.parse(fs.readFileSync(process.env.BOT_CONFIG, 'utf8'))
 assert.equal(after2.qq.voice_enabled, true, '非默认值必须写进去')
 assert.equal(after2.guard?.dryRun, false, '显式关掉必须写进去')
 
 // ── 4. 权限必须 600（里面有 token / api key） ──────────────────────────────
-const mode = fs.statSync(process.env.FEIYU_CONFIG).mode & 0o777
+const mode = fs.statSync(process.env.BOT_CONFIG).mode & 0o777
 assert.equal(mode, 0o600, '配置文件权限必须是 600（实际 ' + mode.toString(8) + '）')
 
 // ── 5. 原子写：写坏了不能留下半个文件 ───────────────────────────────────────
@@ -66,7 +66,7 @@ const circular = { qq: { enabled: true } }
 circular.self = circular
 const bad = cf.writeConfigFile(circular)
 assert.equal(bad.ok, false, '写入失败要返回 ok:false，不能假装成功')
-const still = JSON.parse(fs.readFileSync(process.env.FEIYU_CONFIG, 'utf8'))
+const still = JSON.parse(fs.readFileSync(process.env.BOT_CONFIG, 'utf8'))
 assert.equal(still.qq.voice_enabled, true, '**失败的写不能把原文件弄坏**')
 
 // ── 6. 只读内部标记：__hasUserFile 不许落盘 ────────────────────────────────
@@ -74,7 +74,7 @@ const withMark = cf.readConfigFile()
 withMark.__hasUserFile = true
 withMark.__whatever = 1
 cf.writeConfigFile(withMark)
-const after3 = JSON.parse(fs.readFileSync(process.env.FEIYU_CONFIG, 'utf8'))
+const after3 = JSON.parse(fs.readFileSync(process.env.BOT_CONFIG, 'utf8'))
 assert.equal('__hasUserFile' in after3, false, '__ 开头的内部标记不许落盘')
 
 // ── 7. 核心回归：config() 返回的对象**绝不能**污染 DEFAULTS ───────────────
@@ -83,7 +83,7 @@ assert.equal('__hasUserFile' in after3, false, '__ 开头的内部标记不许�
 // 这类 bug 只在"先跑过别的代码"时才复现，是最难查的一类。
 {
   // 先把配置文件清成"很薄"的一份，避免上一段写进去的 dryRun=false 干扰判定
-  fs.writeFileSync(process.env.FEIYU_CONFIG, JSON.stringify({ qq: { enabled: true } }))
+  fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({ qq: { enabled: true } }))
   const { config, DEFAULTS } = await import('../tools/lib/config.mjs')
   const c = config()
   assert.notEqual(c.guard, DEFAULTS.guard, 'config() 与 DEFAULTS 不许共享嵌套对象')

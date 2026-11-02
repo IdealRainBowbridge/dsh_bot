@@ -2,7 +2,7 @@
 // bili-whale 的六路（字幕/弹幕/热评/抽帧/封面/简介）这里先做四路文字路，
 // 抽帧（ffmpeg）留给 v0.2 —— 没有直链时绝不伪装成"已看完" ✓
 //
-//   node feiyu.mjs debrief --bvid BV1xxxx [--json]
+//   node bot.mjs debrief --bvid BV1xxxx [--json]
 import { apiGet, makeHeaders, reportWatch } from '../lib/bili-api.mjs'
 import { loadCred } from '../lib/cred.mjs'
 import { config } from '../lib/config.mjs'
@@ -36,7 +36,7 @@ function coherenceHint(titleIntro, lines) {
 export async function run(argv = []) {
   const bvid = arg(argv, '--bvid')
   const json = argv.includes('--json')
-  if (!bvid) { console.error('用法：node feiyu.mjs debrief --bvid BV1xxxx'); process.exit(2) }
+  if (!bvid) { console.error('用法：node bot.mjs debrief --bvid BV1xxxx'); process.exit(2) }
 
   const cred = loadCred()
   const H = makeHeaders(cred)
@@ -214,5 +214,5 @@ export async function run(argv = []) {
     console.log('')
   }
   console.log('—— 基于以上材料打分（0–20），不足 share.minScore 就是「这条不值得占主人一次注意力」，合法结果 ✓')
-  console.log('—— 可回复热评：node feiyu.mjs comment --bvid <bvid> --root <rpid> --parent <rpid> --message "回复内容" --go（会自动 @主人）')
+  console.log('—— 可回复热评：node bot.mjs comment --bvid <bvid> --root <rpid> --parent <rpid> --message "回复内容" --go（会自动 @主人）')
 }

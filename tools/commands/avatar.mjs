@@ -1,9 +1,9 @@
 // avatar —— 看自己（或老爸）的 QQ 头像（2026-11-02）
 //
-//   node feiyu.mjs avatar           # 看自己的头像 → 用视觉模型描述出来
-//   node feiyu.mjs avatar --owner   # 看主人的头像
-//   node feiyu.mjs avatar --refresh # 强制重新下载（换了头像时用）
-//   node feiyu.mjs avatar --path    # 只给文件路径，不调模型
+//   node bot.mjs avatar           # 看自己的头像 → 用视觉模型描述出来
+//   node bot.mjs avatar --owner   # 看主人的头像
+//   node bot.mjs avatar --refresh # 强制重新下载（换了头像时用）
+//   node bot.mjs avatar --path    # 只给文件路径，不调模型
 //
 // 她的用法：老爸问"你头像呢/你长什么样"→ 自己真看一眼再答，
 // 不要拿 persona.md 里那段文字描述当答案（那是设定，不一定等于挂出去的脸）。

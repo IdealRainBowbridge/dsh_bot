@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process'
 export function probeRuntime(file, env) {
   let dir
   try {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-node-'))
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-node-'))
     const proof = path.join(dir, 'proof')
     const r = spawnSync(file, ['-e', 'require("fs").writeFileSync(process.argv[1],process.versions.node)', proof],
       { env, stdio: 'ignore', windowsHide: true, timeout: 10000 })
@@ -41,5 +41,5 @@ export function resolveRuntime(dshHome, options = {}) {
     const nodeEnv = { ...env, ELECTRON_RUN_AS_NODE: '1' }
     if (probe(current, nodeEnv)) return { file: current, env: nodeEnv }
   }
-  throw Error('[feiyu] 找不到可执行脚本的 node 运行时，请设置 DSH_NODE 为真实 node 的绝对路径')
+  throw Error('[bot] 找不到可执行脚本的 node 运行时，请设置 DSH_NODE 为真实 node 的绝对路径')
 }

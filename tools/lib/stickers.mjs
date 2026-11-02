@@ -4,10 +4,10 @@
 //   1. 颜文字 / emoji   —— 哪儿都能用（评论也行）
 //   2. B站自带表情码     —— 评论区的"表情包"：写 [大笑] [doge] [吃瓜]，B站会渲染成图
 //   3. 图片表情          —— 只有 QQ/微信 能发：
-//        · [表情:开心]      → ~/.feiyu-ai/stickers/开心/ 里随机一张（AI 画好的那套）
+//        · [表情:开心]      → ~/.bot-ai/stickers/开心/ 里随机一张（AI 画好的那套）
 //        · [自制表情:困死了] → 当场用 PIL 画一张文字贴纸（不联网、不花额度）
 //
-// 图片目录：~/.feiyu-ai/stickers/<标签>/<任意名>.png|gif|webp
+// 图片目录：~/.bot-ai/stickers/<标签>/<任意名>.png|gif|webp
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -19,7 +19,7 @@ import { findPythonWith } from './python-runtime.mjs'
 import { renderSticker, available as stickerRendererAvailable } from './sticker-render.mjs'
 import { swallow } from './swallow.mjs'
 
-export const STICKER_DIR = homePath('.feiyu-ai', 'stickers')
+export const STICKER_DIR = homePath('.bot-ai', 'stickers')
 
 /** 内置兜底标签（文件夹空着也不影响 prompt 里出现这几个）。 */
 export const DEFAULT_TAGS = ['开心', '无语', '委屈', '生气', '困', '比心']
@@ -44,7 +44,7 @@ export const BILI_FACES = [
 ]
 
 // 完整名单（447 个）从 B站表情面板拉，缓存 24h；拉不到就用上面那 16 个
-const FACE_CACHE = homePath('.feiyu-ai', 'bili-faces.json')
+const FACE_CACHE = homePath('.bot-ai', 'bili-faces.json')
 
 /** 读缓存；过期或没有就返回 null。 */
 export function readFaceCache() {

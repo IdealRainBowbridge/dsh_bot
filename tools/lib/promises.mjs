@@ -128,7 +128,7 @@ export function add(text, opts = {}) {
   })
   // 镜像进脑的意图账本（v3 O7）：旧账本仍是执行者，这边只观察 —— S4 再换它当主人。
   try {
-    if (process.env.FEIYU_BRAIN_MIRROR !== '0') {
+    if (process.env.BOT_BRAIN_MIRROR !== '0') {
       brainIntents.create({
         kind: 'intent',
         object: item.what,

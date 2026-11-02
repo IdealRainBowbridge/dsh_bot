@@ -12,13 +12,19 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-// 先把 HOME 指到沙箱 —— 账本会读 ~/.feiyu-ai 下那几本，不能碰主人真实的
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-ledger-test-'))
+// 先把 HOME 指到沙箱 —— 账本会读数据目录下那几本，不能碰主人真实的
+//
+// ⚠️ 2026-11-02：数据目录改名 .bot-ai → .data。这里原来手写 `path.join(sandbox, '.bot-ai')`，
+//    改代码不换它会指向一个代码根本不用的目录 —— 测试**照样通过**
+//    （因为文件写不进去也读不到，断言碰巧都成立），但已经和真实行为脱节了。
+//    这类"测试绿着但测的不是那个东西"比红着更危险。
+//    改成问代码要：断言的是行为，不该复制一份路径常量。
+const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-ledger-test-'))
 process.env.DSH_HOME = path.join(sandbox, '.dsh')
 process.env.USERPROFILE = sandbox
 process.env.HOME = sandbox
 
-const DATA = path.join(sandbox, '.feiyu-ai')
+const { dataDir: DATA } = await import('../tools/lib/paths.mjs')
 fs.mkdirSync(DATA, { recursive: true })
 
 const L = await import('../tools/lib/ledger.mjs')
@@ -219,7 +225,7 @@ ok('readBrief 没缓存时返回 null', () => {
 })
 
 ok('writeBrief 缓存能读回，且行内带账本口径', async () => {
-  const prev = process.env.FEIYU_TEST_SKIP_LEDGER
+  const prev = process.env.BOT_TEST_SKIP_LEDGER
   void prev
   // 直接用 refreshBrief 会跑 python（1.5s）；这里模拟它落盘的那份结构
   const file = path.join(DATA, 'cache', 'ledger-brief.json')
@@ -248,7 +254,7 @@ ok('python 侧必须用 stream_reader 读穿多帧，不能用能"只解第一�
   assert.match(py, /stream_reader/)                       // DSH 日志每行一个 zstd 帧
   assert.doesNotMatch(py, /ZstdDecompressor\(\)\.decompress\(/)   // 只解第一帧 = 只拿到会话头
   assert.match(py, /session\.v\*\.jsonl\.zst/)            // 版本前缀要通配
-  // 她的主会话目录不叫 session-<uuid>（就叫 feiyu），用 session-* 过滤会漏掉她全部用量
+  // 她的主会话目录不叫 session-<uuid>（就叫 bot），用 session-* 过滤会漏掉她全部用量
   assert.doesNotMatch(py, /'session-\*'/)
 })
 
@@ -273,7 +279,7 @@ ok('唤醒提示里必须带上账本块，并告诉她"这账你自己能查"',
   const s = read('lib/scheduler.js')
   assert.match(s, /ledgerLines/)
   assert.match(s, /ledgerTick/)
-  // 提示语里得给出她真能敲的那条命令（形如 `… feiyu.mjs ledger`）
+  // 提示语里得给出她真能敲的那条命令（形如 `… bot.mjs ledger`）
   assert.match(s, /\$\{cli\} ledger/)
 })
 
@@ -294,8 +300,8 @@ ok('聊天提示里（QQ/微信/抖音私信）带账本，群聊不带', () => 
   assert.match(p, /readBrief\(\)/)
 })
 
-ok('命令表里有 ledger，且 run 导出对得上（feiyu.mjs 只认 run）', () => {
-  assert.match(read('tools/feiyu.mjs'), /ledger: '/)
+ok('命令表里有 ledger，且 run 导出对得上（bot.mjs 只认 run）', () => {
+  assert.match(read('tools/bot.mjs'), /ledger: '/)
   const c = read('tools/commands/ledger.mjs')
   assert.match(c, /export async function run\(/)
   assert.doesNotMatch(c, /export async function main\(/)
@@ -328,9 +334,9 @@ ok('唤醒提示：账本块按行渲染，且给出她能敲的那条命令', a
   }))
   const S = await import('../lib/scheduler.js')
   const cfg = { ledger: { enabled: true } }
-  const txt = S.wakePrompt({ action: 'look', maxVideos: 3 }, cfg, 'D:/x/tools/feiyu.mjs')
+  const txt = S.wakePrompt({ action: 'look', maxVideos: 3 }, cfg, 'D:/x/tools/bot.mjs')
   assert.match(txt, /【账本】今天吃了 1\.2 万 token/)
-  assert.match(txt, /feiyu\.mjs"? ledger/)          // 命令要给全（她有 shell，能自己敲）
+  assert.match(txt, /bot\.mjs"? ledger/)          // 命令要给全（她有 shell，能自己敲）
   assert.doesNotMatch(txt, /¥0\.03, /)              // 别被数组 join 成 ", …"
   const block = txt.split('【账本】')[1].split('\n').slice(0, 4)
   assert.ok(block.every((l) => !l.includes('], ')), '账本块里出现了数组字面量，说明漏了展开')

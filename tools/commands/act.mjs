@@ -1,12 +1,12 @@
 // act —— B站「活人感」动作统一入口（弹幕/动态/点赞/投币/图片评论/关注）。
 // 全部默认干跑，--go 才真发；真发还要过配置开关 + 日额度（bili-actions.json）。
 //
-//   node feiyu.mjs act danmaku --bvid BV1xx --text "…" [--at 42] [--go]
-//   node feiyu.mjs act dyn --text "…" [--go] | act dyn --auto [--go]
-//   node feiyu.mjs act like --bvid BV1xx [--go]
-//   node feiyu.mjs act coin --bvid BV1xx [--num 1] [--go]
-//   node feiyu.mjs act pic --bvid BV1xx --message "…" --image <路径> [--go]
-//   node feiyu.mjs act follow --bvid BV1xx [--go]        # 关注该视频的 UP
+//   node bot.mjs act danmaku --bvid BV1xx --text "…" [--at 42] [--go]
+//   node bot.mjs act dyn --text "…" [--go] | act dyn --auto [--go]
+//   node bot.mjs act like --bvid BV1xx [--go]
+//   node bot.mjs act coin --bvid BV1xx [--num 1] [--go]
+//   node bot.mjs act pic --bvid BV1xx --message "…" --image <路径> [--go]
+//   node bot.mjs act follow --bvid BV1xx [--go]        # 关注该视频的 UP
 import * as w from '../lib/bili-write.mjs'
 import { config } from '../lib/config.mjs'
 import * as memory from '../lib/memory.mjs'
@@ -79,5 +79,5 @@ export async function run(argv = []) {
     const r = await w.followUser(target, { go }); console.log(r.why || '?'); process.exit(r.ok ? 0 : 1)
   }
 
-  console.log('用法：act danmaku|dyn|like|coin|pic|follow …（见 feiyu.mjs 帮助）')
+  console.log('用法：act danmaku|dyn|like|coin|pic|follow …（见 bot.mjs 帮助）')
 }

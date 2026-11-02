@@ -1,8 +1,8 @@
 // sing —— 唱一首给主人听（命令行入口；QQ 里说"唱一首"也走同一管线）
-//   node feiyu.mjs sing ["主题"]                        # 原创（说唱/旋律）
-//   node feiyu.mjs sing cover "孙燕姿 天黑黑"           # 翻唱：搜源歌→分离→换她的声音→混伴奏
-//   node feiyu.mjs sing cover "天黑黑" --url <音频直链或本地路径>   # 指定源（不搜索）
-//   node feiyu.mjs sing songs                           # 看她学会了哪些歌（歌单）
+//   node bot.mjs sing ["主题"]                        # 原创（说唱/旋律）
+//   node bot.mjs sing cover "孙燕姿 天黑黑"           # 翻唱：搜源歌→分离→换她的声音→混伴奏
+//   node bot.mjs sing cover "天黑黑" --url <音频直链或本地路径>   # 指定源（不搜索）
+//   node bot.mjs sing songs                           # 看她学会了哪些歌（歌单）
 import { sing } from '../lib/sing.mjs'
 import { config } from '../lib/config.mjs'
 

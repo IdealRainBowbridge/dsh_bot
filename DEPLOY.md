@@ -146,7 +146,7 @@
 | 6. 发布 | **她不能自己发** —— 成片等你在面板点发布 | 设计如此 |
 
 ```bash
-node tools/feiyu.mjs produce ["主题"]     # 每天有额度（douyin.produce.dailyMax）
+node tools/bot.mjs produce ["主题"]     # 每天有额度（douyin.produce.dailyMax）
 ```
 
 ---
@@ -157,7 +157,7 @@ node tools/feiyu.mjs produce ["主题"]     # 每天有额度（douyin.produce.d
 |---|---|---|
 | 搜索引擎 | Bing（`cn.bing.com`）+ DuckDuckGo（`html.duckduckgo.com`） | 双源兜底，抓不到就换 |
 | 网页抓取 | `fetch` + 本地代理 | Clash `http://127.0.0.1:7897` |
-| 常驻进程 | `feiyu.mjs web roam`（`web.roam.enabled`） | 完全自由开着时死了自动拉起（60s） |
+| 常驻进程 | `bot.mjs web roam`（`web.roam.enabled`） | 完全自由开着时死了自动拉起（60s） |
 | 记忆 | 搜索/读页/写小说/自我升级 全部 `remember(platform=web)` | 面板可见、可作为她的"行为记忆" |
 
 ---
@@ -190,8 +190,8 @@ dsh plugin --profile desktop add "link:D:\dsh-feiyu"
 
 # 3) B站凭据
 #    浏览器 F12 拷贝 SESSDATA/bili_jct/buvid3 → POST /dsh-feiyu/api/cookie
-node tools/feiyu.mjs nav            # 验证登录态
-node tools/feiyu.mjs selftest       # 全量体检
+node tools/bot.mjs nav            # 验证登录态
+node tools/bot.mjs selftest       # 全量体检
 
 # 4) QQ
 #    装 QQNT 9.9.20+ → NapCat 注入（管理员）→ 面板点「启动 QQ 服务」
@@ -199,20 +199,20 @@ node tools/feiyu.mjs selftest       # 全量体检
 
 # 5) 抖音
 D:\social-auto-upload\.venv\Scripts\python.exe douyin_interact.py login
-node tools/feiyu.mjs douyin self     # 记下自己的 sec_uid
-node tools/feiyu.mjs douyin my-videos
+node tools/bot.mjs douyin self     # 记下自己的 sec_uid
+node tools/bot.mjs douyin my-videos
 
 # 6) 语音（可选）
 #    GPT-SoVITS 装好 → python api_v2.py（9880）→ 面板「音色」试听
-node tools/feiyu.mjs voice list
+node tools/bot.mjs voice list
 
 # 7) 唱歌（可选）
 #    RVC 装好 → assets/weights 放她的 .pth → 确认 ffmpeg/ffprobe 路径
-node tools/feiyu.mjs sing cover "天黑黑" --dry
+node tools/bot.mjs sing cover "天黑黑" --dry
 
 # 8) 生图 / 表情包（可选）
 #    硅基 key → imageGen.api_key；参考图 → ~/.feiyu-ai/sticker-ref.jpg
-node tools/feiyu.mjs sticker gen "本鱼饿了" --tag 开心
+node tools/bot.mjs sticker gen "本鱼饿了" --tag 开心
 
 # 9) 最后开自主行为
 #    面板：完全自由 ON、每日回顾 ON、主动搭话 ON、干跑 OFF
@@ -221,11 +221,11 @@ node tools/feiyu.mjs sticker gen "本鱼饿了" --tag 开心
 验证清单（一条条打勾即可）：
 
 ```powershell
-node tools/feiyu.mjs selftest                 # 全绿
+node tools/bot.mjs selftest                 # 全绿
 curl http://127.0.0.1:8080/health             # napcat.ok=true
 curl http://127.0.0.1:8095/health             # failStreak=0
-node tools/feiyu.mjs mem stats                # episodes/facts/lore 都有数
-node tools/feiyu.mjs mem recallall --chat qq:<你的号>   # 跨通道记忆块能装配出来
+node tools/bot.mjs mem stats                # episodes/facts/lore 都有数
+node tools/bot.mjs mem recallall --chat qq:<你的号>   # 跨通道记忆块能装配出来
 npm test                                      # 8 套测试全过
 ```
 

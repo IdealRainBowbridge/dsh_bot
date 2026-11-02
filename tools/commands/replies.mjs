@@ -5,8 +5,8 @@
 //    聊过的人记进 facts（鱼友名录），下次接得上。
 // 默认干跑；真发要 bilibili.replies.enabled + 日额度（bili-write 把关）。
 //
-//   node feiyu.mjs replies [--go] [--max 3]      # ⓪①② 一次跑完
-//   node feiyu.mjs replies --own-only            # 只回自己作品下面的评论
+//   node bot.mjs replies [--go] [--max 3]      # ⓪①② 一次跑完
+//   node bot.mjs replies --own-only            # 只回自己作品下面的评论
 import fs from 'node:fs'
 import { scanReplies, postReply, capOk, actStats, listOwnVideos, listCommentsOf, replyVisibility } from '../lib/bili-write.mjs'
 import { config } from '../lib/config.mjs'

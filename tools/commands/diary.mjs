@@ -1,9 +1,9 @@
 // diary —— 两本日记：给你的那本（有细节有情绪）+ 她自己的那本（不加滤镜）。
-// 写日记不可关 —— "今天不想看"也得写清楚为什么（dafeiyu 与 bili-whale 共同的坚持）。
+// 写日记不可关 —— "今天不想看"也得写清楚为什么（dabot 与 bili-whale 共同的坚持）。
 //
-//   node feiyu.mjs diary --book owner  --append "…"
-//   node feiyu.mjs diary --book owner  --show [--tail 20]
-//   node feiyu.mjs diary --path
+//   node bot.mjs diary --book owner  --append "…"
+//   node bot.mjs diary --book owner  --show [--tail 20]
+//   node bot.mjs diary --path
 import fs from 'node:fs'
 import { diaryPath, WORK_DIR } from '../lib/paths.mjs'
 

@@ -12,7 +12,7 @@ import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..')
-const FEIYU_MJS = path.join(ROOT, 'tools', 'feiyu.mjs')
+const BOT_MJS = path.join(ROOT, 'tools', 'bot.mjs')
 const SUP_FILE = () => dataPath('aux-supervisor.json')
 
 function readState() {
@@ -46,7 +46,7 @@ function spawnDetached(args, logName, env = {}) {
   const logPath = dataPath(logName)
   fs.mkdirSync(path.dirname(logPath), { recursive: true })
   const fd = fs.openSync(logPath, 'a')
-  const child = spawn(process.execPath, [FEIYU_MJS, ...args], {
+  const child = spawn(process.execPath, [BOT_MJS, ...args], {
     detached: true,
     windowsHide: true,
     stdio: ['ignore', fd, fd],
@@ -79,7 +79,7 @@ export async function ensureBiliOwnReply({ everyMin = 0 } = {}) {
   lastOwnScan.running = true
   try {
     const out = await new Promise((resolve) => {
-      const child = spawn(process.execPath, [FEIYU_MJS, 'replies', '--own-only', '--go', '--max', '2'], { windowsHide: true })
+      const child = spawn(process.execPath, [BOT_MJS, 'replies', '--own-only', '--go', '--max', '2'], { windowsHide: true })
       let buf = ''
       child.stdout.on('data', (d) => { buf += d.toString() })
       child.stderr.on('data', (d) => { buf += d.toString() })

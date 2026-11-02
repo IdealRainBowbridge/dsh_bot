@@ -1,8 +1,8 @@
 // onebot-file —— 把本地图片变成 OneBot 能发的 file 值（2026-11-02）
 //
-// 病根：以前直接传 `file:///home/feiyu/.feiyu-ai/stickers/xxx.jpg`。
+// 病根：以前直接传 `file:///home/bot/.bot-ai/stickers/xxx.jpg`。
 // 那是**容器内**路径，而真正的发送方 SnowLuma 跑在**宿主机**上 ——
-// 宿主上根本没有 /home/feiyu/...，于是：
+// 宿主上根本没有 /home/bot/...，于是：
 //   send_private_msg 返回 failed/100: EACCES: permission denied, stat '...'
 // 每次表情包都发不出去，日志里只留一句"表情结果：没发出去"，看着像额度问题。
 //

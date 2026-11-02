@@ -27,7 +27,7 @@ export function pythonPath() {
   const v = config().voice ?? {}
   if (v.python && fs.existsSync(v.python)) return v.python
   const p = findPythonWith(['numpy'])
-  return p.ok ? p.bin : (v.python || process.env.FEIYU_TTS_PYTHON || 'python3')
+  return p.ok ? p.bin : (v.python || process.env.BOT_TTS_PYTHON || 'python3')
 }
 
 /** 打分器现在能不能真用（diagnose 与 bestOf 都问这一句）。 */
@@ -54,7 +54,7 @@ export function available() {
 export function scoreWavs(items) {
   const list = (items || []).filter((i) => i && i.path)
   if (!list.length) return []
-  const payload = path.join(os.tmpdir(), `feiyu-prosody-${process.pid}-${Date.now()}.json`)
+  const payload = path.join(os.tmpdir(), `bot-prosody-${process.pid}-${Date.now()}.json`)
   try {
     fs.writeFileSync(payload, JSON.stringify({ items: list }), 'utf8')
     const out = execFileSync(pythonPath(), [SCRIPT, payload], {

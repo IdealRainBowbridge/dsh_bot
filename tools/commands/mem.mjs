@@ -1,10 +1,10 @@
-// mem —— 三层记忆的命令行入口（dafeiyu brain/memory.py 的用法移植）。
+// mem —— 三层记忆的命令行入口（dabot brain/memory.py 的用法移植）。
 //
-//   node feiyu.mjs mem remember --chat share --text "…" [--role user]
-//   node feiyu.mjs mem fact   --user owner --text "爱吃辣，周三加班"
-//   node feiyu.mjs mem lore    --tag origin --text "第一次见到主人是在下雨的下午"
-//   node feiyu.mjs mem recall  --query "上次说想养猫"
-//   node feiyu.mjs mem old | stats
+//   node bot.mjs mem remember --chat share --text "…" [--role user]
+//   node bot.mjs mem fact   --user owner --text "爱吃辣，周三加班"
+//   node bot.mjs mem lore    --tag origin --text "第一次见到主人是在下雨的下午"
+//   node bot.mjs mem recall  --query "上次说想养猫"
+//   node bot.mjs mem old | stats
 import * as memory from '../lib/memory.mjs'
 import { config } from '../lib/config.mjs'
 
@@ -15,7 +15,7 @@ function arg(argv, name) {
 
 export function run(argv = []) {
   const cmd = argv[0] ?? 'stats'
-  const self = config().identity?.name ?? 'feiyu'
+  const self = config().identity?.name ?? 'dsh_bot'
 
   if (cmd === 'remember') {
     memory.remember('bilibili', arg(argv, '--chat') || 'share', arg(argv, '--user') || 'owner',
@@ -47,7 +47,7 @@ export function run(argv = []) {
       parts.push(a)
     }
     const pattern = arg(argv, '--q') || arg(argv, '--query') || parts.join(' ')
-    if (!pattern) { console.error('用法：node feiyu.mjs mem grep "关键词" [--days 7] [--limit 30] [--role user|assistant]'); process.exit(2) }
+    if (!pattern) { console.error('用法：node bot.mjs mem grep "关键词" [--days 7] [--limit 30] [--role user|assistant]'); process.exit(2) }
     const hits = memory.grepEpisodes(pattern, {
       days: Number(arg(argv, '--days') || 0) || 0,
       limit: Number(arg(argv, '--limit') || 30) || 30,

@@ -44,7 +44,7 @@ function recordModel(name, pth, index) {
   writeRun(run)
 }
 
-/** 长任务日志：训练全程写 ~/.feiyu-ai/rvc/train-<name>.log，随时可翻。 */
+/** 长任务日志：训练全程写 ~/.bot-ai/rvc/train-<name>.log，随时可翻。 */
 function logFile(name) { return dataPath('rvc', `train-${name}.log`) }
 const stamp = () => new Date().toISOString().slice(11, 19)
 function appendLog(name, line) {
@@ -55,7 +55,7 @@ function appendLog(name, line) {
 function runRvc(args, { onLine } = {}) {
   return new Promise((resolve, reject) => {
     const root = RVC_ROOT()
-    const logPath = path.join(root, '.feiyu-run.log')
+    const logPath = path.join(root, '.bot-run.log')
     fs.appendFileSync(logPath, `\n$ ${args.join(' ')}\n`)
     // PYTHONPATH=仓库根：train/*.py 里 from infer.audio import ... 需要根目录在 sys.path
     // （webui 靠便携 runtime 的 .pth 才没炸，我们自己的 venv 得显式给）

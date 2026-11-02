@@ -18,7 +18,7 @@ import crypto from 'node:crypto'
 
 /** 取配置里的 token（支持环境变量覆盖，方便容器编排）。 */
 export function inboundToken(cfg) {
-  return String(process.env.FEIYU_INBOUND_TOKEN || cfg?.qq?.inboundToken || '')
+  return String(process.env.BOT_INBOUND_TOKEN || cfg?.qq?.inboundToken || '')
 }
 
 /**
@@ -68,7 +68,7 @@ function same(a, b) {
 function presented(req) {
   const auth = String(req?.headers?.authorization || '')
   if (/^Bearer\s+/i.test(auth)) return auth.replace(/^Bearer\s+/i, '').trim()
-  const h = req?.headers?.['x-feiyu-token']
+  const h = req?.headers?.['x-bot-token']
   if (h) return String(h).trim()
   try {
     const u = new URL(String(req?.url || ''), 'http://x')

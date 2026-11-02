@@ -30,7 +30,7 @@ dsh-feiyu/
 │   └── node-runtime.js     探测 DSH 自带 node
 ├── client.js               面板（13 张卡片，深合并镜像）
 ├── tools/                  工具链（spawn 真 node，改完即时生效）
-│   ├── feiyu.mjs           CLI 分发（26 命令）
+│   ├── bot.mjs           CLI 分发（26 命令）
 │   ├── commands/           act/bili-watch/comment/debrief/diary/douyin/douyin-dm-server/
 │   │                       feed/ledger/mem/nav/produce/qq-server/quota/qzone/replies/report/social/
 │   │                       review/selftest/selfup/sing/sticker/vision/voice/watch/web
@@ -357,7 +357,7 @@ locks/                  自由进程单实例锁
     - ④ **主人说过的话没人记**：`facts.json` 的 `owner` 桶是空的，所以她"永远不知道"他中午吃了烧鸭。新增 `tools/lib/owner-facts.mjs`：从他的话里抽 `food|doing|plan|mood|media` 五类事实（同 key 只留最新），`learnFromOwner()` 在每条 QQ 消息进来时调用；`promptBlock()` 渲染成【今天已经知道的事】（**"他自己说的，不用再问一遍"**）；`asksKnown(draft)` 在回复出门前做闸门 —— 命中"吃了吗/在干嘛"且已有事实 → 打回重写一次，仍命中就这轮不发（宁可不说，也不问第二遍）。
     - ⑤ **承诺没有账本**：她"这就去看《可塑性记忆》"说过 7 次、答应 5 次、执行 0 次。新增 `tools/lib/promises.mjs`：`extract/catchFromReply` 从她的回复里认出承诺（"这就/马上/明天…+看去读写查"、"答应/保证/一定"、"看完再讲"），带 `dueAt` 落盘 `promises.json`；`qq-server` 每次主动搭话前先跑 `dueNow()`，用 `binge` 真去看一集（`--go --json --promise <id>`），成了就 `done()`、没材料就 `fail()`（`tries≥2` 顺延 6h），并把结果写进这一条推送的上下文（`didLine`）；`promptBlock()` 让提示词里有【你欠着的事 · 现在就该做】/【你答应过、还没做的】/【这些你真没做成】（教她照实说做不到，不许再空口答应）。
     - ⑥ **没有"看番"这个能力**：`focus.mjs` 的活动表只有 web/bilibili/douyin，`watch.mjs`/`bili-watch.mjs` 只读标题和热评 —— 她**物理上无法**看完一集。新增 `tools/commands/binge.mjs`：`--search` 搜番、`--show/--bvid --ep N` 看一集、`--list` 查进度、`--go` 落记忆。材料优先级 **弹幕 > 官方字幕**：B站 番剧的 `subtitle` 轨串片率极高（实测看《可塑性记忆》EP1 拿到的是 ED 歌词和人 iPhone16 钢化膜测评），所以 `danmaku.length >= 40` 就**不信字幕轨**，改用弹幕（剥掉"前方高能/打卡/哈哈哈"噪声、去重、按长度取 160 条）+ 热评喂 LLM；LLM 返回 `{understood, plot, feel}`，`understood===true && plot` 且不含"看不到剧情"才算真看完。进度落 `~/.feiyu-ai/binge/<slug>.json`，`--go` 后 `memory.remember('bilibili', 'binge:<slug>', …)` 写进她的记忆。选片也修过三轮：第 1 集优先"标题写着 01/第1集"且时长 15~40 分；第 N 集只认"整部合集（>40 分且分 P ≥ N）"，凑不出就**老实退回第 1 集**并说清楚（不许拿"#14 苏醒"冒充第 2 集）；P1 直接用"正片"，别按标题匹配（"备份1" 里也含 1）。
-    - ⑦ **给她权限，不只给她命令**：`persona.mjs` 新增 `CAPABILITIES`（12 行，`binge/focus/debrief/web/mem/promises/diary/selfup/selfwake`）+ `capabilityBlock()`，明确写"跑法：`node D:/dsh-feiyu/tools/feiyu.mjs <命令>`"，以及**自我改造许可**（`selfup backup` → 改 `tools/` → 跑测试 → `selfup log` 留痕），并钉一句"做不到就照实说，不许只回一句'这就去看'"。
+    - ⑦ **给她权限，不只给她命令**：`persona.mjs` 新增 `CAPABILITIES`（12 行，`binge/focus/debrief/web/mem/promises/diary/selfup/selfwake`）+ `capabilityBlock()`，明确写"跑法：`node D:/dsh-feiyu/tools/bot.mjs <命令>`"，以及**自我改造许可**（`selfup backup` → 改 `tools/` → 跑测试 → `selfup log` 留痕），并钉一句"做不到就照实说，不许只回一句'这就去看'"。
     - ⑧ **别只让她记得欠着，也让她记得做成了**：`promises.promptBlock()` 多一块【你最近真做成的事】（12 小时内的 `done`，带结果摘要）—— 否则她只有"欠着的"这一个方向，就容易反复许同一个愿；有了这块她可以说"我今天看完了第一集"，而不是再许一遍。实测注入：`· 可塑性记忆：看完了《【4月】可塑性记忆 01【幻樱】》第 1 集`。
 - ⑨ **引用消息（10-27 第二批）**：主人报"她看不懂引用/看不见引用了哪条"。病根不是模型不会读引用，是**代码根本没取**——OneBot v11 的引用长这样：
     `message: [ {type:'reply', data:{id:'50854801'}}, {type:'text', data:{text:'这句啥意思'}} ]`
@@ -387,7 +387,7 @@ locks/                  自由进程单实例锁
     - 🩸 **最要紧的发现**：回评 API 返回 ok、rpid 也拿到了，但**匿名（不带 cookie）拉楼中楼是空的** —— B站 把低等级新号的评论挂成"仅自己可见"（`state=17`）。实测今天 27 条评论**匿名可见 0 条**，视频 `stat.reply` 一直是 2（没算她那两条回复）。验证方法很重要：拿**别人的**评论喂给同一个检查器，它说"可见" —— 说明不是检查器错了。所以新增 `replyVisibility()` + `replies --audit`（匿名视角体检）+ 发完自动核一眼 + `holdCheck` 自刹车（最近 3 条里 ≥2 条被挂就不发了，要发得 `--force`）。
     - 配置：`bilibili.replies = { enabled:true, dailyMax:5, ownWorks:true, ownMax:5, image:true, verifyAfterPost:true, holdCheck:true }`。原来 `dailyMax:0` 在代码里是"不限额"（`capOk` 对 0 返回 true），一天刷了 27 条评论 —— 这是账号信用的直接杀手，改成 5。
     - 账号侧的治理（主人要做的）：完善资料、绑定手机/实名、把等级抬上去；这期间**别刷评论量**，每天几条就够。她的评论会被审核放出来或一直挂着，`--audit` 随时能看
-    - 回归：`test/memory-hygiene-test.mjs`（22 条）锁死上面每一项 —— 饥饿封顶/按次衰减/心情不再被砍、`recallAll` 排掉 `kind:'push'`、ops 与干活流水不进价值观池、同主题刷屏折叠到 ≤2 条、事实抽取与"问第二遍"闸门、承诺落账/去重/终态、`focus` 认 `binge`、能力清单里每条命令都真在 `feiyu.mjs` 注册、网志钩子不再 `slice(-3)`。`tools/run-tests.mjs` 现为 **23 套全绿**。
+    - 回归：`test/memory-hygiene-test.mjs`（22 条）锁死上面每一项 —— 饥饿封顶/按次衰减/心情不再被砍、`recallAll` 排掉 `kind:'push'`、ops 与干活流水不进价值观池、同主题刷屏折叠到 ≤2 条、事实抽取与"问第二遍"闸门、承诺落账/去重/终态、`focus` 认 `binge`、能力清单里每条命令都真在 `bot.mjs` 注册、网志钩子不再 `slice(-3)`。`tools/run-tests.mjs` 现为 **23 套全绿**。
     - 端到端演练：`tools/drill-promise.mjs` —— 主人说"中午吃了烧鸭/在改插件/推荐看可塑性记忆"→ 事实落库并渲染成【今天已经知道的事】→ 她说"这就去看"自动落账 → 到点执行 `binge` → 真拿到第 1 集剧情（司回收老婆婆的 Giftia / 艾菈寿命只剩不到十年）→ 承诺 `done` → 写进记忆。首次跑还抓出 `--json` 输出前面带一行"→ 选了 BV…"导致 `JSON.parse` 炸的问题（已改成截取第一个 `{`）。
     - 配置新增：`mood={hungerCap:70,mealGain:7,decayPerTick:6,moodBase:62,hungryMoodPenalty:1}`、`binge={enabled:true,dailyMax:1,minEpisodeMin:15}`（日上限：一天一集是"真看"，一天十集是"刷数据"，`--force` 可破）。`qq.proactive` 收敛为 `{dailyMax:12,minGapMin:25,minQuietMin:20,chance:0.12,typeCooldownMin:120,similarityMax:0.32}`。
     - ⚠️ 副作用提醒：`config.mjs` 现在容忍 **UTF-8 BOM**（PowerShell `Set-Content -Encoding UTF8` 会写 BOM，曾导致整个 `feiyu.config.json` 静默回落默认值，连 LLM key 都丢了 → `binge` 报 `LLM HTTP 401`）。
@@ -482,10 +482,10 @@ git add -A && git -c user.name="baishuyue" -c user.email="206720720+baishuyue@us
 env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY git -c http.proxy=http://127.0.0.1:7897 -c http.sslBackend=openssl push origin main
 
 # 常用命令
-"$NODE" tools/feiyu.mjs selftest / voice models / sing songs / sing cover "歌名"
-"$NODE" tools/feiyu.mjs voice emo list / voice emo build [--force] / voice emo test [--emotion 撒娇]
-"$NODE" tools/feiyu.mjs produce "主题" / douyin engage / replies --go
-"$NODE" tools/feiyu.mjs web log / selfup status
+"$NODE" tools/bot.mjs selftest / voice models / sing songs / sing cover "歌名"
+"$NODE" tools/bot.mjs voice emo list / voice emo build [--force] / voice emo test [--emotion 撒娇]
+"$NODE" tools/bot.mjs produce "主题" / douyin engage / replies --go
+"$NODE" tools/bot.mjs web log / selfup status
 
 # 观察她
 web-log.md（上网）/ bili-outbox.md（B站发言）/ selfup-log.md（自我升级）

@@ -2,8 +2,8 @@
 // 链路：凭据 → 分享标尺（--share）→ 风控闸门（guard）→ 额度闸（quota）→ POST → 记账。
 // 撞到风控码（-352/-799/10031/12015/12051）→ 明确停手提示，别连发 ✗
 //
-//   node feiyu.mjs comment --bvid BV1xx --message "…" [--root rpid --parent rpid] [--go]
-//   node feiyu.mjs comment --share --bvid BV1xx --message "…" --reason "至少八字" --score 15 --rank 1 [--go]
+//   node bot.mjs comment --bvid BV1xx --message "…" [--root rpid --parent rpid] [--go]
+//   node bot.mjs comment --share --bvid BV1xx --message "…" --reason "至少八字" --score 15 --rank 1 [--go]
 //   不带 --go = 干跑：全链路检查但只打印要发什么，不 POST ✓
 import { apiGet, makeHeaders } from '../lib/bili-api.mjs'
 import { loadCred, missingForWrite, looksLikeJct, explainCode, HARD_STOP_CODES } from '../lib/cred.mjs'
@@ -37,7 +37,7 @@ export async function run(argv = []) {
   const go = argv.includes('--go')
 
   if (!bvid || !message) {
-    console.error('用法：node feiyu.mjs comment --bvid BV1xx --message "…" [--root rpid --parent rpid] [--share --reason … --score … --rank 1] [--go]')
+    console.error('用法：node bot.mjs comment --bvid BV1xx --message "…" [--root rpid --parent rpid] [--share --reason … --score … --rank 1] [--go]')
     process.exit(2)
   }
 
@@ -82,7 +82,7 @@ export async function run(argv = []) {
 
   // ⑤ 真发前闸门 1：DRY_RUN 总开关（只拦 --go 真发，不拦预览）
   if (cfg.guard?.dryRun) {
-    console.log('【DRY_RUN 拦截】未发送（把 feiyu.config.json 的 guard.dryRun 改 false 才真发）')
+    console.log('【DRY_RUN 拦截】未发送（把 bot.config.json 的 guard.dryRun 改 false 才真发）')
     console.log(`  视频：《${title}》(${bvid})`)
     console.log(`  本要发送：${message}`)
     return
@@ -133,7 +133,7 @@ export async function run(argv = []) {
   guard.commit(chatId, message)
   const quota = await import('./quota.mjs')
   quota.run(['record', '--type', isShare ? 'share' : 'reply', '--target', bvid, '--note', title.slice(0, 30)])
-  memory.remember('bilibili', chatId, cfg.identity?.name ?? 'feiyu', 'assistant', message)
+  memory.remember('bilibili', chatId, cfg.identity?.name ?? 'dsh_bot', 'assistant', message)
   try { const { recordBili } = await import('../lib/outbox.mjs'); recordBili({ kind: isShare ? '分享评论' : (root ? '回评' : '评论'), title, bvid, text: message }) } catch (e) { swallow(e, 'tools/commands/comment.mjs:136') }
   // 登记 rpid：回评论扫描（replies 命令）靠它找到这条评论下的新回复
   // 10-29：先分清两件事再记账 ——

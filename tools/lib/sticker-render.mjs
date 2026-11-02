@@ -28,7 +28,7 @@ const INK = '262A34'
  * 最后还会用 `fc-match :lang=zh` 兜底（有 fontconfig 就一定找得到）。
  */
 const FONTS = [
-  () => homePath('.feiyu-ai', 'fonts', 'NotoSansCJK.ttc'),          // 容器里拷进去的那份
+  () => homePath('.bot-ai', 'fonts', 'NotoSansCJK.ttc'),          // 容器里拷进去的那份
   () => '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',   // Debian/Ubuntu
   () => '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',        // Arch
   () => '/usr/share/fonts/noto-cjk/NotoSansCJK-Light.ttc',          // Arch（备用字重）
@@ -74,7 +74,7 @@ export function available() {
   if (!hasFfmpeg()) return { ok: false, why: 'ffmpeg 不可用' }
   if (!hasDrawtext()) return { ok: false, why: 'ffmpeg 没有 drawtext 滤镜（缺 libfreetype）' }
   const font = findFont()
-  if (!font) return { ok: false, why: '找不到中文字体（试过 ~/.feiyu-ai/fonts 与系统路径）' }
+  if (!font) return { ok: false, why: '找不到中文字体（试过 ~/.bot-ai/fonts 与系统路径）' }
   return { ok: true, font, why: '' }
 }
 

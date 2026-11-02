@@ -1,9 +1,9 @@
 // promises —— 命令行入口（她自己查账用）
 //
-//   node feiyu.mjs promises              # 全部（含已完成/失败）
-//   node feiyu.mjs promises --due        # 现在到点的
-//   node feiyu.mjs promises done p1abc "看完了第一集"
-//   node feiyu.mjs promises fail p1abc "这条没有字幕"
+//   node bot.mjs promises              # 全部（含已完成/失败）
+//   node bot.mjs promises --due        # 现在到点的
+//   node bot.mjs promises done p1abc "看完了第一集"
+//   node bot.mjs promises fail p1abc "这条没有字幕"
 import * as promises from '../lib/promises.mjs'
 
 export function run(argv = []) {

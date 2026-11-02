@@ -1,7 +1,7 @@
 // bili-watch —— 静默自助刷 B站一轮：feed → 深读 → LLM 生成 @评论 → 干跑/真发。
 // 复用现有 feed/debrief/comment 三个命令（子进程调用，不重写），不写日记、少打印，是"静默"。
 //
-//   node feiyu.mjs bili-watch [--max 2] [--dry]
+//   node bot.mjs bili-watch [--max 2] [--dry]
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -14,7 +14,7 @@ import { dataPath } from '../lib/paths.mjs'
 import { acquire } from '../lib/lock.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const FEIYU = path.join(HERE, '..', 'feiyu.mjs')
+const FEIYU = path.join(HERE, '..', 'bot.mjs')
 
 // 宿主 stdio:ignore 起进程，不打文件日志等于瞎 —— 出问题只能靠猜
 const LOG = dataPath('bili-watch.log')

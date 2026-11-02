@@ -1,5 +1,5 @@
 // vision 离线测试 —— 不出网：默认未启用不挡路 / dataUri 格式 / describeFrames 关闭时返回 null。
-// 实机点亮验证：填好 vision 配置后 node feiyu.mjs vision probe --image <图>
+// 实机点亮验证：填好 vision 配置后 node bot.mjs vision probe --image <图>
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'

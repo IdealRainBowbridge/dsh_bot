@@ -1,20 +1,20 @@
 // brain 命令 —— 脑的体检 / 检索 / 巩固 / 迁移 / 评测（v3 §12/§15）。
 //
-//   node tools/feiyu.mjs brain doctor              # 8 条不变量 + 数字
-//   node tools/feiyu.mjs brain stats
-//   node tools/feiyu.mjs brain recall "烧鸭"        # 看它现在能召回什么
-//   node tools/feiyu.mjs brain consolidate [--llm] [--dry]
-//   node tools/feiyu.mjs brain intents [--all]
-//   node tools/feiyu.mjs brain facts [--conflicts]
-//   node tools/feiyu.mjs brain migrate [owner|lore|all]
-//   node tools/feiyu.mjs brain eval [--calibrate]
-//   node tools/feiyu.mjs brain self [show|owner|narrative]
-//   node tools/feiyu.mjs brain emit "一句话" [--platform qq] [--role user|assistant]
-//   node tools/feiyu.mjs brain tick
-//   node tools/feiyu.mjs brain schema [--show]      # O6 图式（30 天 × 5 次才归纳）
-//   node tools/feiyu.mjs brain competence [--show]  # O13 能力自评（成功 3 次才算会）
-//   node tools/feiyu.mjs brain task [list|add|done|fail|history]  # 身体/工具协议
-//   node tools/feiyu.mjs brain backfill [N]         # 把旧 episodes.jsonl 导进脑
+//   node tools/bot.mjs brain doctor              # 8 条不变量 + 数字
+//   node tools/bot.mjs brain stats
+//   node tools/bot.mjs brain recall "烧鸭"        # 看它现在能召回什么
+//   node tools/bot.mjs brain consolidate [--llm] [--dry]
+//   node tools/bot.mjs brain intents [--all]
+//   node tools/bot.mjs brain facts [--conflicts]
+//   node tools/bot.mjs brain migrate [owner|lore|all]
+//   node tools/bot.mjs brain eval [--calibrate]
+//   node tools/bot.mjs brain self [show|owner|narrative]
+//   node tools/bot.mjs brain emit "一句话" [--platform qq] [--role user|assistant]
+//   node tools/bot.mjs brain tick
+//   node tools/bot.mjs brain schema [--show]      # O6 图式（30 天 × 5 次才归纳）
+//   node tools/bot.mjs brain competence [--show]  # O13 能力自评（成功 3 次才算会）
+//   node tools/bot.mjs brain task [list|add|done|fail|history]  # 身体/工具协议
+//   node tools/bot.mjs brain backfill [N]         # 把旧 episodes.jsonl 导进脑
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'
@@ -37,7 +37,7 @@ import * as competence from '../brain/competence.mjs'
 import * as tasks from '../brain/taskqueue.mjs'
 
 const has = (flag) => process.argv.includes(flag)
-// run(argv) 收到的是 feiyu.mjs 的 slice(3)：argv[0] 才是子命令，argv[1..] 是它的参数
+// run(argv) 收到的是 bot.mjs 的 slice(3)：argv[0] 才是子命令，argv[1..] 是它的参数
 let ARGV = []
 const rest = () => ARGV.slice(1).filter((a) => !a.startsWith('--'))
 
@@ -116,7 +116,7 @@ export async function run(argv = []) {
     return
   }
 
-  // 身体/工具协议：脑出任务、常驻体认领执行（node tools/feiyu.mjs brain task add binge -- --show X）
+  // 身体/工具协议：脑出任务、常驻体认领执行（node tools/bot.mjs brain task add binge -- --show X）
   if (sub === 'task') {
     const act = rest()[0] || 'list'
     if (act === 'add') {

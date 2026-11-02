@@ -1,8 +1,8 @@
 // produce —— 她的视频生产管线（第 17 轮升级：静图+旁白 → 真剪辑的片子）。
 //
-//   node feiyu.mjs produce ["主题"] [--platform bili|douyin] [--frames 1|2] [--bgm auto|none|<wav>] [--dry] [--no-video]
-//   node feiyu.mjs produce --debut-posted [BV号]      # 首条发出去了，解锁
-//   node feiyu.mjs produce --debut                     # 看首条锁的状态
+//   node bot.mjs produce ["主题"] [--platform bili|douyin] [--frames 1|2] [--bgm auto|none|<wav>] [--dry] [--no-video]
+//   node bot.mjs produce --debut-posted [BV号]      # 首条发出去了，解锁
+//   node bot.mjs produce --debut                     # 看首条锁的状态
 //
 // 一条片子怎么来的（细节在 tools/lib/video.mjs 顶上）：
 //   策划（她自己的兴趣/见闻 → 分镜+台词+她自己写的导演稿）→ 每幕生图 → 逐句 TTS 配音
@@ -700,7 +700,7 @@ export async function run(argv = []) {
   // ⑤ 首条锁：投稿包就绪 → ready（还没解锁，等主人点发布）
   if (lockedDebut) {
     debut.markReady({ title, dir })
-    console.log('🔒 首条投稿包已就绪：发布之后跑 `feiyu produce --debut-posted BV号` 才解锁（在那之前只能继续做自我介绍）')
+    console.log('🔒 首条投稿包已就绪：发布之后跑 `bot produce --debut-posted BV号` 才解锁（在那之前只能继续做自我介绍）')
   }
 
   try { fs.writeFileSync(capFile, JSON.stringify({ day: dayKey, count: (capState.day === dayKey ? Number(capState.count) : 0) + 1 })) } catch {}
@@ -748,7 +748,7 @@ export function renderPostDoc({ meta, plan, platform, cfg }) {
       '3. 简介末尾勾「自制」，转载/二创都不用勾',
       `4. 发布时间建议：${suggestSlot()}`,
       '',
-      meta.debut ? '> ⚠️ 这是**首条**：发完记得跑 `feiyu produce --debut-posted <BV号>` 解锁，之后想剪什么剪什么。' : '',
+      meta.debut ? '> ⚠️ 这是**首条**：发完记得跑 `bot produce --debut-posted <BV号>` 解锁，之后想剪什么剪什么。' : '',
       '',
       '## 台词稿',
       ...meta.scenes.map((l, i) => `${i + 1}. ${l}`),

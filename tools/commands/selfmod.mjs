@@ -1,8 +1,8 @@
 // selfmod —— 她想改自己时的提案入口（2026-11-02）
 //
-//   node feiyu.mjs selfmod list                     # 看有没有待批
-//   node feiyu.mjs selfmod propose <文件> <为什么> --from <新文件路径>
-//   node feiyu.mjs selfmod status                   # 最近改了什么
+//   node bot.mjs selfmod list                     # 看有没有待批
+//   node bot.mjs selfmod propose <文件> <为什么> --from <新文件路径>
+//   node bot.mjs selfmod status                   # 最近改了什么
 //
 // 她的用法：想改自己 → 先把新内容写成临时文件 → propose → 然后在 QQ 里跟老爸说
 // "我想改 XXX，你看行不行"。老爸回「改吧」才会真动手。

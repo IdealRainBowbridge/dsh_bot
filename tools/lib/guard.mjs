@@ -1,7 +1,7 @@
-// 风控闸门 —— dafeiyu 骨架 ops/guard.py 的 JS 移植。
+// 风控闸门 —— dabot 骨架 ops/guard.py 的 JS 移植。
 //
 // 所有外发消息都必须过这里：
-//   · DRY_RUN   默认开（第一周只打印不真发 —— dafeiyu 的铁律）
+//   · DRY_RUN   默认开（第一周只打印不真发 —— dabot 的铁律）
 //   · 清洗      banned 词（"作为AI"…）+ 剥 markdown
 //   · 限速      同一 chat 两条消息最小间隔
 //   · 去重      3-gram Jaccard 超阈值判复读，宁可沉默不刷屏
@@ -26,7 +26,7 @@ function writeJson(file, value) {
   if (!r.ok) { try { swallow(new Error('guard write failed: ' + file), 'guard:write') } catch { /* ignore */ } }
 }
 
-/** 3-gram 集合（dafeiyu guard.py _grams）。 */
+/** 3-gram 集合（dabot guard.py _grams）。 */
 export function grams(s, n = 3) {
   s = String(s ?? '').replace(/\s+/g, '')
   const out = new Set()
@@ -81,14 +81,14 @@ export function dryBlocked(cfg = config()) {
   return !!cfg.guard?.dryRun
 }
 
-export const DRY_WHY = '干跑（guard.dryRun 开着）：这次不真发 —— 想真发先把 feiyu.config.json 的 guard.dryRun 改成 false'
+export const DRY_WHY = '干跑（guard.dryRun 开着）：这次不真发 —— 想真发先把 bot.config.json 的 guard.dryRun 改成 false'
 
 /**
  * 统一判定入口（发送前）。
  * @returns {{ok: boolean, why: string}} ok=false 时 why 说明原因。
  */
 export function allow(chatId, text, cfg = config(), opts = {}) {
-  if (opts.checkDryRun !== false && cfg.guard?.dryRun) return { ok: false, why: `DRY_RUN（干跑：只打印不真发；确认没问题后把 feiyu.config.json 的 guard.dryRun 改 false）` }
+  if (opts.checkDryRun !== false && cfg.guard?.dryRun) return { ok: false, why: `DRY_RUN（干跑：只打印不真发；确认没问题后把 bot.config.json 的 guard.dryRun 改 false）` }
   const gap = Math.max(0, Number(cfg.guard?.minGapSec ?? 25))
   const at = readJson(SENT_AT, {})[chatId] ?? 0
   if (Date.now() - at < gap * 1000) return { ok: false, why: `间隔不足 ${gap}s` }

@@ -14,9 +14,9 @@
 //
 // 现在每个工序是一个独立进程：
 //
-//   node feiyu.mjs nightwork tidy       ← 整理（巩固记忆）
-//   node feiyu.mjs nightwork review     ← 审查（代码/脑/账本）
-//   node feiyu.mjs nightwork optimize   ← 优化 + 归档
+//   node bot.mjs nightwork tidy       ← 整理（巩固记忆）
+//   node bot.mjs nightwork review     ← 审查（代码/脑/账本）
+//   node bot.mjs nightwork optimize   ← 优化 + 归档
 //
 // 三个好处，都是"分工"的实质而不是形式：
 //   ① **失败隔离**：审查把进程跑崩，整理的结果已经落盘了，不会连带报废

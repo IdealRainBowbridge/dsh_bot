@@ -7,7 +7,7 @@
 // 为什么要有它：10-31 的事故里——
 //   · bili-watch.mjs 缺一对引号 → 解析期就死，整条链路不可用
 //   · produce.mjs 的自动投稿块粘错位置 → TDZ 崩溃，首条解锁命令失效
-//   · wander/dream 用了 dataPath('feiyu-ai/xxx') 双前缀 → 素材永远读不到，静默
+//   · wander/dream 用了 dataPath('bot-ai/xxx') 双前缀 → 素材永远读不到，静默
 //   · qq-server 引 '../lib/wander.mjs'（实际在 commands/）→ 每 60s 静默失败
 // 下面 5 条检查，每一条都能独立拦下上面至少一个事故。
 import { execFileSync } from 'node:child_process'
@@ -157,18 +157,18 @@ function checkSpecifiers(files) {
 function checkDataPathPrefix(files) {
   for (const f of files) {
     const src = stripComments(fs.readFileSync(f, 'utf8'))
-    const m = /dataPath\(\s*['"]feiyu-ai\//.exec(src)
+    const m = /dataPath\(\s*['"]bot-ai\//.exec(src)
     if (m) {
       const line = src.slice(0, m.index).split('\n').length
       push('dataPath 双前缀', `${rel(f)}:${line}`,
-        "dataPath 已指向 ~/.feiyu-ai，再拼 'feiyu-ai/' 会变成 ~/.feiyu-ai/feiyu-ai/…（读不到且静默）")
+        "dataPath 已指向 ~/.bot-ai，再拼 'bot-ai/' 会变成 ~/.bot-ai/bot-ai/…（读不到且静默）")
     }
   }
 }
 
 // ── 4. 命令注册表：只在 COMMANDS 对象字面量内取 key ─────────────────────────
 function checkCommandRegistry() {
-  const entry = path.join(ROOT, 'tools/feiyu.mjs')
+  const entry = path.join(ROOT, 'tools/bot.mjs')
   const cmdDir = path.join(ROOT, 'tools/commands')
   if (!fs.existsSync(entry) || !fs.existsSync(cmdDir)) { notes.push('跳过命令注册检查'); return }
   const src = fs.readFileSync(entry, 'utf8')
@@ -185,13 +185,13 @@ function checkCommandRegistry() {
   const declared = new Set([...body.matchAll(/^\s{2}(['"]?)([a-z][a-z0-9-]{1,30})\1\s*:/gm)].map((m) => m[2]))
   const files = fs.readdirSync(cmdDir).filter((n) => n.endsWith('.mjs')).map((n) => n.replace(/\.mjs$/, ''))
 
-  // 有文件却没注册 = 跑 feiyu <name> 会提示未知命令
+  // 有文件却没注册 = 跑 bot <name> 会提示未知命令
   for (const name of files) if (!declared.has(name)) {
     push('命令未注册', `tools/commands/${name}.mjs`, `COMMANDS 里没有 '${name}'`)
   }
   // 注册了却没文件 = 一定 500
   for (const name of declared) if (!files.includes(name)) {
-    push('注册但无文件', 'tools/feiyu.mjs', `声明了 '${name}' 但 tools/commands/${name}.mjs 不存在`)
+    push('注册但无文件', 'tools/bot.mjs', `声明了 '${name}' 但 tools/commands/${name}.mjs 不存在`)
   }
   notes.push(`命令注册表：${declared.size} 个已注册 / ${files.length} 个命令文件`)
 }
@@ -201,8 +201,8 @@ function checkPerms() {
   if (process.platform === 'win32') { notes.push('跳过权限检查（Windows）'); return }
   const HOME = process.env.USERPROFILE || process.env.HOME || ''
   const targets = [
-    [path.join(HOME, '.dsh/feiyu.config.json'), 0o600],
-    [path.join(HOME, '.feiyu-ai/credentials.json'), 0o600],
+    [path.join(HOME, '.dsh/bot.config.json'), 0o600],
+    [path.join(HOME, '.bot-ai/credentials.json'), 0o600],
   ]
   for (const [t, want] of targets) {
     if (!fs.existsSync(t)) continue

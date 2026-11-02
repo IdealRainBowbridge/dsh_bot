@@ -1,8 +1,8 @@
 // 统一配置层 —— 一个文件承载所有"属于使用者"的东西。
 // 设计来自 dsh-bili-whale 的 tools/lib/config.mjs（MIT），
-// 默认值融合 dafeiyu 骨架的 config.yaml（guard / preferences / 作息哲学）。
+// 默认值融合 dabot 骨架的 config.yaml（guard / preferences / 作息哲学）。
 //
-// 查找顺序：$FEIYU_CONFIG → ~/.dsh/feiyu.config.json → 内置默认值
+// 查找顺序：$BOT_CONFIG → ~/.dsh/bot.config.json → 内置默认值
 import fs from 'node:fs'
 import { configPath } from './paths.mjs'
 
@@ -10,7 +10,7 @@ export { configPath } from './paths.mjs'
 
 /** 中性默认值：换个账号也能跑；所有"个人化"的东西请写进配置文件。 */
 export const DEFAULTS = {
-  // 身份三件套（拼成一行注入提示）+ 专属人设文件（~/.feiyu-ai/persona.md，优先级更高）
+  // 身份三件套（拼成一行注入提示）+ 专属人设文件（~/.bot-ai/persona.md，优先级更高）
   identity: {
     name: '大肥鱼',      // 她叫什么
     ownerTitle: '主人',  // 她怎么称呼你
@@ -25,7 +25,7 @@ export const DEFAULTS = {
     minGapMin: 10,
     maxVideos: 5,
   },
-  // 口味（feed 选题的权重来源；来自 dafeiyu 骨架的 preferences）
+  // 口味（feed 选题的权重来源；来自 dabot 骨架的 preferences）
   preferences: {
     like: ['AI 与 Agent 工具', '鬼畜与怀旧', '猫咪', '美食（尤其是白饭相关）'],
     dislike: ['带货', '擦边', '标题党', '纯搬运'],
@@ -44,7 +44,7 @@ export const DEFAULTS = {
     // 以前写死 3 元/天，跟 a2a 真实余额完全脱节（余额 ¥1500 却只让她花 ¥3）。
     // 想人为限流时才配一个正数，它会和余额取 min。
     dailyBudget: 0,                     // 元/天，0 = 预算=余额
-    mineWorkspace: 'feiyu-work',        // 哪个工作区的会话算"她自己吃的"（她的是 ~/.dsh/feiyu-work）
+    mineWorkspace: 'bot-work',        // 哪个工作区的会话算"她自己吃的"（她的是 ~/.dsh/bot-work）
     price: { inputPerM: 2, cachePerM: 0.2, outputPerM: 3 },   // 元/百万 token（按 DeepSeek 档位估，可改）
     balanceUrl: '',                     // 填 https://api.deepseek.com/user/balance 且 apiKey 有效才查余额
     apiKey: '',
@@ -55,7 +55,7 @@ export const DEFAULTS = {
   //   platforms.<id> === false → 该平台彻底关；与 <svc>.enabled 取"与"。
   // v5 起放进 DEFAULTS —— 以前它只存在于实际配置文件里，diagnose 每次报"配置多出"。
   platforms: { qq: true, wechat: false, bilibili: true },
-  // 风控闸门（来自 dafeiyu 骨架 ops/guard.py 的设计）
+  // 风控闸门（来自 dabot 骨架 ops/guard.py 的设计）
   guard: {
     dryRun: true,       // ⚠️ 默认干跑：只打印不真发。观察一周后再改 false
     minGapSec: 25,      // 同一"会话"两条消息最小间隔
@@ -97,7 +97,7 @@ export const DEFAULTS = {
   },
 
   // 专业唱歌（10-25）：RVC 翻唱——真歌干声换她的音色再混伴奏（AI 孙燕姿同款管线）。
-  // 依赖 D:/rvc（RVC 仓库+venv，见 rvc.mjs）；她的歌单在 ~/.feiyu-ai/songs/。
+  // 依赖 D:/rvc（RVC 仓库+venv，见 rvc.mjs）；她的歌单在 ~/.bot-ai/songs/。
   rvc: {
     root: 'D:/rvc/RVC',
     python: 'D:/rvc/venv/Scripts/python.exe',
@@ -147,7 +147,7 @@ export const DEFAULTS = {
     model: 'deepseek-chat',
     temperature: 0.92,
     max_tokens: 600,
-    // 写脚本/文案用另一套参数（dafeiyu 的设计：聊天口癖别污染内容）
+    // 写脚本/文案用另一套参数（dabot 的设计：聊天口癖别污染内容）
     content_model: 'deepseek-chat',
     content_temperature: 0.7,
   },

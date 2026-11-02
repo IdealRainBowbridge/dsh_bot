@@ -76,16 +76,16 @@ const post = (port, p, obj) => new Promise((resolve) => {
 /** 跑一个场景：独立数据目录 + 独立配置 + 独立端口。 */
 async function scenario({ name, cfg, fn }) {
   console.log('\n▶ ' + name)
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-smoke-'))
-  const cfgFile = path.join(dataDir, 'feiyu.config.json')
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-smoke-'))
+  const cfgFile = path.join(dataDir, 'bot.config.json')
   const llm = await fakeLLM()
   const port = await freePort()
   // 把配置里的 LLM 地址指到刚起的假网关
   const cfg2 = JSON.parse(JSON.stringify(cfg))
   cfg2.llm = { ...(cfg2.llm || {}), base_url: 'http://127.0.0.1:' + llm.port + '/v1' }
   fs.writeFileSync(cfgFile, JSON.stringify(cfg2))
-  const child = spawn(process.execPath, [path.join(ROOT, 'tools', 'feiyu.mjs'), 'qq-server', String(port)], {
-    cwd: ROOT, env: { ...process.env, FEIYU_CONFIG: cfgFile, FEIYU_DATA_DIR: dataDir }, stdio: 'pipe',
+  const child = spawn(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'qq-server', String(port)], {
+    cwd: ROOT, env: { ...process.env, BOT_CONFIG: cfgFile, BOT_DATA_DIR: dataDir }, stdio: 'pipe',
   })
   let log = ''
   child.stdout.on('data', (d) => { log += d.toString() })

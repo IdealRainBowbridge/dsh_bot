@@ -34,7 +34,7 @@ if (planOnly) {
 // ③ 把到期时间改成现在，模拟"到点了" → 走 binge
 const fs = await import('node:fs')
 const path = await import('node:path')
-const P = path.join(process.env.USERPROFILE, '.feiyu-ai', 'promises.json')
+const P = path.join(process.env.USERPROFILE, '.bot-ai', 'promises.json')
 const j = JSON.parse(fs.readFileSync(P, 'utf8'))
 for (const it of j.items) if (it.state === 'open') it.dueAt = Date.now() - 1000
 fs.writeFileSync(P, JSON.stringify(j, null, 1) + '\n')
@@ -46,7 +46,7 @@ console.log(`\n到点的承诺：${due.map((d) => `${d.id}「${d.what}」`).join
 const { execFileSync } = await import('node:child_process')
 const id = due[0].id
 const out = execFileSync(process.execPath, [
-  path.join(import.meta.dirname, 'feiyu.mjs'), 'binge', '--show', due[0].what, '--ep', '1', '--go', '--json', '--promise', id,
+  path.join(import.meta.dirname, 'bot.mjs'), 'binge', '--show', due[0].what, '--ep', '1', '--go', '--json', '--promise', id,
 ], { encoding: 'utf8', timeout: 240000 })
 const txt = String(out)
 const r = JSON.parse(txt.slice(txt.indexOf('{')).trim() || '{}')

@@ -50,7 +50,7 @@ export function detect(text) {
   return out.slice(0, 2)
 }
 
-/** binge 看番账本（~/.feiyu-ai/binge/<番名>.json，含 seen:[1,2,3]）—— 这是"看完第几集"最硬的证据。 */
+/** binge 看番账本（~/.bot-ai/binge/<番名>.json，含 seen:[1,2,3]）—— 这是"看完第几集"最硬的证据。 */
 let bingeCache = { at: 0, rows: [] }
 function bingeRows(now = Date.now()) {
   if (now - bingeCache.at < 60_000 && bingeCache.rows.length) return bingeCache.rows

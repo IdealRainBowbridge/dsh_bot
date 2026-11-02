@@ -15,7 +15,7 @@
 //   ② 每次写前强制备份（selfup backup 独立目录）
 //   ③ 写后必须 node --check 通过，否则立即回滚
 //   ④ **绝不自动重启** —— 重启会让 QQ 断线，必须老爸点头
-//   ⑤ 只允许改 dsh-feiyu 项目内文件，路径穿越/外部路径一律拒绝
+//   ⑤ 只允许改 dsh_bot 项目内文件，路径穿越/外部路径一律拒绝
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -24,7 +24,7 @@ import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const ROOT = path.resolve(HERE, '..', '..')       // dsh-feiyu 项目根
+const ROOT = path.resolve(HERE, '..', '..')       // dsh_bot 项目根
 const STATE = () => dataPath('selfmod.json')
 const MAX_PENDING = 5
 
@@ -229,7 +229,7 @@ export function apply(id) {
 
   // ⑥ 写 selfup 日志（她自己的手术记录）
   try {
-    execFileSync(process.execPath, [path.join(ROOT, 'tools', 'feiyu.mjs'), 'selfup', 'log',
+    execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
       `【${item.id}】改 ${item.file}：${item.why}（语法✓ 门禁✓，备份 ${path.basename(bk.dir)}）`],
       { timeout: 20000, stdio: 'pipe', cwd: ROOT })
   } catch (e) { swallow(e, 'selfmod:selfup-log') }

@@ -1,5 +1,5 @@
-// 三段式 prompt 装配 —— 移植 dafeiyu brain/persona.py。
-//   [身份层] 人设文件（~/.feiyu-ai/persona.md，与 B站会话共用同一份）+ identity 三件套
+// 三段式 prompt 装配 —— 移植 dabot brain/persona.py。
+//   [身份层] 人设文件（~/.bot-ai/persona.md，与 B站会话共用同一份）+ identity 三件套
 //   [记忆层] 关于对方的 facts + 相关旧记忆（memory 三层记忆）
 //   [状态层] 情绪/饥饿/时段/今日轮次（mood 状态机）
 import fs from 'node:fs'
@@ -25,22 +25,22 @@ import { gapText } from './timefix.mjs'
 import { readBrief } from './ledger.mjs'
 import { swallow } from './swallow.mjs'
 
-// 真实 CLI 调用前缀（10-31）：以前写死 `node D:/dsh-feiyu/tools/feiyu.mjs`，
+// 真实 CLI 调用前缀（10-31）：以前写死 `node D:/dsh_bot/tools/bot.mjs`，
 // 那是 Windows 开发机的路径，Linux 容器里不存在 —— 她照着跑必然 ENOENT。
-// 从本文件位置回推：tools/lib/persona.mjs → ../../feiyu.mjs
+// 从本文件位置回推：tools/lib/persona.mjs → ../../bot.mjs
 const CLI_INVOKE = (() => {
   try {
     const here = path.dirname(fileURLToPath(import.meta.url))
-    const cli = path.resolve(here, '..', 'feiyu.mjs')
+    const cli = path.resolve(here, '..', 'bot.mjs')
     // node 不一定在 PATH（DSH 是 Electron 主进程），带上当前解释器更稳
     return `${process.execPath} ${cli}`
-  } catch { return 'node tools/feiyu.mjs' }
+  } catch { return 'node tools/bot.mjs' }
 })()
 
-/** 人设文件（与 B站会话共用同一份，换机器连 ~/.feiyu-ai 一起拷）。 */
+/** 人设文件（与 B站会话共用同一份，换机器连 ~/.bot-ai 一起拷）。 */
 export function personaText() {
   try {
-    const t = fs.readFileSync(homePath('.feiyu-ai', 'persona.md'), 'utf8').trim()
+    const t = fs.readFileSync(homePath('.bot-ai', 'persona.md'), 'utf8').trim()
     if (t) return t.slice(0, 3000)
   } catch (e) {
     // 10-31 审计：以前这里吞掉一切错误 —— 人格文件读失败时她**静默变成没有设定的人**，
@@ -54,16 +54,16 @@ export function personaText() {
 
 /**
  * 「我是谁」快照（照 dsh-world 的 keepSelfCopy）：每次她要改写人设之前，先把当天原样存一份。
- * 她的人设一旦改坏，没有回退点是很难受的事 —— 存到 ~/.feiyu-ai/persona.history/<YYYY-MM-DD>.md。
+ * 她的人设一旦改坏，没有回退点是很难受的事 —— 存到 ~/.bot-ai/persona.history/<YYYY-MM-DD>.md。
  * 同一天只留第一份（那才是"改之前的原样"）。
  * @returns {string} 快照路径，失败返回空串
  */
 export function keepPersonaCopy(when = new Date()) {
   try {
-    const src = homePath('.feiyu-ai', 'persona.md')
+    const src = homePath('.bot-ai', 'persona.md')
     if (!fs.existsSync(src)) return ''
     const day = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`
-    const dir = homePath('.feiyu-ai', 'persona.history')
+    const dir = homePath('.bot-ai', 'persona.history')
     fs.mkdirSync(dir, { recursive: true })
     const dst = path.join(dir, `${day}.md`)
     if (!fs.existsSync(dst)) fs.copyFileSync(src, dst)
@@ -287,7 +287,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   //
   // 权重怎么来的、骰子在哪掷的 —— **一律不写**。她不该知道自己是被算出来的。
   try {
-    const sj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
+    const sj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
     const c = sj?.current
     if (c && Number(c.until || 0) > Date.now()) {
       const lean = String(c.lean || '').trim()   // decide() 写的"她自己的说法"
@@ -306,7 +306,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 而且模型会盯着"最新那 4 句"调整（recency bias），等于用最近的话污染人格。
   // 这里只读文件，不触发采样 —— 换锚是低频动作，不该发生在对话路径上。
   try {
-    const aj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'meta', 'anchor.json'), 'utf8'))
+    const aj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'meta', 'anchor.json'), 'utf8'))
     const items = Array.isArray(aj?.items) ? aj.items.filter((x) => x && x.text).slice(0, 4) : []
     if (items.length >= 2) {
       parts.push('【你自己说过的话】\n' + items.map((x) => '· ' + x.text).join('\n') +
@@ -318,7 +318,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 目的：她说"我刚在看番"不是编的 —— 那是真计划，还能说出理由。
   // 这里同步读文件而不是 import mind.mjs：buildMessages 是同步的，且避免循环依赖。
   try {
-    const mp = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'mind-plan.json'), 'utf8'))
+    const mp = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'mind-plan.json'), 'utf8'))
     const act = String(mp.activity || '')
     if (act && Number(mp.until || 0) > Date.now()) {
       // 已由上面的【此刻】取代。这里保留读取但**不再注入时限与理由** ——
@@ -340,7 +340,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     let seg2 = []
     // ① 她此刻真在做的事（mind-plan，上面已经读过一次，这里再取一次拿 why）
     try {
-      const mp = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'mind-plan.json'), 'utf8'))
+      const mp = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'mind-plan.json'), 'utf8'))
       const act = String(mp.activity || '')
       const LABEL = { web: '自由上网', bilibili: '刷B站', binge: '看番/看剧', rest: '歇着', free: '自由时间' }
       if (act && Number(mp.until || 0) > Date.now()) {
@@ -349,7 +349,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     } catch (e) { swallow(e, 'persona:openThread:mind') }
     // ② 情绪值（低/高都不该装作没事）
     try {
-      const mj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'mood.json'), 'utf8'))
+      const mj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'mood.json'), 'utf8'))
       const v = Math.round(Number(mj.value) || 60)
       if (v < 45) seg.push(`你情绪偏低（${v}/100），别装作没事`)
       else if (v > 75) seg.push(`你心情不错（${v}/100）`)
@@ -357,7 +357,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     // ③ 日记最后一句（她最近的牵挂）—— 只给QQ私聊，群聊里念日记就是泄露
     if (platform === 'qq' && !isGroup) {
       try {
-        const dg = fs.readFileSync(homePath('.dsh', 'feiyu-work', 'feiyu-diary.md'), 'utf8')
+        const dg = fs.readFileSync(homePath('.dsh', 'bot-work', 'bot-diary.md'), 'utf8')
           .split('\n').map((x) => x.trim()).filter((x) => x && !x.startsWith('#')).slice(-1)[0]
         if (dg) seg.push(`你日记里最近写着：${dg.replace(/^[-*\s]+/, '').slice(0, 50)}`)
       } catch (e) { swallow(e, 'persona:openThread:diary') }
@@ -366,7 +366,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     //    "我下午翻了半天鲸类声学的论文" 比 "我歇着" 有信息量一百倍。
     //    web-log.md 最新在上（## 日期段在文件头），要取"今天的段落"的头部几条。
     try {
-      const wl = fs.readFileSync(homePath('.feiyu-ai', 'web-log.md'), 'utf8')
+      const wl = fs.readFileSync(homePath('.bot-ai', 'web-log.md'), 'utf8')
       const today = new Date()
       const dk = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       // ⚠️ 踩过：跨零点后"今天"段为空（11-02 凌晨 00:05 查 11-01 的记录）→ 什么都不注入。
@@ -382,7 +382,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     if (seg2.length) seg.push('你今天在网上干的：' + seg2.join('；'))
     // ⑤ 最近挂在心上（lore.json 直接读，不依赖 memory 模块，避免循环依赖）
     try {
-      const lj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'lore.json'), 'utf8'))
+      const lj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'lore.json'), 'utf8'))
       const arr = Array.isArray(lj) ? lj : (Array.isArray(lj?.items) ? lj.items : [])
       if (arr.length) {
         const last = arr[arr.length - 1]
@@ -433,13 +433,13 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // ── 她自己的头像（2026-11-02）────────────────────────────────────────────
   // 以前她只有 persona.md 的文字描述（"蓝色鲸鱼娘"），那是**设定**不是**现状**：
   // 她不知道自己在 QQ 上实际挂的是哪张脸。用户问"你能识别自己头像吗"——
-  // 现在头像已缓存到 ~/.feiyu-ai/avatar/，这里告诉她"你有这张脸，路径在哪"，
+  // 现在头像已缓存到 ~/.bot-ai/avatar/，这里告诉她"你有这张脸，路径在哪"，
   // 被问起时她可以自己看图确认（走 vision），而不是凭设定编。
   if (platform === 'qq' && !isGroup) {
     try {
       const selfQQ = String(cfg.qq?.selfQQ || '').replace(/\D/g, '')
       if (selfQQ) {
-        const f = homePath('.feiyu-ai', 'avatar', `qq-${selfQQ}.jpg`)
+        const f = homePath('.bot-ai', 'avatar', `qq-${selfQQ}.jpg`)
         if (fs.existsSync(f)) {
           parts.push(
             `【你自己的QQ头像】你的号 ${selfQQ}，头像文件在 ${f}（本地已缓存）。\n` +
@@ -686,7 +686,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   //   那才是"细节要了才给"的真实形态 —— 想不起来的部分就该模糊。
   let cueBlock = ''
   try {
-    const sj = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'seg', 'index.json'), 'utf8'))
+    const sj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'seg', 'index.json'), 'utf8'))
     const all = [...(Array.isArray(sj?.segments) ? sj.segments : [])]
     if (sj?.open) all.push(sj.open)
     const rows = all
@@ -715,7 +715,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
  * 是**她不知道自己有这个动作**（也没有）。所以这里把真命令摊给她，
  * 并且明说：做不到就照实说，不许空口答应。
  *
- * ⚠️ 这份清单必须跟 COMMANDS（tools/feiyu.mjs）对得上 —— 写了却不存在，
+ * ⚠️ 这份清单必须跟 COMMANDS（tools/bot.mjs）对得上 —— 写了却不存在，
  * 她就会去调一个不存在的命令，然后开始编 "我看了"。（test/memory-hygiene-test.mjs 会校验）
  */
 export const CAPABILITIES = [
@@ -767,7 +767,7 @@ export function postureBlock(isGroup = false) {
 export function capabilityBlock(cfg) {
   const upgrade = cfg?.web?.selfUpgrade !== false
   // 10-31：以前把 12 条命令逐条列进 system prompt（937 字符 ≈ 480 token，占 28%，每轮都发）。
-  // 那是"查手册"的信息量，不是"每句话都得记住"的东西 —— 命令全集以 feiyu.mjs 的
+  // 那是"查手册"的信息量，不是"每句话都得记住"的东西 —— 命令全集以 bot.mjs 的
   // COMMANDS 为唯一权威，用 `help` 现查，永远不会漂移。这里只留分组摘要。
   const groups = [...new Set(CAPABILITIES.map(([cmd]) => String(cmd).trim().split(/\s+/)[0]))]
   const brief = groups.slice(0, 12).join(' / ')
@@ -775,7 +775,7 @@ export function capabilityBlock(cfg) {
     + '这是你的手，不是主人的工具：`' + CLI_INVOKE + ' <命令>`。'
     + '常用：' + brief + '。全部命令 `help`，单条用法 `help <命令>`。'
     + (upgrade
-      ? '真缺能力就自己补：`selfup backup` → 改 tools/ → `node --check` → 跑测试 → `selfup log "改了什么"`（造新命令 = 在 tools/commands/ 写 .mjs + 在 feiyu.mjs 的 COMMANDS 加一行）。'
+      ? '真缺能力就自己补：`selfup backup` → 改 tools/ → `node --check` → 跑测试 → `selfup log "改了什么"`（造新命令 = 在 tools/commands/ 写 .mjs + 在 bot.mjs 的 COMMANDS 加一行）。'
       : '')
     + '\n做不到的事只有一种说法：照实说"这个我现在看不了/做不了"，并说清卡在哪。**不许只回一句"这就去看"**。'
 }
@@ -816,7 +816,7 @@ const LEDGER_ASK = new RegExp([
   '额度', '还能(发|干|做|吃)', '够不够(花|吃)', 'token', '预算', '钱包', '充(钱|值)',
 ].join('|'), 'i')
 
-/** 走神注入：10% 概率（dafeiyu：别超过 10%，多了就是噪音）。
+/** 走神注入：10% 概率（dabot：别超过 10%，多了就是噪音）。
  *  实现只留一份：mood.distract（那边"再干活"是给她自己干活用的，这里换成聊天口吻）。 */
 export function thinkingInstruction(random = Math.random) {
   return mood.distract(random).replace('再干活', '再回答')

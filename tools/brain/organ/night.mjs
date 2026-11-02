@@ -220,7 +220,7 @@ export async function metabolicBacklog({ now = Date.now() } = {}) {
   // ③ 代码改动（容器内没 git，读不到就是 0 —— 不是错，是环境如此）
   try {
     const { execFileSync } = await import('node:child_process')
-    const r = execFileSync('git', ['-C', '/home/feiyu/plugins/dsh-feiyu', '-c', 'safe.directory=*', 'status', '--porcelain'],
+    const r = execFileSync('git', ['-C', ROOT_DIR, '-c', 'safe.directory=*', 'status', '--porcelain'],
       { timeout: 4000, encoding: 'utf8' })
     out.dirty = String(r || '').split('\n').filter(Boolean).length
   } catch { /* 没 git 或没权限：当作没有未归档改动 */ }

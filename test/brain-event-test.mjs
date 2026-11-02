@@ -6,12 +6,12 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-brain-event-'))
-process.env.FEIYU_DATA_DIR = tmp
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-brain-event-'))
+process.env.BOT_DATA_DIR = tmp
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 process.env.DSH_HOME = path.join(tmp, '.dsh')
-process.env.FEIYU_BRAIN_MIRROR = '0'
+process.env.BOT_BRAIN_MIRROR = '0'
 
 let bad = 0
 const ok = (name, pass, detail = '') => {
@@ -23,7 +23,7 @@ const event = await import('../tools/brain/event.mjs')
 const episode = await import('../tools/brain/episode.mjs')
 const paths = await import('../tools/brain/paths.mjs')
 
-const NODE = process.env.FEIYU_NODE || process.execPath
+const NODE = process.env.BOT_NODE || process.execPath
 const EVENT_URL = pathToFileURL(path.join(REPO, 'tools', 'brain', 'event.mjs')).href
 
 // ① 4 个进程各写 25 条（同一分片名 t）：不丢、不重、id 唯一

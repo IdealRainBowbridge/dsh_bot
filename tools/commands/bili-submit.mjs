@@ -1,6 +1,6 @@
 // bili-submit —— B站自动投稿（实测通过的链路，10-31）。
 // probe → preupload(r=upos, profile=ugcupos/bup, probe_version/upcdn/zone) → 分片PUT → 合并 → 提交 add/v3
-// 用法：node feiyu.mjs bili-submit <video.mp4> --title 标题 --tid 21 --tags a,b --desc 简介 [--cover c.jpg] [--dry]
+// 用法：node bot.mjs bili-submit <video.mp4> --title 标题 --tid 21 --tags a,b --desc 简介 [--cover c.jpg] [--dry]
 import fs from 'node:fs'
 import path from 'node:path'
 import { loadCred } from '../lib/cred.mjs'

@@ -25,12 +25,12 @@ import { dataPath } from './paths.mjs'
 const PY_TIMEOUT = 120_000
 const USAGE_CACHE = () => dataPath('cache', 'ledger-usage.json')
 
-/** 找 python：voice.python → FEIYU_TTS_PYTHON → GPT-SoVITS 自带 venv（和 prosody 用同一套）。 */
+/** 找 python：voice.python → BOT_TTS_PYTHON → GPT-SoVITS 自带 venv（和 prosody 用同一套）。 */
 export function pythonPath(cfg = config()) {
   const cands = [
     cfg.ledger?.python,      // 10-30：账本自己的 python 优先（容器内 uv venv）
     cfg.voice?.python,
-    process.env.FEIYU_TTS_PYTHON,
+    process.env.BOT_TTS_PYTHON,
     'D:/GPT-SoVITS/.venv/Scripts/python.exe',   // Windows 时代的残留，最后兜底
   ].filter(Boolean)
   for (const c of cands) {
@@ -92,7 +92,7 @@ export async function usage(opts = {}) {
   })()
   if (!pyOk) {
     const { collectUsage } = await import('./usage-node.mjs')
-    const data = collectUsage(dir, cfg.ledger?.mineWorkspace || 'feiyu-work')
+    const data = collectUsage(dir, cfg.ledger?.mineWorkspace || 'bot-work')
     try {
       fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
       fs.writeFileSync(cacheFile, JSON.stringify({ signature: sig, at: Date.now(), data }, null, 0))
@@ -104,7 +104,7 @@ export async function usage(opts = {}) {
   // 直接切字符串会拼出 /D:/… 这种 python 不认的路径
   const here = path.dirname(fileURLToPath(import.meta.url))
   const args = [path.join(here, 'ledger_usage.py'),
-    '--sessions', dir, '--mine', cfg.ledger?.mineWorkspace || 'feiyu-work']
+    '--sessions', dir, '--mine', cfg.ledger?.mineWorkspace || 'bot-work']
   const data = await new Promise((resolve, reject) => {
     execFile(py, args, { timeout: PY_TIMEOUT, maxBuffer: 32 * 1024 * 1024, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } },
       (err, stdout, stderr) => {
@@ -284,7 +284,7 @@ export async function balance(cfg = config(), opts = {}) {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' }, signal: ctrl.signal })
     if (!r.ok) return null
     const j = await r.json()
-    // a2a 桥（10-30 二版）：不再直接调 a2a API —— 宿主 feiyu-quota.timer 每 5 分钟聚合
+    // a2a 桥（10-30 二版）：不再直接调 a2a API —— 宿主 bot-quota.timer 每 5 分钟聚合
     // 全部账号（含 429 剔除、倍率换算）写成 a2a-balance.json，这里只读文件。
     // 她只看得到「还剩多少」，账号明细/限流状态全留在宿主（不该进她的视野）。
     if (j?.total != null && j?.usableToday != null) {

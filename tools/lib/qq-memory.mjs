@@ -4,7 +4,7 @@
 //   · 微信是"顺手回两句"，QQ 是跟主人聊天 —— 需要记得更久、更懂他这个人；
 //   · 光靠 recent(24 条) 还是会被截断，所以每聊几轮就用 LLM 把这段对话压成摘要，
 //     再抽一份"关于主人的稳定事实"（称呼、作息、工作、最近在烦什么）滚雪球式更新；
-//   · 这些都落在 ~/.feiyu-ai/qq/ 下，跟微信/B站记忆物理分开，以后做"自我迭代"也在这块地里长。
+//   · 这些都落在 ~/.bot-ai/qq/ 下，跟微信/B站记忆物理分开，以后做"自我迭代"也在这块地里长。
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath, diaryPath } from './paths.mjs'

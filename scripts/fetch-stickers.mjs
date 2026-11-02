@@ -11,7 +11,7 @@
 // 用法：
 //   node scripts/fetch-stickers.mjs                 # 全部 940 张
 //   node scripts/fetch-stickers.mjs --limit 20      # 只下 20 张
-//   FEIYU_PROXY= node scripts/fetch-stickers.mjs    # 强制直连（本机有梯子时）
+//   BOT_PROXY= node scripts/fetch-stickers.mjs    # 强制直连（本机有梯子时）
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
@@ -23,20 +23,20 @@ const RAW = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/`
 const API = `https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`
 
 // 宿主 mihomo 监听 7890（注意：不是旧代码里写的 7897，那个端口没人在听）
-const PROXY = process.env.FEIYU_PROXY !== undefined
-  ? process.env.FEIYU_PROXY
+const PROXY = process.env.BOT_PROXY !== undefined
+  ? process.env.BOT_PROXY
   : 'http://172.17.0.1:7890'
 
 const argv = process.argv.slice(2)
 const getArg = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : null }
 const LIMIT = Number(getArg('--limit') || 0)
-const OUT = getArg('--dir') || homePath('.feiyu-ai', 'sticker-src')
+const OUT = getArg('--dir') || homePath('.bot-ai', 'sticker-src')
 
 function curlTo(url, outPath, timeoutSec = 90) {
   return new Promise((resolve) => {
     const args = ['-sS', '-L', '-m', String(timeoutSec), '-o', outPath]
     if (PROXY) args.push('-x', PROXY)
-    args.push('-A', 'feiyu-sticker-fetch', url)
+    args.push('-A', 'bot-sticker-fetch', url)
     execFile('curl', args, { timeout: timeoutSec * 1000 + 5000, maxBuffer: 1024 * 1024 }, (err, _so, se) => {
       if (err) return resolve(String(se || err.message).slice(0, 70) || 'curl 失败')
       try {

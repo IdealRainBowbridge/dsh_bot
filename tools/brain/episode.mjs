@@ -162,7 +162,7 @@ export function makeEpisode(ev, { recentGists = [], knownNames = [] } = {}) {
     id: `ep-${isoOf(ev.at).slice(0, 10).replace(/-/g, '')}-${String(new Date(ev.at).getHours()).padStart(2, '0')}${String(new Date(ev.at).getMinutes()).padStart(2, '0')}-${Math.random().toString(36).slice(2, 6)}`,
     at: ev.at,
     atIso: isoOf(ev.at),
-    who: { self: 'feiyu', others: ev.who.kind === 'self' ? [] : [ev.who] },
+    who: { self: 'dsh_bot', others: ev.who.kind === 'self' ? [] : [ev.who] },
     where: ev.where,
     scope: ev.scope,
     act: ev.act,

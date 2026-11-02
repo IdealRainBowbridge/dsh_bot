@@ -2,11 +2,11 @@
 // "她自己学新声音"的入口：从 URL 导入任意参考音频即得新音色（GPT-SoVITS v4 零样本），
 // 逐个试听发到主人 QQ，主人或鱼自己拍板切换。
 //
-//   node feiyu.mjs voice list
-//   node feiyu.mjs voice try --name <音色名>            # 用该音色合成自我介绍发主人QQ
-//   node feiyu.mjs voice tryall                          # 全部音色逐个试听
-//   node feiyu.mjs voice use --name <音色名>             # 切换默认音色（写配置）
-//   node feiyu.mjs voice import --url <wav直链> --name <名字> --text <参考文本>
+//   node bot.mjs voice list
+//   node bot.mjs voice try --name <音色名>            # 用该音色合成自我介绍发主人QQ
+//   node bot.mjs voice tryall                          # 全部音色逐个试听
+//   node bot.mjs voice use --name <音色名>             # 切换默认音色（写配置）
+//   node bot.mjs voice import --url <wav直链> --name <名字> --text <参考文本>
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -66,7 +66,7 @@ export async function run(argv = []) {
 
   if (sub === 'train') {
     const rvc = await import('../lib/rvc.mjs')
-    const name = arg(argv, '--name', 'feiyu-sunshine')
+    const name = arg(argv, '--name', 'bot-sunshine')
     const epochs = Number(arg(argv, '--epochs', 150)) || 150
     const batch = Number(arg(argv, '--batch', 8)) || 8
     const saveEvery = Number(arg(argv, '--se', 50)) || 50
@@ -91,7 +91,7 @@ export async function run(argv = []) {
       })
     }
     console.log(`✓ 数据集就绪：${ds.count} 句 / 约 ${ds.approxMinutes || '?'} 分钟 —— ${ds.dir}`)
-    console.log(`🏋️ 开始训练 ${epochs} 轮（bs=${batch}，全程日志 ~/.feiyu-ai/rvc/train-${name}.log，挂后台别关机）…`)
+    console.log(`🏋️ 开始训练 ${epochs} 轮（bs=${batch}，全程日志 ~/.bot-ai/rvc/train-${name}.log，挂后台别关机）…`)
     const t0 = Date.now()
     const out = await rvc.trainVoice({ name, datasetDir: ds.dir, epochs, batch, saveEvery, log: (l) => console.log('  ' + String(l).slice(0, 110)) })
     console.log(`✅ 训练完成（${Math.round((Date.now() - t0) / 60000)} 分钟）`)
@@ -125,7 +125,7 @@ export async function run(argv = []) {
         console.log(`${ok ? '✓ 已试听' : '✗ 发送失败（NapCat 没起？）'}：${v.name}${v.wav === (config().voice?.ref_audio_path || '').replace(/\\/g, '/') ? '（当前）' : ''}`)
       } catch (e) { console.error(`✗ ${v.name} 合成失败：${e.message}`) }
     }
-    console.log('听完想换：node feiyu.mjs voice use --name <名字>')
+    console.log('听完想换：node bot.mjs voice use --name <名字>')
     return
   }
 
@@ -139,7 +139,7 @@ export async function run(argv = []) {
     const cleanTxt = clean.replace(/\.wav$/, '.txt')
     const useText = fs.existsSync(cleanTxt) ? fs.readFileSync(cleanTxt, 'utf8').trim() : v.text
     // 直接改配置文件（config() 是只读视图）；路径统一走 paths.mjs，
-    // 认 $FEIYU_CONFIG / $DSH_HOME —— 以前读 config().configPath（不存在的字段）再硬编码 USERPROFILE。
+    // 认 $BOT_CONFIG / $DSH_HOME —— 以前读 config().configPath（不存在的字段）再硬编码 USERPROFILE。
     // configPath 在 paths.mjs 里导出的是**字符串常量**，当成函数调用必然 TypeError —— 10-26 修
     const cfgFile = configPath
     const j = JSON.parse(fs.readFileSync(cfgFile, 'utf8'))
@@ -191,7 +191,7 @@ export async function run(argv = []) {
       'import json, sys, os',
       // 模型优先用本地目录（faster-whisper 传名字会去 HF 下载，代理没开就直接崩）
       `MP = ${JSON.stringify(fs.existsSync('D:/GPT-SoVITS/runtime/fw-models/small') ? 'D:/GPT-SoVITS/runtime/fw-models/small' : 'small')}`,
-      'if os.environ.get("HTTPS_PROXY") and not os.environ.get("FEIYU_ASR_PROXY_OK"):',
+      'if os.environ.get("HTTPS_PROXY") and not os.environ.get("BOT_ASR_PROXY_OK"):',
       '    os.environ.pop("HTTPS_PROXY", None); os.environ.pop("HTTP_PROXY", None)',
       'import soundfile as sf, librosa',
       'from faster_whisper import WhisperModel',
@@ -246,8 +246,8 @@ export async function run(argv = []) {
     } else { fs.copyFileSync(url, wavFile) }   // 也支持本地路径
     fs.writeFileSync(path.join(dir, `${name}.txt`), text, 'utf8')
     console.log(`✓ 音色「${name}」已导入（零样本，立即可用）`)
-    console.log(`试听：node feiyu.mjs voice try --name ${name}`)
-    console.log(`采用：node feiyu.mjs voice use --name ${name}`)
+    console.log(`试听：node bot.mjs voice try --name ${name}`)
+    console.log(`采用：node bot.mjs voice use --name ${name}`)
     return
   }
 
@@ -277,14 +277,14 @@ export async function run(argv = []) {
     if (act === 'list') {
       const j = readManifest()
       const keys = Object.keys(j)
-      if (!keys.length) { console.log('还没有情绪参考音色。生成：node feiyu.mjs voice emo build'); return }
+      if (!keys.length) { console.log('还没有情绪参考音色。生成：node bot.mjs voice emo build'); return }
       console.log(`情绪参考音色（${EMO_DIR}）：`)
       for (const k of keys) {
         const e = j[k]
         const label = EMOTIONS[k]?.label || k
         console.log(`  ${label.padEnd(4)} ${k.padEnd(12)} 起伏 ${String(e.sd ?? '?').padStart(5)}  音域 ${String(e.rng ?? '?').padStart(5)}  「${String(e.text || '').slice(0, 24)}」`)
       }
-      console.log('试听：node feiyu.mjs voice emo test   重做：voice emo build --force')
+      console.log('试听：node bot.mjs voice emo test   重做：voice emo build --force')
       return
     }
 
@@ -346,7 +346,7 @@ export async function run(argv = []) {
       fs.mkdirSync(EMO_DIR, { recursive: true })
       fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + '\n', 'utf8')
       console.log('清单：' + MANIFEST)
-      console.log('试听：node feiyu.mjs voice emo test')
+      console.log('试听：node bot.mjs voice emo test')
       return
     }
 

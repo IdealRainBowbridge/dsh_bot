@@ -16,12 +16,12 @@ import os from 'node:os'
 // ⚠️ 隔离必须在**任何 import 之前**完成：paths.mjs 在 import 时就把 HOME 定死了。
 // 10-27 踩过：只设了自定义变量、没设 USERPROFILE，结果测试把真记忆库（lore 55KB /
 // episodes 86KB / facts 10KB）写成了几条假数据 —— 只能从备份往回捞。
-const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-memtest-'))
+const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-memtest-'))
 process.env.USERPROFILE = TMP_HOME
 process.env.HOME = TMP_HOME
-process.env.FEIYU_DATA_DIR = path.join(TMP_HOME, '.feiyu-ai')
+process.env.BOT_DATA_DIR = path.join(TMP_HOME, '.bot-ai')
 process.env.DSH_HOME = path.join(TMP_HOME, '.dsh')
-fs.mkdirSync(process.env.FEIYU_DATA_DIR, { recursive: true })
+fs.mkdirSync(process.env.BOT_DATA_DIR, { recursive: true })
 fs.mkdirSync(process.env.DSH_HOME, { recursive: true })
 
 const { dataPath, dshPath } = await import('../tools/lib/paths.mjs')
@@ -179,13 +179,13 @@ await ok('binge / promises 命令文件存在且导出 run', async () => {
     assert.equal(typeof (mod.run ?? mod.default), 'function', `${name} 没有 run 导出`)
   }
 })
-await ok('能力清单里的每条命令都真的注册在 feiyu.mjs 里', () => {
-  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'feiyu.mjs'), 'utf8')
+await ok('能力清单里的每条命令都真的注册在 bot.mjs 里', () => {
+  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'bot.mjs'), 'utf8')
   for (const [cmd] of persona.CAPABILITIES) {
     const name = String(cmd).trim().split(/\s+/)[0]
     const fileName = path.join(import.meta.dirname, '..', 'tools', 'commands', name.replace(/^--?/, '') + '.mjs')
     assert.ok(new RegExp(`(^|\\s)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`, 'm').test(src) || /--/.test(name),
-      `能力清单写了 ${name}，但 feiyu.mjs 的命令表里没有`)
+      `能力清单写了 ${name}，但 bot.mjs 的命令表里没有`)
     if (!/--/.test(name)) assert.ok(fs.existsSync(fileName), `缺文件 tools/commands/${name}.mjs`)
   }
 })

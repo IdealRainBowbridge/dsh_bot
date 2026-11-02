@@ -7,10 +7,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-voice-'))
-process.env.FEIYU_DATA_DIR = TMP
-process.env.FEIYU_CONFIG = path.join(TMP, 'cfg.json')
-fs.writeFileSync(process.env.FEIYU_CONFIG, JSON.stringify({
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-voice-'))
+process.env.BOT_DATA_DIR = TMP
+process.env.BOT_CONFIG = path.join(TMP, 'cfg.json')
+fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({
   identity: { name: '小锦鲤', selfClaim: '咱', ownerTitle: '铲屎官' },
 }))
 
@@ -31,7 +31,7 @@ assert.equal(fill('没有占位符'), '没有占位符')
 assert.equal(fill('重复 {name} 和 {name}'), '重复 小锦鲤 和 小锦鲤')
 
 // 兜底：配置文件全空时不能崩（config() 不缓存，所以不用重载模块）
-fs.writeFileSync(process.env.FEIYU_CONFIG, '{}')
+fs.writeFileSync(process.env.BOT_CONFIG, '{}')
 assert.ok(selfName().length > 0, '没配名字也要有兜底')
 assert.ok(ownerTitle().length > 0, '没配称呼也要有兜底')
 assert.ok(fill('{name}/{owner}').length > 1, '模板也要能渲染')

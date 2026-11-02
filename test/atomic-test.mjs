@@ -11,7 +11,7 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { updateJson, readJsonSafe, writeJsonAtomic, acquireLock, bumpJson } from '../tools/lib/atomic.mjs'
 
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-atomic-'))
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-atomic-'))
 const F = path.join(TMP, 'counter.json')
 
 // ── 1. 基本读改写 ──────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ rel4()
 
 // ── 7. 核心回归：真多进程并发，一个都不许丢 ───────────────────────────────
 writeJsonAtomic(F, { n: 0 })
-// ⚠️ 不能硬编码 /srv/feiyu-sandbox/app —— 容器里插件在 /home/feiyu/plugins/dsh-feiyu。
+// ⚠️ 不能硬编码 /srv/bot-sandbox/app —— 容器里插件在 /home/bot/plugins/dsh_bot。
 // 用 import.meta.dirname 解析，测试在哪都能跑（v5 自测时踩过：容器里 20 个 worker 全部
 // import 失败 → 计数 0 → 误判成"并发全丢"）。
 const ATOMIC_URL = new URL('../tools/lib/atomic.mjs', import.meta.url).href

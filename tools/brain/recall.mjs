@@ -21,7 +21,7 @@ import { relTime } from './clock.mjs'
  *   2026-10-29 用 1045 条真实情景出 120 道题（两人对话，两天前以上），
  *   lex 0.42 / recency 0.14 / salience 0.20 / affect 0.18 / self 0.14 / hits 0.06 / entity 0
  *   → Recall@6 0.85 → 0.875，MRR 0.70。entity 归零是因为实体表还基本是空的（O12 补上再祭一次）。
- * 重跑：node tools/feiyu.mjs brain eval --calibrate
+ * 重跑：node tools/bot.mjs brain eval --calibrate
  */
 export const DEFAULT_WEIGHTS = {
   lex: 0.42, recency: 0.14, salience: 0.20, affect: 0.18, self: 0.14, hits: 0.06, entity: 0,

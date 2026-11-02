@@ -21,8 +21,8 @@ function candidates() {
   const out = []
   const push = (p) => { if (p && typeof p === 'string') out.push(p) }
   push(cfg.voice?.python)
-  push(process.env.FEIYU_PYTHON)
-  push(process.env.FEIYU_TTS_PYTHON)
+  push(process.env.BOT_PYTHON)
+  push(process.env.BOT_TTS_PYTHON)
   // 容器里 DSH 自带的 pyenv（存在但没有第三方库，作为"能跑"的最低保障）
   push(path.join(process.env.HOME || '', '.dsh', 'pyenv', 'bin', 'python3'))
   push(path.join(process.env.HOME || '', '.dsh', 'pyenv', 'bin', 'python'))

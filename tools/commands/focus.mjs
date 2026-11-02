@@ -1,15 +1,15 @@
-// feiyu focus —— 她决定"接下来这一段时间干什么"
+// bot focus —— 她决定"接下来这一段时间干什么"
 //
 // 这是完全自由里"自主"那半边：宿主只负责按时叫醒她，**干什么由她自己定**。
 // 定下来之后宿主半边（lib/index.js 的 focusTick）会只放行这一件事的常驻循环，
 // 其余关掉 —— 一个人一次只能做一件事，这样才像活的。
 //
-//   node feiyu.mjs focus                              # 我现在在干什么
-//   node feiyu.mjs focus web      --min 25            # 接下来 25 分钟上网
-//   node feiyu.mjs focus bilibili --min 30 --note "想看那个唱见的新投稿"
-//   node feiyu.mjs focus bilibili --min 15
-//   node feiyu.mjs focus rest     --min 40 --note "吃饱了犯困"   # 歇着也是正经事
-//   node feiyu.mjs focus off                          # 收工，回到没安排的自由时间
+//   node bot.mjs focus                              # 我现在在干什么
+//   node bot.mjs focus web      --min 25            # 接下来 25 分钟上网
+//   node bot.mjs focus bilibili --min 30 --note "想看那个唱见的新投稿"
+//   node bot.mjs focus bilibili --min 15
+//   node bot.mjs focus rest     --min 40 --note "吃饱了犯困"   # 歇着也是正经事
+//   node bot.mjs focus off                          # 收工，回到没安排的自由时间
 import fs from 'node:fs'
 import { configPath } from '../lib/config.mjs'
 import {
@@ -41,7 +41,7 @@ export async function run(argv = []) {
     const s = focusSnapshot()
     if (!s.activity) {
       console.log('（没有记录：现在是自由时间，什么都没在跑 —— 可以挑一件事了）')
-      console.log('挑法：node feiyu.mjs focus web|bilibili --min <分钟>  ／ focus rest --min <分钟>')
+      console.log('挑法：node bot.mjs focus web|bilibili --min <分钟>  ／ focus rest --min <分钟>')
       return
     }
     const tail = s.expired
@@ -81,7 +81,7 @@ export async function run(argv = []) {
   writeCfg(first)
   console.log(`✓ 接下来${min > 0 ? ' ' + min + ' 分钟' : ''}${meta.label}（${meta.hint}）${note ? '：' + note : ''}`)
   console.log('  宿主会在 1 分钟内把它拉起来，其余活动自动停；到点自动收工。')
-  console.log(`  （想提前收工：node feiyu.mjs focus off）`)
+  console.log(`  （想提前收工：node bot.mjs focus off）`)
 }
 
 export default run

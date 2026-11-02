@@ -4,8 +4,8 @@
 // 面板开关不控制行为、探活探错地址、账本漏掉一条通道。每一条都不报错。
 // 这个命令把这些"看不见的错"一次性摊开，她和人都能一眼看到。
 //
-//   node feiyu.mjs diagnose           # 人读
-//   node feiyu.mjs diagnose --json    # 机器读（面板/自动化用）
+//   node bot.mjs diagnose           # 人读
+//   node bot.mjs diagnose --json    # 机器读（面板/自动化用）
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -90,8 +90,8 @@ function behaviorMismatches(cfg) {
     out.push('llm.fallback 只有 1 级 —— 单级链首选失败即无退路，建议至少 2 级（同网关可配不同模型）')
   }
   // 沙箱
-  const presets = (() => { try { return JSON.parse(fs.readFileSync(dshPath('feiyu-perm.json'), 'utf8')) } catch { return null } })()
-  if (!presets) out.push('没有 feiyu-perm.json —— 插件会在第一次唤醒时自动钉权限；如果面板显示"被沙箱拦住"，点「修复记忆写入」')
+  const presets = (() => { try { return JSON.parse(fs.readFileSync(dshPath('bot-perm.json'), 'utf8')) } catch { return null } })()
+  if (!presets) out.push('没有 bot-perm.json —— 插件会在第一次唤醒时自动钉权限；如果面板显示"被沙箱拦住"，点「修复记忆写入」')
   return out
 }
 
@@ -246,7 +246,7 @@ export async function run(argv = []) {
 
   // 5.6) 入口鉴权：这是最容易被忽略的一项（服务一旦绑 0.0.0.0 就等于门户大开）
   try {
-    const token = String(config().qq?.inboundToken || process.env.FEIYU_INBOUND_TOKEN || '')
+    const token = String(config().qq?.inboundToken || process.env.BOT_INBOUND_TOKEN || '')
     const bind = String(process.env.QQ_BIND_HOST || actualBind() || '127.0.0.1')
     if (token) {
       items.push(ok('入口鉴权', '已设 token（' + token.slice(0, 3) + '***，长度 ' + token.length + '）· 绑 ' + bind))

@@ -30,7 +30,7 @@ const base = {
   night: { maxVideos: 5 }, share: { minScore: 15 },
 }
 const st = { atText: '22:00', window: '17:00-24:00', withinWindow: '第2次', maxVideos: 5 }
-const line = (cfg) => String(wakePrompt(st, cfg, 'D:/dsh-feiyu/tools/feiyu.mjs')).split('\n').find(l => l.includes('硬限制')) || ''
+const line = (cfg) => String(wakePrompt(st, cfg, 'D:/dsh_bot/tools/bot.mjs')).split('\n').find(l => l.includes('硬限制')) || ''
 
 // ① 0 = 不限，不能写成"≤0 条"
 const l0 = line({ ...base, quota: { shareDaily: 0, sameVideoDays: 7 } })

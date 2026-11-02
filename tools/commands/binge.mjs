@@ -8,16 +8,16 @@
 //   ② 看：`binge --bvid BVxxx` 或 `binge --show 可塑性记忆 --ep 2`
 //        → debrief 四路材料（元信息 + 官方字幕 + 热评 + 简介）
 //        → LLM 只根据**材料**写"这一集讲了什么 + 我的感受"（没字幕就照实说没看成）
-//   ③ 记账：`~/.feiyu-ai/binge/<slug>.json` 存进度（第几集/到哪儿了），`binge --list` 能看
+//   ③ 记账：`~/.bot-ai/binge/<slug>.json` 存进度（第几集/到哪儿了），`binge --list` 能看
 //   ④ 落记忆：记住"我看完了第 X 集，剧情是…"，下次主人问起她真能答
 //   ⑤ 结承诺：`--promise p1abc` 传进来 → 成功 done / 失败 fail（写明为什么）
 //
-//   node feiyu.mjs binge --search "可塑性记忆"
-//   node feiyu.mjs binge --show 可塑性记忆 --ep 1 [--go]
-//   node feiyu.mjs binge --show 可塑性记忆 --ep next --count 3 [--go]   ← 连着看三集（节奏她自己定）
-//   node feiyu.mjs binge --show 可塑性记忆 --ep next --count all [--go] ← 一口气看完
-//   node feiyu.mjs binge --bvid BV1xx [--go] --promise p1abc
-//   node feiyu.mjs binge --list
+//   node bot.mjs binge --search "可塑性记忆"
+//   node bot.mjs binge --show 可塑性记忆 --ep 1 [--go]
+//   node bot.mjs binge --show 可塑性记忆 --ep next --count 3 [--go]   ← 连着看三集（节奏她自己定）
+//   node bot.mjs binge --show 可塑性记忆 --ep next --count all [--go] ← 一口气看完
+//   node bot.mjs binge --bvid BV1xx [--go] --promise p1abc
+//   node bot.mjs binge --list
 //
 // 10-28 主人拍板："不做限制，给她自主性" → `binge.dailyMax` 默认 0（不限），
 // 一晚看一集还是看完一整部，由她自己的兴趣和状态决定。
@@ -310,7 +310,7 @@ export async function run(argv = []) {
         out.push({ 剧: j.show, 看过: `${j.seen?.length ?? 0}/${j.total ?? '?'} 集`, 最近: j.log?.at?.(-1)?.at ? new Date(j.log.at(-1).at).toLocaleString('zh-CN', { hour12: false }) : '' })
       }
     } catch {}
-    if (!out.length) { console.log('（还没看过任何一部 —— node feiyu.mjs binge --search "番名" 开始）'); return }
+    if (!out.length) { console.log('（还没看过任何一部 —— node bot.mjs binge --search "番名" 开始）'); return }
     for (const r of out) console.log(`  ${r.剧}　看过 ${r.看过}　最近 ${r.最近}`)
     return
   }
@@ -321,7 +321,7 @@ export async function run(argv = []) {
     if (!list.length) { console.log(`✗ 搜不到「${keyword}」（B站搜索可能吃风控，等几分钟再试）`); process.exit(1) }
     console.log(`「${keyword}」的候选（${list.length} 条）：`)
     for (const x of list) console.log(`  ${x.bvid}  ${x.title.slice(0, 44)}  ${x.author}  ${x.duration}  播放${x.play}${x.pages > 1 ? '  共' + x.pages + 'P' : ''}`)
-    console.log('\n挑一条真的看：node feiyu.mjs binge --bvid <bvid> [--ep 1] --go')
+    console.log('\n挑一条真的看：node bot.mjs binge --bvid <bvid> [--ep 1] --go')
     return
   }
 
@@ -515,7 +515,7 @@ export async function run(argv = []) {
       console.log(`【剧情】${r.plot}`)
       if (r.feel) console.log(`【我】${r.feel}`)
     }
-    if (!last.dry) console.log(`（看过 ${last.seen}/${last.total} 集，进度存在 ~/.feiyu-ai/binge/）`)
+    if (!last.dry) console.log(`（看过 ${last.seen}/${last.total} 集，进度存在 ~/.bot-ai/binge/）`)
     const failed = done.find((x) => !x?.ok)
     if (failed) console.log(`（第 ${failed.ep} 集没看上：${failed.via} —— 想换条投稿就 --bvid）`)
   } else {

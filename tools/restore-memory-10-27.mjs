@@ -1,7 +1,7 @@
 ﻿// 记忆库回捞（10-27）
 //
 // 事故：`test/memory-hygiene-test.mjs` 第一版只设了一个 paths.mjs 不认的变量，
-// 于是 rmSync/writeJson 打到了**真实**的 ~/.feiyu-ai：
+// 于是 rmSync/writeJson 打到了**真实**的 ~/.bot-ai：
 //   lore.json      55 KB(172 条) → 132 B
 //   facts.json     10 KB        → 63 B
 //   episodes.jsonl 86 KB        → 226 B

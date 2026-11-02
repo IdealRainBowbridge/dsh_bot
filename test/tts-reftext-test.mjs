@@ -61,7 +61,7 @@ ok('配置里的旧值会被盖掉（configRef 用转写当参考文本）', tts
 ok('颜文字仍被洗掉', !sanitizeForTts('好 (・_・;)').includes('・'))
 
 // ⑥ 现场配置必须已经对齐（防止有人手改回去）
-const cfgPath = path.join(process.env.USERPROFILE || os.homedir(), '.dsh', 'feiyu.config.json')
+const cfgPath = path.join(process.env.USERPROFILE || os.homedir(), '.dsh', 'bot.config.json')
 if (fs.existsSync(cfgPath)) {
   const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
   const truth = refTextOf(cfg.voice?.ref_audio_path || '')

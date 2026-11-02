@@ -5,7 +5,7 @@
 import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'
 
-/** 脑根目录：~/.feiyu-ai/brain */
+/** 脑根目录：~/.bot-ai/brain */
 export const BRAIN = () => dataPath('brain')
 
 export const epDir = () => path.join(BRAIN(), 'ep')

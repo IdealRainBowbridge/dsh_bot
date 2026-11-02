@@ -200,9 +200,9 @@ O10 自我模型 · O11 交付账 · O12 实体/关系 · O13 能力自评
 **身体/工具协议**（脑出任务、常驻体执行，绝不在事件循环里干重活）：
 
 ```
-node tools/feiyu.mjs brain task add binge -- --show "可塑性记忆" --ep next   # 排队
+node tools/bot.mjs brain task add binge -- --show "可塑性记忆" --ep next   # 排队
 curl -X POST localhost:<port>/task -d '{"kind":"produce","args":["--plan"]}'  # 外部投递
-node tools/feiyu.mjs brain task          # 看队列/历史
+node tools/bot.mjs brain task          # 看队列/历史
 ```
 
 kind 是白名单（`binge/produce/dm-read/card-open/tts/web-search/backup`），args 必须数组逐项透传 —— **绝不拼 shell**。
@@ -217,7 +217,7 @@ kind 是白名单（`binge/produce/dm-read/card-open/tts/web-search/backup`）�
 |---|---|
 | **生物钟**（`night`） | 窗口内随机醒（拟人，不整点），跨零点、最小间隔，每次刷 N 条视频 |
 | **完全自由**（`freedom`） | 开了之后按间隔 + 概率给她"自由时间"：上网、刷B站/抖音、写小说、写游戏、发说说、自我升级 |
-| **自定唤醒**（`selfwake`） | 她自己说"我 23:40 再醒"，到点**真的**叫起来（优先于概率）。`node feiyu.mjs selfwake 23:40 --note "把那篇小说收尾"` |
+| **自定唤醒**（`selfwake`） | 她自己说"我 23:40 再醒"，到点**真的**叫起来（优先于概率）。`node bot.mjs selfwake 23:40 --note "把那篇小说收尾"` |
 | **真的看番/看剧**（`binge`，10-27 新增 / 10-28 修续集） | 不是"看标题和热评"，是**真看完一集**：`binge --search "可塑性记忆"` → `binge --show "可塑性记忆" --ep next --go`（不给 `--ep` 且账本里已有这本，也按下一集走）。材料优先用弹幕（番剧字幕轨串片率极高，实测拿到过 ED 歌词和钢化膜测评），LLM 读完写 `{剧情, 感受}` 进她的记忆；进度落 `~/.feiyu-ai/binge/<番名>.json`，`--list` 查看到第几集。**一个投稿看不明白会自动换源重试**（同一集在合集/单集投稿里的弹幕密度差三倍），P 数不够或"其实是别的集（备份分 P）"会立刻放弃、不硬看。**节奏她自己定**：`--count 3`=连看三集、`--count all`=看到底、`--to 6`=看到第 6 集；`binge.dailyMax` 默认 **0 = 不限**（只是可选保险，不是日常规矩） |
 | **承诺有账本**（`promises`，10-27 新增 / 10-28 改独立执行） | 她说"这就去看"会被 `catchFromReply` 记成一条带截止时间的承诺；**执行器独立跑**（`runDuePromises()` 60s tick，不掷骰子、不占搭话日额，启动 25 秒先补做一次夜里的欠账），`binge` 成功就结清、没材料才照实记失败；额度满就顺延到明天 09:30，进程崩了只顺延 6 小时不判她失信。`promises` 查全部、`promises --due` 查到期 |
 | **看得懂引用**（10-27 新增） | 主人引用她（或别人）某条消息再说话时，她读到的是**被引用的原文**，不是"【引用回复了一条消息】"。做法：她发出去的每条都记 `message_id → 正文`（环形表 400 条落 `msg-index.json`），收到引用先查本地表，没命中走 NapCat `get_msg`，再没有就把最近 40~50 条历史拉一遍（`get_msg` 对老消息只回"消息不存在"，所以启动时和每 10 分钟预热一次）。引用的是图片还会过一次 VL。开关 `qq.quote = {enabled, seeImage, historyCount}` |
@@ -248,7 +248,7 @@ dsh-feiyu/
 │   └── node-runtime.js         找真 node（DSH 自带运行时 / PATH / DSH_NODE）
 ├── client.js                   浏览器半边：DSH 设置里那一页「🐟 大肥鱼」
 ├── tools/                      工具链（spawn 真 node 跑，改完不用重启 DSH）
-│   ├── feiyu.mjs               CLI 入口（30+ 子命令）
+│   ├── bot.mjs               CLI 入口（30+ 子命令）
 │   ├── lib/
 │   │   ├── memory.mjs          三层记忆 + 统一时序回忆(recallAll) + 全文检索(grepEpisodes) + 按月分片
 │   │   ├── normalize.mjs       占位符/死链归一（治"看不到内容"）
@@ -482,78 +482,78 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
 
 ```bash
 # ── 体检与身份 ────────────────────────────────────────────────
-node tools/feiyu.mjs selftest                      # 配置/凭据/登录态/数据目录/干跑 全检
-node tools/feiyu.mjs nav                           # 我是谁（真打一次 /nav）
+node tools/bot.mjs selftest                      # 配置/凭据/登录态/数据目录/干跑 全检
+node tools/bot.mjs nav                           # 我是谁（真打一次 /nav）
 
 # ── 记忆 ────────────────────────────────────────────────────
-node tools/feiyu.mjs mem stats                     # 计数
-node tools/feiyu.mjs mem grep "小说" --days 30      # 翻旧账（原文全留，按原话找）
-node tools/feiyu.mjs mem recallall --chat qq:1     # 看她现在脑子里装的那块记忆
-node tools/feiyu.mjs mem recall --query "养猫"      # 关键词回忆（>7 天）
-node tools/feiyu.mjs mem lore --tag 兴趣 --text "…" # 写世界设定
-node tools/feiyu.mjs diary --book private --append "…"
+node tools/bot.mjs mem stats                     # 计数
+node tools/bot.mjs mem grep "小说" --days 30      # 翻旧账（原文全留，按原话找）
+node tools/bot.mjs mem recallall --chat qq:1     # 看她现在脑子里装的那块记忆
+node tools/bot.mjs mem recall --query "养猫"      # 关键词回忆（>7 天）
+node tools/bot.mjs mem lore --tag 兴趣 --text "…" # 写世界设定
+node tools/bot.mjs diary --book private --append "…"
 
 # ── 节奏 ────────────────────────────────────────────────────
-node tools/feiyu.mjs selfwake 23:40 --note "把那篇小说收尾"   # 她定下次几点醒
-node tools/feiyu.mjs selfwake --show | --clear
+node tools/bot.mjs selfwake 23:40 --note "把那篇小说收尾"   # 她定下次几点醒
+node tools/bot.mjs selfwake --show | --clear
 
 # ── 看番 / 承诺（10-27，10-28 修"说了不做"）──────────────────
-node tools/feiyu.mjs binge --search "可塑性记忆"        # 搜番，看有哪几集能看
-node tools/feiyu.mjs binge --show "可塑性记忆" --ep 1 --go   # 真看完一集（写剧情+感受进记忆）
-node tools/feiyu.mjs binge --show "可塑性记忆" --ep next --go # 接着看下一集（续看会沿用账本里 P 数最多的那条投稿）
-node tools/feiyu.mjs binge --bvid BV1os411S7dL --ep 1 --go   # 指定投稿
-node tools/feiyu.mjs binge --list                       # 已经看过哪几部、看到第几集
-node tools/feiyu.mjs focus binge --min 40               # 接下来 40 分钟专心看番（其余循环停）
-node tools/feiyu.mjs promises                           # 她答应过、还没做的事
-node tools/feiyu.mjs promises --due                     # 只看到期的（qq-server 里 runDuePromises() 每 60s 自己跑）
-node tools/feiyu.mjs promises done <id> "看完了"         # 结清 / fail <id> "没字幕"
+node tools/bot.mjs binge --search "可塑性记忆"        # 搜番，看有哪几集能看
+node tools/bot.mjs binge --show "可塑性记忆" --ep 1 --go   # 真看完一集（写剧情+感受进记忆）
+node tools/bot.mjs binge --show "可塑性记忆" --ep next --go # 接着看下一集（续看会沿用账本里 P 数最多的那条投稿）
+node tools/bot.mjs binge --bvid BV1os411S7dL --ep 1 --go   # 指定投稿
+node tools/bot.mjs binge --list                       # 已经看过哪几部、看到第几集
+node tools/bot.mjs focus binge --min 40               # 接下来 40 分钟专心看番（其余循环停）
+node tools/bot.mjs promises                           # 她答应过、还没做的事
+node tools/bot.mjs promises --due                     # 只看到期的（qq-server 里 runDuePromises() 每 60s 自己跑）
+node tools/bot.mjs promises done <id> "看完了"         # 结清 / fail <id> "没字幕"
 
 # ── 脑（v3，10-29）：记忆/意图/自我/体检 ──────────────────────
-node tools/feiyu.mjs brain doctor                   # 17 项体检（8 条不变量 + 派生层门槛 + 任务队列）
-node tools/feiyu.mjs brain stats                    # 情景/事实/意图/巩固进度
-node tools/feiyu.mjs brain recall "烧鸭"             # 看它现在能召回什么（带 ‹ep-id› 可回溯）
-node tools/feiyu.mjs brain facts [--conflicts]      # 结构化事实（每条都带 prov）
-node tools/feiyu.mjs brain intents [--all]          # 意图三态：答应过/做不了/只能想想
-node tools/feiyu.mjs brain consolidate [--llm] [--dry]
-node tools/feiyu.mjs brain eval [--calibrate]       # 评测台：Recall@6 / MRR，可反推权重
-node tools/feiyu.mjs brain schema [--show]          # O6 图式（30 天 × 5 次才归纳）
-node tools/feiyu.mjs brain competence [--show]      # O13 能力自评（成功 3 次才算会）
-node tools/feiyu.mjs brain self [show|owner|narrative]
-node tools/feiyu.mjs brain task [list|add|done|fail|history]   # 身体/工具协议
-node tools/feiyu.mjs brain backfill [N]             # 把旧 episodes.jsonl 导进脑（去重、跳过微信）
-node tools/feiyu.mjs brain emit "一句话" --role user  # 手工灌一条事件（调试用）
-node tools/feiyu.mjs brain tick                     # 跑一次心跳（补做 + 该不该巩固）
+node tools/bot.mjs brain doctor                   # 17 项体检（8 条不变量 + 派生层门槛 + 任务队列）
+node tools/bot.mjs brain stats                    # 情景/事实/意图/巩固进度
+node tools/bot.mjs brain recall "烧鸭"             # 看它现在能召回什么（带 ‹ep-id› 可回溯）
+node tools/bot.mjs brain facts [--conflicts]      # 结构化事实（每条都带 prov）
+node tools/bot.mjs brain intents [--all]          # 意图三态：答应过/做不了/只能想想
+node tools/bot.mjs brain consolidate [--llm] [--dry]
+node tools/bot.mjs brain eval [--calibrate]       # 评测台：Recall@6 / MRR，可反推权重
+node tools/bot.mjs brain schema [--show]          # O6 图式（30 天 × 5 次才归纳）
+node tools/bot.mjs brain competence [--show]      # O13 能力自评（成功 3 次才算会）
+node tools/bot.mjs brain self [show|owner|narrative]
+node tools/bot.mjs brain task [list|add|done|fail|history]   # 身体/工具协议
+node tools/bot.mjs brain backfill [N]             # 把旧 episodes.jsonl 导进脑（去重、跳过微信）
+node tools/bot.mjs brain emit "一句话" --role user  # 手工灌一条事件（调试用）
+node tools/bot.mjs brain tick                     # 跑一次心跳（补做 + 该不该巩固）
 
 # ── 聊天通道 ────────────────────────────────────────────────
-node tools/feiyu.mjs qq-server 8080                # QQ 常驻（NapCat OneBot 上报 /onebot）
-node tools/feiyu.mjs douyin-dm-server --port 8095  # 抖音私信陪聊
-node tools/feiyu.mjs qzone --content "…"           # 发 QQ 空间说说
+node tools/bot.mjs qq-server 8080                # QQ 常驻（NapCat OneBot 上报 /onebot）
+node tools/bot.mjs douyin-dm-server --port 8095  # 抖音私信陪聊
+node tools/bot.mjs qzone --content "…"           # 发 QQ 空间说说
 
 # ── 抖音 ────────────────────────────────────────────────────
-node tools/feiyu.mjs douyin self                   # 读当前登录号（顾思苡）的 sec_uid
-node tools/feiyu.mjs douyin my-videos              # 扫自己的投稿（--owner 扫主人号）
-node tools/feiyu.mjs douyin comments --vid <id>    # 读评论（带 cid）
-node tools/feiyu.mjs douyin reply --vid <id> --cid <cid> --message "…" --go
-node tools/feiyu.mjs douyin engage [--dry]         # 自己作品下回评论（cid 精确 + 文本兜底）
-node tools/feiyu.mjs douyin interact [--dry]       # feed→选片→读热评→写评论
-node tools/feiyu.mjs douyin watch [--duration 10]  # 自主观看
+node tools/bot.mjs douyin self                   # 读当前登录号（顾思苡）的 sec_uid
+node tools/bot.mjs douyin my-videos              # 扫自己的投稿（--owner 扫主人号）
+node tools/bot.mjs douyin comments --vid <id>    # 读评论（带 cid）
+node tools/bot.mjs douyin reply --vid <id> --cid <cid> --message "…" --go
+node tools/bot.mjs douyin engage [--dry]         # 自己作品下回评论（cid 精确 + 文本兜底）
+node tools/bot.mjs douyin interact [--dry]       # feed→选片→读热评→写评论
+node tools/bot.mjs douyin watch [--duration 10]  # 自主观看
 
 # ── B站 ─────────────────────────────────────────────────────
-node tools/feiyu.mjs feed | debrief --bvid BV1xx | comment --bvid BV1xx --message "…" [--go]
-node tools/feiyu.mjs bili-watch --free             # 静默自助刷一轮
-node tools/feiyu.mjs replies                       # 扫别人对我评论的回复并回应
-node tools/feiyu.mjs replies --own-only [--go]      # 只回**我自己作品**下面的评论（任何类型）
-node tools/feiyu.mjs replies --audit 10             # 体检：最近 10 条评论别人到底看不看得见（匿名视角）
-node tools/feiyu.mjs replies --own-only --go --force # 明知被挂审核也要发（默认会自刹车）
+node tools/bot.mjs feed | debrief --bvid BV1xx | comment --bvid BV1xx --message "…" [--go]
+node tools/bot.mjs bili-watch --free             # 静默自助刷一轮
+node tools/bot.mjs replies                       # 扫别人对我评论的回复并回应
+node tools/bot.mjs replies --own-only [--go]      # 只回**我自己作品**下面的评论（任何类型）
+node tools/bot.mjs replies --audit 10             # 体检：最近 10 条评论别人到底看不看得见（匿名视角）
+node tools/bot.mjs replies --own-only --go --force # 明知被挂审核也要发（默认会自刹车）
 
 # ── 她自己的手脚 ─────────────────────────────────────────────
-node tools/feiyu.mjs web search "关键词" | web fetch <url> | web log
-node tools/feiyu.mjs sticker gen "文案" [--tag 标签] [--send]
-node tools/feiyu.mjs produce ["主题"]              # 短视频投稿包（成片等你点发布）
-node tools/feiyu.mjs sing ["主题"] | cover "歌名"
-node tools/feiyu.mjs voice list | tryall | use | refcheck | refclean   # refcheck：ASR 核对参考文本；refclean：挤掉参考段死空气
-node tools/feiyu.mjs selfup backup|log|status       # 改自己代码前备份、改完记账
-node tools/feiyu.mjs report --days 1                # 观看日报（不调模型）
+node tools/bot.mjs web search "关键词" | web fetch <url> | web log
+node tools/bot.mjs sticker gen "文案" [--tag 标签] [--send]
+node tools/bot.mjs produce ["主题"]              # 短视频投稿包（成片等你点发布）
+node tools/bot.mjs sing ["主题"] | cover "歌名"
+node tools/bot.mjs voice list | tryall | use | refcheck | refclean   # refcheck：ASR 核对参考文本；refclean：挤掉参考段死空气
+node tools/bot.mjs selfup backup|log|status       # 改自己代码前备份、改完记账
+node tools/bot.mjs report --days 1                # 观看日报（不调模型）
 ```
 
 ---

@@ -6,7 +6,7 @@
 //
 // 用法：catch {} → catch (e) { swallow(e, 'qq-server:mood-tick') }
 // 设计：① 绝不抛（这本身就是兜底路径）；② 合并去重 + 每小时一条摘要，
-//       避免每 60s 的 tick 把日志刷爆；③ 写 ~/.feiyu-ai/logs/swallowed.log，超 2MB 截半。
+//       避免每 60s 的 tick 把日志刷爆；③ 写 ~/.bot-ai/logs/swallowed.log，超 2MB 截半。
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'

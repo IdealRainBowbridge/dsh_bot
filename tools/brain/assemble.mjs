@@ -178,7 +178,7 @@ function slotList(ctx) {
   //   ③ 更重要：line() 会拼上"（还有 X 分钟）"—— 那是任务管理器的语言，明确被否掉过。
   //      这里只取 lean。
   try {
-    const st = JSON.parse(fs.readFileSync(homePath('.feiyu-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
+    const st = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
     const lean = String(st?.current?.lean || '').trim()
     if (lean) add('selfstate', '【此刻】' + lean, 18)
   } catch { }

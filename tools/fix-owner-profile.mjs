@@ -12,7 +12,7 @@ import path from 'node:path'
 import { homePath } from './lib/paths.mjs'
 
 const GO = process.argv.includes('--go')
-const FILE = homePath('.feiyu-ai', 'qq', 'owner-profile.md')
+const FILE = homePath('.bot-ai', 'qq', 'owner-profile.md')
 const old = fs.readFileSync(FILE, 'utf8')
 
 const from = '他馋南京的鸭血粉丝汤、盐水鸭、小笼包，菜单我已背下来，还记着答应一起去吃桑拿鸡汤泡饭。'

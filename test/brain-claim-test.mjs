@@ -10,12 +10,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-claim-'))
-process.env.FEIYU_DATA_DIR = tmp
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-claim-'))
+process.env.BOT_DATA_DIR = tmp
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 process.env.DSH_HOME = path.join(tmp, '.dsh')
-process.env.FEIYU_BRAIN_MIRROR = '0'
+process.env.BOT_BRAIN_MIRROR = '0'
 
 // 造一份看番账本：测试番 已看 1~3 集
 fs.mkdirSync(path.join(tmp, 'binge'), { recursive: true })

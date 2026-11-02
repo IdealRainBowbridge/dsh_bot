@@ -1,9 +1,9 @@
 // quota —— 额度账本：分享每天 ≤shareDaily、同一视频 sameVideoDays 天一次。
 // 复用 dsh-bili-whale 的账本思路（quota.json + check/record），克制是活下来的前提。
 //
-//   node feiyu.mjs quota check --type share --target BV1xxxx
-//   node feiyu.mjs quota record --type share --target BV1xxxx --note "…"
-//   node feiyu.mjs quota show
+//   node bot.mjs quota check --type share --target BV1xxxx
+//   node bot.mjs quota record --type share --target BV1xxxx --note "…"
+//   node bot.mjs quota show
 import fs from 'node:fs'
 import { dataPath } from '../lib/paths.mjs'
 import { config } from '../lib/config.mjs'

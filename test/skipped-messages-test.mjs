@@ -15,15 +15,15 @@ import os from 'node:os'
 import path from 'node:path'
 
 // 隔离必须在任何 import 之前（paths.mjs 在 import 时定死 HOME）
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-skip-'))
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-skip-'))
 process.env.USERPROFILE = TMP
 process.env.HOME = TMP
 delete process.env.DSH_HOME
-process.env.FEIYU_DATA_DIR = path.join(TMP, '.feiyu-ai')
-fs.mkdirSync(process.env.FEIYU_DATA_DIR, { recursive: true })
-const cfgPath = path.join(TMP, 'feiyu.config.json')
+process.env.BOT_DATA_DIR = path.join(TMP, '.bot-ai')
+fs.mkdirSync(process.env.BOT_DATA_DIR, { recursive: true })
+const cfgPath = path.join(TMP, 'bot.config.json')
 fs.writeFileSync(cfgPath, JSON.stringify({ identity: { name: '大肥鱼', ownerTitle: '主人', selfClaim: '我' }, llm: { api_key: 'x' } }))
-process.env.FEIYU_CONFIG = cfgPath
+process.env.BOT_CONFIG = cfgPath
 
 const SK = await import('../tools/lib/skipped-messages.mjs')
 const persona = await import('../tools/lib/persona.mjs')

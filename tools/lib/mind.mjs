@@ -17,7 +17,7 @@
 //   · focus 仍是唯一真相（谁在干什么），这里只是**替她做那个决定**
 //   · wander / tattle / proactive 仍可独立触发，但会先看 mind 的计划：
 //     她在专心做一件事时，不相干的打扰会被压掉
-//   · 她随时可以用 `feiyu mind now` 手动重规划（改变主意是她的权利）
+//   · 她随时可以用 `bot mind now` 手动重规划（改变主意是她的权利）
 import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'

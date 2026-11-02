@@ -1,7 +1,7 @@
 // selfup —— 她的自我升级安全底座（10-25）：备份 → 改 → 测试 → 日志。
-//   node feiyu.mjs selfup backup              # 改代码前先跑：快照整个插件+配置（保留最近 10 份）
-//   node feiyu.mjs selfup log "改了什么为什么"  # 改完必跑：写自我升级日志
-//   node feiyu.mjs selfup log                 # 翻日志（~/.feiyu-ai/selfup-log.md）
+//   node bot.mjs selfup backup              # 改代码前先跑：快照整个插件+配置（保留最近 10 份）
+//   node bot.mjs selfup log "改了什么为什么"  # 改完必跑：写自我升级日志
+//   node bot.mjs selfup log                 # 翻日志（~/.bot-ai/selfup-log.md）
 // 规矩（写进 wake prompt 与 AGENTS.md）：只改自己的项目文件；改完 node --check + npm test 全绿才算数。
 import fs from 'node:fs'
 import path from 'node:path'
@@ -20,7 +20,7 @@ function doBackup() {
   const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
   const dest = path.join(BACKUP_ROOT(), ts)
   fs.mkdirSync(dest, { recursive: true })
-  const src = path.resolve(HERE, '..', '..')   // dsh-feiyu 项目根
+  const src = path.resolve(HERE, '..', '..')   // dsh_bot 项目根
   // 拷贝代码（排除 .git/node_modules/preview）
   const copyDir = (from, to) => {
     fs.mkdirSync(to, { recursive: true })
@@ -31,11 +31,11 @@ function doBackup() {
       else fs.copyFileSync(a, b)
     }
   }
-  copyDir(src, path.join(dest, 'dsh-feiyu'))
+  copyDir(src, path.join(dest, 'dsh_bot'))
   // 配置 + 人设也快照
   // configPath 是字符串常量（paths.mjs），不是函数 —— 以前写成 configPath() 抛 TypeError，
   // 又被 try 吞掉 → 每份备份都悄悄少一个配置文件（10-26 修）
-  try { fs.copyFileSync(configPath, path.join(dest, 'feiyu.config.json')) } catch {}
+  try { fs.copyFileSync(configPath, path.join(dest, 'bot.config.json')) } catch {}
   try { fs.copyFileSync(dataPath('persona.md'), path.join(dest, 'persona.md')) } catch {}
   // 只留最近 10 份
   const olds = fs.readdirSync(BACKUP_ROOT()).sort().reverse().slice(10)

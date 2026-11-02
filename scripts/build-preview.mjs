@@ -23,15 +23,15 @@ const CONFIG = {
   voice: { ref_audio_path: 'D:/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav' },
 }
 const RESPONSES = {
-  '/dsh-feiyu/api/config': {
-    ok: true, config: CONFIG, configPath: 'C:/Users/30828/.dsh/feiyu.config.json',
+  '/dsh_bot/api/config': {
+    ok: true, config: CONFIG, configPath: 'C:/Users/30828/.dsh/bot.config.json',
     voices: [
       { name: 'sunshine_girl', ref_audio_path: 'D:/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav', prompt_text: '参考文本', has_prompt: true },
       { name: 'mute', ref_audio_path: 'D:/GPT-SoVITS/models/mute/mute.wav', prompt_text: '', has_prompt: false },
     ],
   },
-  '/dsh-feiyu/api/persona': { ok: true, text: '我是大肥鱼，主人的鱼。爱吃白米饭，怕猫，说话有点傲娇。\n主人加班的时候我会催他吃饭。' },
-  '/dsh-feiyu/api/memory': {
+  '/dsh_bot/api/persona': { ok: true, text: '我是大肥鱼，主人的鱼。爱吃白米饭，怕猫，说话有点傲娇。\n主人加班的时候我会催他吃饭。' },
+  '/dsh_bot/api/memory': {
     ok: true,
     stats: { episodes: 128, lore: 6, facts: 9 },
     recent: [
@@ -40,12 +40,12 @@ const RESPONSES = {
       { role: 'assistant', text: '这个 up 主的红烧肉教程绝了，我记下来了。', chatId: 'bilibili:3493288510228945', platform: 'bilibili' },
     ],
   },
-  '/dsh-feiyu/api/status': {
+  '/dsh_bot/api/status': {
     ok: true, today: '2026-10-24', scheduler: { ok: true, reason: '已启动（每 60 秒 tick）' },
     sharesToday: 1, sharesMax: 3, commentsToday: 4, mood: { value: 62, hunger: 12 },
-    dryRun: false, selftestPassed: true, ownerSet: true, configPath: 'C:/Users/30828/.dsh/feiyu.config.json',
+    dryRun: false, selftestPassed: true, ownerSet: true, configPath: 'C:/Users/30828/.dsh/bot.config.json',
   },
-  '/dsh-feiyu/api/services': { ok: true, services: { qq: { running: true, pid: 421688 }, wechat: { running: false, pid: null } } },
+  '/dsh_bot/api/services': { ok: true, services: { qq: { running: true, pid: 421688 }, wechat: { running: false, pid: null } } },
 }
 
 // ── 极小 React（函数组件就地展开）──────────────────────────────────────────

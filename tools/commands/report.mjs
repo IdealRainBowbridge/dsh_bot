@@ -1,7 +1,7 @@
 // report —— 观看日报：把今天（或 N 天）真实看过的 B站/抖音 汇总成 Markdown。
 // 纯数据聚合，不调模型（参考 dsh-bili-whale 的"日报不调用模型"做法）。
 //
-//   node feiyu.mjs report [--days 1] [--out <path>]
+//   node bot.mjs report [--days 1] [--out <path>]
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from '../lib/paths.mjs'

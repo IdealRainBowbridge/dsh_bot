@@ -6,7 +6,7 @@
 //
 // 所以现在的模型：
 //   · 完全自由（freedom）= 只负责"按时摇她起来"，不定她干什么
-//   · 她醒了，自己挑一件，用 `feiyu focus <活动> --min <分钟>` 定下来（这就是"自主"）
+//   · 她醒了，自己挑一件，用 `bot focus <活动> --min <分钟>` 定下来（这就是"自主"）
 //   · 宿主半边（lib/index.js）每 60 秒按这份状态**只放行一个**常驻循环，其余一律停掉
 //   · 到点自动收工 → 回到"自由时间"（什么都不跑），下次醒了她再挑
 //   · 歇着（rest）也是正经选项：人不可能一刻不停地刷
@@ -18,14 +18,14 @@ import { dshPath } from './paths.mjs'
 import { writeJsonAtomic } from './atomic.mjs'
 import { swallow } from './swallow.mjs'
 
-export const FOCUS_PATH = dshPath('feiyu-focus.json')
+export const FOCUS_PATH = dshPath('bot-focus.json')
 
 /** 可以"占住一段时间"的常驻活动（各自对应一个循环进程）。 */
 export const LOOP_ACTIVITIES = {
   web: { label: '自由上网', sw: ['web', 'roam'], hint: '逛网页/搜索/读文章/写小说' },
   bilibili: { label: '刷B站', sw: ['bilibili', 'freeRoam'], hint: '看视频/深读/评论/发动态' },
   // 看番（10-27 新增）：她说"这就去看"必须真有个动作。binge 是一次性命令，
-  // 不需要自己的循环；这里让它占住时间（其余循环全关），她会调 `feiyu binge --show … --go`。
+  // 不需要自己的循环；这里让它占住时间（其余循环全关），她会调 `bot binge --show … --go`。
   binge: { label: '看番/看剧', sw: ['bilibili', 'bingeLoop'], hint: '用 binge 真的看完一集，看完写感受' },
 }
 

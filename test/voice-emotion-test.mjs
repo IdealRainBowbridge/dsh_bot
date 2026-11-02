@@ -12,11 +12,11 @@ import os from 'node:os'
 import path from 'node:path'
 
 // 先把 dataPath 指到临时目录 —— 情绪参考段清单不能读主人真实的那份
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'feiyu-emo-test-'))
+const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-emo-test-'))
 process.env.DSH_HOME = sandbox
 process.env.USERPROFILE = sandbox
 process.env.HOME = sandbox
-process.env.FEIYU_HOME = path.join(sandbox, '.data')
+process.env.BOT_HOME = path.join(sandbox, '.data')
 // 注：这个变量是测试自己约定的，路径名跟随数据目录改名
 
 const E = await import('../tools/lib/emotion.mjs')

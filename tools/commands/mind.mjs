@@ -1,8 +1,8 @@
 // mind —— 统一自主规划：她自己决定「接下来做什么」。
 //
-//   node feiyu.mjs mind            看当前计划和上下文（只读）
-//   node feiyu.mjs mind now        立刻重新规划一次（改变主意是她的权利）
-//   node feiyu.mjs mind history    看她做过的计划流水
+//   node bot.mjs mind            看当前计划和上下文（只读）
+//   node bot.mjs mind now        立刻重新规划一次（改变主意是她的权利）
+//   node bot.mjs mind history    看她做过的计划流水
 //
 // 和 focus 的分工：focus 是「她现在在干什么」的事实记录；
 // mind 是「她怎么决定的那件事」的决策层。planner 决定后会写进 focus。

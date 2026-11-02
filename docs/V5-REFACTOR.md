@@ -27,7 +27,7 @@
 而 `brain.onSent` 只在真发后记 → **两套记忆分叉**，她之后会引用"幽灵发言"。
 
 实测证据（重构前）：15:58:11 日志 `[qq][干跑] → 在发呆啊…`，同一秒
-`~/.feiyu-ai/qq/episodes.jsonl` 出现同文 assistant 行。
+`~/.bot-ai/qq/episodes.jsonl` 出现同文 assistant 行。
 
 **修法**：新增 `memory.rememberAudit()`，只写 `audit/unsent.jsonl`（不进任何提示词、
 不进 brain）。`diagnose` 增加"干跑审计"一项。

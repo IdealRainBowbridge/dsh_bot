@@ -1,14 +1,14 @@
 // social —— 她今天在 B站 干了什么（主人："除了@我的其它我都不知道发生了什么"）。
 //
-//   node feiyu.mjs social                 # 今天：先列"没 @ 你的"，再列"@ 你的"
-//   node feiyu.mjs social --days 3        # 近三天
-//   node feiyu.mjs social --kind 回评     # 只看某一类（评论/回评/弹幕/动态/点赞/投币/关注/投稿）
-//   node feiyu.mjs social --invisible     # 只看她干了但没告诉你的
-//   node feiyu.mjs social --md            # 另存一份 Markdown 到 ~/.feiyu-ai/bili-social-<day>.md
-//   node feiyu.mjs social --push          # 摘要推到主人 QQ（每日摘要就是走这条）
-//   node feiyu.mjs social --json
+//   node bot.mjs social                 # 今天：先列"没 @ 你的"，再列"@ 你的"
+//   node bot.mjs social --days 3        # 近三天
+//   node bot.mjs social --kind 回评     # 只看某一类（评论/回评/弹幕/动态/点赞/投币/关注/投稿）
+//   node bot.mjs social --invisible     # 只看她干了但没告诉你的
+//   node bot.mjs social --md            # 另存一份 Markdown 到 ~/.bot-ai/bili-social-<day>.md
+//   node bot.mjs social --push          # 摘要推到主人 QQ（每日摘要就是走这条）
+//   node bot.mjs social --json
 //
-// 数据源：~/.feiyu-ai/bili-social.jsonl（每条都标了 toOwner）
+// 数据源：~/.bot-ai/bili-social.jsonl（每条都标了 toOwner）
 import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
 import * as S from '../lib/social-log.mjs'
