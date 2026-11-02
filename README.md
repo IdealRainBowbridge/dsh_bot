@@ -689,4 +689,3 @@ npm test     # 8 套：client-smoke / client-render / stickers / imggen / memory
 
 本项目 MIT。与 B站、QQ、微信、DeepSeek 官方无隶属关系。
 用你自己的账号做事，后果自负 —— 所以她被设计得**宁可沉默，不刷屏**。
-// smtest 1793644773
