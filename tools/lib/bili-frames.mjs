@@ -3,8 +3,12 @@
 // 背景（10-31）：debrief 一直只吃文字（元信息/字幕/热评/简介），头注释里写着
 // 「抽帧（ffmpeg）留给 v0.2 —— 没有直链时绝不伪装成"已看完"」。这一版把 v0.2 补上。
 //
-// 链路：view 拿 cid → wbi/playurl 拿 dash 直链 → curl 下载头部若干 MB →
-//       ffmpeg 均匀抽 n 帧 → 交给 vision 描述 → 返回一段描述文本。
+// 链路：view 拿 cid → wbi/playurl 拿 dash 直链
+//       → **先下最低清晰度整片，按画面内容算出该看哪几秒**（adapt-frames）
+//       → 再到高清流里取那几个位置的片段 → ffmpeg 各解一帧 → 交给 vision 描述。
+//
+// 2026-11-02 第三次重做：前两次（只下头部 / 固定 40%+75%）都是"位置写死"，
+// 现在改成**内容决定采样位置**（用户原话见 adapt-frames.mjs 文件头）。
 //
 // 三条硬原则：
 //   1. 任何一步失败都返回 null，**绝不编造画面**。宁可让她说"这次没看到"。
@@ -19,6 +23,8 @@ import { apiGet, makeHeaders } from './bili-api.mjs'
 import { loadCred } from './cred.mjs'
 import { dataPath } from './paths.mjs'
 import { visionOn, describeFrames } from './vision.mjs'
+// adapt-frames 是**动态** import 的（见 seeVideo 里）：它只在真要按内容挑帧时才需要。
+// 静态引入会让"只想抽一帧"的轻调用也背上它。
 
 const execFileP = promisify(execFile)
 
@@ -240,13 +246,22 @@ async function sampleFragments(url, total, opts = {}) {
   const first = firstFragment(init, end)
   if (first) frags.push({ at: 'head', buf: first })
 
-  // ③ 中段两处：40% / 75%（避开开头 OP 与结尾 ED）
-  const ratios = (opts.ratios && opts.ratios.length) ? opts.ratios : [0.40, 0.75]
+  // ③ 取样点：**由调用方按内容决定**（adapt-frames 算出来的秒数），
+  //    不再写死 40%/75%。传 ratios 是没算内容时的退化路径。
+  //
+  //    opts.points = [{ sec, ratio }]，来自 pickFramesByContent 的骨架+内容层。
+  //    没有 points 才退回均匀比例 —— 并**明确标记为退化**（label 带 ~）。
+  let points = Array.isArray(opts.points) ? opts.points.slice() : []
+  if (!points.length) {
+    const ratios = (opts.ratios && opts.ratios.length) ? opts.ratios : [0.25, 0.5, 0.75]
+    points = ratios.map((r) => ({ sec: 0, ratio: r, fallback: true }))
+  }
   const SPAN = Number(opts.spanBytes ?? 3 * 1024 * 1024)
   const MAX_TRY = 3
-  for (let i = 0; i < ratios.length; i++) {
-    const r = ratios[i]
-    // 有总长 → 按比例落点；没总长 → 从 init 末尾往后盲扫（每处错开窗口，保证不重叠）
+  for (let i = 0; i < points.length; i++) {
+    const pt = points[i]
+    const r = Number(pt.ratio || 0)
+    // 有总长 → 按字节比例落点；没总长 → 从 init 末尾往后盲扫（每处错开窗口，保证不重叠）
     let start = (total > 0)
       ? Math.max(end + 1, Math.floor(total * r) - Math.floor(SPAN / 2))
       : end + 1 + i * SPAN
@@ -259,7 +274,8 @@ async function sampleFragments(url, total, opts = {}) {
       // 整窗往后平移一个窗口再试（不是从窗口尾巴接着找）
       start += SPAN
     }
-    if (f) frags.push({ at: approx ? `~${Math.round(r * 100)}%` : `${Math.round(r * 100)}%`, buf: f })
+    const label = (pt.fallback || approx) ? `~${Math.round(r * 100)}%` : `${Math.round(r * 100)}%`
+    if (f) frags.push({ at: label, buf: f })
   }
   return { head, frags, boxes, bytesDown }
 }
@@ -325,12 +341,69 @@ export async function seeVideo(bvid, opts = {}) {
       if (bw > 0 && dur > 0) { totalBytes = Math.round((bw * dur) / 8); totalSource = 'estimate' }
     }
 
+    // ③.5 **先算内容，再决定取哪几帧**（2026-11-02）
+    //
+    // 为什么不能省这一步：没有它就只能按固定位置抽（40%/75%），
+    // 而"位置写死、不看内容"正是这套一直被诟病的电路板做法。
+    //
+    // 做法：拿**最低清晰度**的整条视频流（几十 MB，能整条取），
+    // 用 adapt-frames 按内容算出该看哪几秒（骨架铺全局 + 变化密集处加密），
+    // 再把这些秒数换算成字节比例，到**高清**流里去取那几个位置的片段。
+    //
+    // 代价：多下一次低清整片。实测 6 分钟视频最低清 360p 约 8MB / 4 秒，
+    // 换来的是"取哪几帧由画面内容决定"。
+    let contentPlan = []
+    let contentThresh = 0
+    try {
+      const AF = await import('./adapt-frames.mjs')
+      const durSec = Number(pu.data?.dash?.duration || 0)
+      if (durSec > 1 && opts.contentPick !== false) {
+        // 最低清晰度那条（id 最小），只为跑差异计算，不用来看
+        const lowList = (pu.data?.dash?.video || []).slice()
+          .filter((x) => /^avc/i.test(String(x.codecs || '')))
+          .sort((a, b) => Number(a.id) - Number(b.id))
+        const low = lowList[0] || null
+        const lowUrl = String(low?.baseUrl || low?.base_url || '')
+        if (lowUrl) {
+          // 网络流探针：ffmpeg 直接读 URL（B站 CDN 支持 Range，只取需要的那几秒）。
+          // 为什么不用整片：60 分钟的视频最低清整片 201MB（实测），"看一眼"不该付这个代价。
+          const probeAt = async (sec) => {
+            const out = path.join(tmp, `p_${String(Math.round(sec * 10)).padStart(7, '0')}.raw`)
+            try {
+              await execFileP('ffmpeg', [
+                '-hide_banner', '-loglevel', 'error',
+                // B站 CDN 会校验 Referer/UA：不带就是 403（实测直接 -i URL 必失败）。
+                // 两种写法都可（-headers 与 -user_agent/-referer），这里用后者更直观。
+                '-user_agent', H['user-agent'] || 'Mozilla/5.0',
+                '-referer', 'https://www.bilibili.com/',
+                // -ss 放在 -i 前 = 快速定位（seek 到关键帧，不解码前面全部）
+                '-ss', String(Math.max(0, sec)),
+                '-i', lowUrl,
+                '-frames:v', '1',
+                '-vf', 'scale=64:36,format=gray',
+                '-f', 'rawvideo', '-y', out,
+              ], { timeout: 30_000 })
+              const buf = fs.readFileSync(out)
+              try { fs.unlinkSync(out) } catch { /* ignore */ }
+              return buf.length === 64 * 36 ? buf : null
+            } catch { return null }
+          }
+          const budget = Math.max(2, Math.min(10, Number(opts.frames || 3)))
+          const got = await AF.pickByContentStream(probeAt, { duration: durSec, budget })
+          contentPlan = AF.planOnly(got)
+          contentThresh = Number(got.calibratedThresh || 0)
+        }
+      }
+    } catch { contentPlan = [] }
+
     let frames = []
     let size = 0          // 本次**真的下载**了多少字节（不是流的总长）
     let sampleAt = 'head'
     if (totalBytes > 0) {
       const { head, frags, bytesDown } = await sampleFragments(url, totalBytes, {
-        headers: H, tmp, spanBytes: maxBytes, ratios: opts.ratios,
+        headers: H, tmp, spanBytes: maxBytes,
+        points: contentPlan.length ? contentPlan : undefined,
+        ratios: opts.ratios,
       })
       if (!head || !frags.length) return null
       size = bytesDown || 0
@@ -373,7 +446,10 @@ export async function seeVideo(bvid, opts = {}) {
     const desc = await describeFrames(frames, {
       query: opts.query
         || `这是同一条视频（《${String(d.title || '').slice(0, 40)}》）不同位置的 ${frames.length} 帧。`
-        + `取样位置：${sampleAt}（% 指视频进度，不是均匀抽样）。`
+        + `取样位置：${sampleAt}（% 指视频进度）。`
+        + (contentPlan.length
+          ? `这几帧是**按画面变化挑出来的**：先铺全片骨架，再在变化大的地方补帧，所以静止的长镜头只给一张、有事情的地方会多给。`
+          : `（这次没能按内容挑帧，位置是均匀取的——可信度低一些）`)
         + '用 2~3 句中文描述你**看到**的东西：画面里有什么人/物、在做什么、什么场景和风格。'
         + '只描述画面本身，不要推测剧情，不要复述标题。',
     })
@@ -385,7 +461,10 @@ export async function seeVideo(bvid, opts = {}) {
       bytes: size,
       codec: String(stream?.codecs || ''),
       title: String(d.title || ''),
-      sampleAt,                              // head+40%+75% 之类（~ 表示位置是估的）
+      sampleAt,                              // 实际取到的位置（~ 表示位置是估的）
+      contentPicked: contentPlan.length > 0, // true = 位置由画面内容决定
+      contentPlan: contentPlan.map((p) => Math.round(p.sec)),  // 算出来的秒数，便于复核
+      contentThresh,                         // 这条片子自适应出来的"算变了"阈值（便于复核）
       spanBytes: totalSource === 'estimate' ? null : (totalBytes || null),
       spanBytesSource: totalSource,          // head / range / estimate / none
     }

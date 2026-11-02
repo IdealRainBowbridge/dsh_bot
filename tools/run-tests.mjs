@@ -28,7 +28,8 @@ const TESTS = [
   'recall-push-test.mjs',
   'imggen-test.mjs',
   'vision-test.mjs',
-  'bili-audio-test.mjs',   // 音频/ASR：成稿合并 + 失败语义（不打网络）
+  'bili-audio-test.mjs',
+  'adapt-frames-test.mjs',  // 抽帧策略：阈值自适应 / 骨架覆盖 / 预算上限   // 音频/ASR：成稿合并 + 失败语义（不打网络）
   'ledger-test.mjs',
   'comment-engage-test.mjs',
   'reply-style-test.mjs',
