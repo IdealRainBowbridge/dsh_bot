@@ -7,6 +7,7 @@
 // 与 package.json 的 `test` 脚本等价：同样的文件、同样的顺序、失败即停。
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -64,6 +65,33 @@ const TESTS = [
   'share-queue-race-test.mjs', // 分享队列多生产者：并发入队不丢事件、不写坏 JSON
 ]
 
+// ── 测试临时产物统一收尾（2026-11-02）─────────────────────────────────────
+// 30 个测试用 fs.mkdtempSync(os.tmpdir()) 建隔离目录，其中一半从不清理。
+// 实测跑 4 轮全量就留下 15 个 bot-brain-cons-* —— 无界泄漏，只是单个很小。
+// 这里在每个测试前后各拍一次 /tmp，把**这期间新出现**的、且命中测试前缀的删掉。
+// 只删命中前缀的：不碰别人的东西，也不碰她运行时的临时文件。
+const TEST_TMP_PREFIXES = [
+  'bot-brain-cons-', 'bot-brain-', 'bot-group-', 'bot-', 'dsh-',
+  'epdedup-', 'watchlog-', 'watchslot-', 'dupfp-', 'dupfp2-',
+  'botcfg-', 'botmem-', 'bot-quota-', 'bot-focus-', 'bot-life-',
+]
+function snapshotTmp() {
+  const dir = os.tmpdir()
+  try { return new Set(fs.readdirSync(dir)) } catch { return new Set() }
+}
+function cleanupNewTmp(before) {
+  const dir = os.tmpdir()
+  let after = []
+  try { after = fs.readdirSync(dir) } catch { return 0 }
+  let n = 0
+  for (const name of after) {
+    if (before.has(name)) continue
+    if (!TEST_TMP_PREFIXES.some((p) => name.startsWith(p))) continue
+    try { fs.rmSync(path.join(dir, name), { recursive: true, force: true }); n++ } catch { /* 删不掉就算了 */ }
+  }
+  return n
+}
+
 const filter = process.argv[2] || ''
 const picked = filter ? TESTS.filter((t) => t.includes(filter)) : TESTS
 if (!picked.length) {
@@ -83,10 +111,13 @@ for (const t of picked) {
   }
   // v5：单个测试套原来没有超时 —— 任何一个测试挂住（比如等网络/等文件锁），
   // 整个 run-tests 就永远不结束，看着像"卡住了"。给 5 分钟上限。
+  const tmpBefore = snapshotTmp()
   const r = spawnSync(NODE, [file], {
     stdio: 'inherit', windowsHide: true, cwd: path.join(HERE, '..'),
     timeout: 300_000, killSignal: 'SIGKILL',
   })
+  const cleaned = cleanupNewTmp(tmpBefore)
+  if (cleaned) console.log(`  （清掉 ${cleaned} 个测试临时产物）`)
   if (r.status === 0) console.log(`✓ ${t}`)
   else {
     console.log(`✗ ${t}（exit ${r.status ?? r.signal}）`)

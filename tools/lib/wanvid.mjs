@@ -240,13 +240,23 @@ export async function animate({
   cfg = config(), s = settings(cfg), log = () => {},
 }) {
   const tmp = path.join(os.tmpdir(), `wan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`)
-  const { taskId, seconds: dur } = await submit({ firstFrame, prompt, negative, seconds, seed, s, log })
-  const done = await waitTask({ taskId, s, log })
-  await download(done.videoUrl, tmp)
-  const raw = keepRaw ? out.replace(/\.mp4$/, '.raw.mp4') : tmp
-  if (keepRaw) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.copyFileSync(tmp, raw) }
-  mute(tmp, out, cfg)
-  if (!keepRaw) { try { fs.rmSync(tmp, { force: true }) } catch {} }
+  try {
+    const { taskId, seconds: dur } = await submit({ firstFrame, prompt, negative, seconds, seed, s, log })
+    const done = await waitTask({ taskId, s, log })
+    await download(done.videoUrl, tmp)
+    const raw = keepRaw ? out.replace(/\.mp4$/, '.raw.mp4') : tmp
+    if (keepRaw) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.copyFileSync(tmp, raw) }
+    mute(tmp, out, cfg)
+    const d = probeDur(out, cfg)
+    if (!(d > 0.5)) throw new Error('掐完音轨的片段读不出时长')
+    return { file: out, seconds: dur, taskId, raw: keepRaw ? raw : '', dur: d }
+  } finally {
+    // 2026-11-02 修：tmp 是纯中间件，**永远删**。
+    // 以前 keepRaw=true（默认）时 tmp 留着不删 —— 而 animateScene() 从不传 keepRaw，
+    // 于是每生成一段就在 /tmp 漏一个 wan-*.mp4（实测堆了 66 个）。
+    // keepRaw 的语义是"留一份未掐音轨的 raw"，不是"留临时下载件" —— 两件事被绑在一起了。
+    try { fs.rmSync(tmp, { force: true }) } catch { /* 删不掉也不能影响出片 */ }
+  }
   const d = probeDur(out, cfg)
   if (!(d > 0.5)) throw new Error('掐完音轨的片段读不出时长')
   return { file: out, seconds: dur, taskId, raw: keepRaw ? raw : '', dur: d }
