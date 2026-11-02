@@ -4,7 +4,7 @@
 //   node bot.mjs browser links                              # 当前页的可点链接
 //   node bot.mjs browser click "选择器" [序号] | type "选择器" "文字" | enter
 //   node bot.mjs browser scroll ±px | back | shot [--tag 名] | status | close
-import { browserRead, browserAct, browserShot, browserStatus, browserClose, browserPeek, browserDetach } from '../lib/browser.mjs'
+import { browserRead, browserAct, browserShot, browserStatus, browserClose, browserPeek, browserDetach, browserTabs, browserCloseAll, browserCloseTabAt, browserActionsLog } from '../lib/browser.mjs'
 
 function deviceOf(argv) {
   const d = argv[argv.indexOf('--device') + 1]
@@ -62,13 +62,25 @@ async function runSub(sub, argv) {
     for (const t of s.tabs) console.log(`  · [${t.title}] ${t.url}`)
     return
   }
-  if (sub === 'close') { console.log(await browserClose()); return }
+  if (sub === 'tabs') {
+    const p = await browserPeek({ maxChars: 1 })
+    console.log(await browserTabs())
+    return
+  }
+  if (sub === 'close') {
+    const t = argv[1]
+    if (t === '--all') { console.log(await browserCloseAll()); return }
+    if (t && /^@\d+$/.test(t)) { console.log(await browserCloseTabAt(Number(t.slice(1)))); return }
+    console.log(await browserClose()); return
+  }
+  if (sub === 'actions') { console.log(await browserActionsLog()); return }
 
   console.log('内置浏览器（电脑/手机双身份，可点可填可截图）')
   console.log('  browser read <url> [--pc|--mobile] [--chars N] [--links] [--full]   读正文+可交互元素编号（@1 @2…）')
   console.log('  browser text [--offset N] | links | shot [--tag 名]                 续读 / 看链接 / 截图')
   console.log('  browser click @3 | click text=登录 | type @5 "字" | enter           交互（点完自动回新的元素表）')
-  console.log('  browser scroll ±px | back | status | close')
+  console.log('  browser tabs | close @2 | close --all | close                       标签管理 / 关当前页')
+  console.log('  browser scroll ±px | back | status | actions | close                滚动/后退/状态/动作日志')
 }
 
 export async function run(argv = []) {

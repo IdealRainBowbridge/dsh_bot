@@ -198,8 +198,9 @@ export class Cdp {
     this.ws = ws
     this.nextId = 1
     this.pending = new Map()   // id → {resolve, reject}
-    this.events = []           // 没人等的事件先存着
+    this.events = []           // 没人等的事件先存着（封顶防泄漏）
     this.waiters = []          // 等事件的人
+    this.inflight = new Map()  // sessionId → 在途网络请求数
     this.open = true
     // undici 的 WebSocket 是异步连接：new 完不能立刻 send，必须等 open
     this.ready = new Promise((resolve, reject) => {
@@ -213,9 +214,18 @@ export class Cdp {
         const p = this.pending.get(msg.id)
         if (p) { this.pending.delete(msg.id); clearTimeout(p.timer); msg.error ? p.reject(new Error(msg.error.message || JSON.stringify(msg.error))) : p.resolve(msg.result) }
       } else if (msg.method) {
-        const w = this.waiters.findIndex((x) => x.match(msg))
-        if (w >= 0) { const [hit] = this.waiters.splice(w, 1); hit.resolve(msg) }
-        else this.events.push(msg)
+        // 网络在途请求计数（settle 判"网络安静"用）—— 只计数不进事件缓存，免得刷爆
+        if (msg.method === 'Network.requestWillBeSent') this.inflight.set(msg.sessionId, (this.inflight.get(msg.sessionId) || 0) + 1)
+        else if (msg.method === 'Network.loadingFinished' || msg.method === 'Network.loadingFailed')
+          this.inflight.set(msg.sessionId, Math.max(0, (this.inflight.get(msg.sessionId) || 0) - 1))
+        if (!msg.method.startsWith('Network.')) {
+          const w = this.waiters.findIndex((x) => x.match(msg))
+          if (w >= 0) { const [hit] = this.waiters.splice(w, 1); hit.resolve(msg) }
+          else {
+            this.events.push(msg)
+            if (this.events.length > 320) this.events.splice(0, this.events.length - 200)   // 常驻进程防泄漏
+          }
+        }
       }
     })
     ws.addEventListener('close', () => {
@@ -284,6 +294,7 @@ async function openTab(conn, device) {
   const { sessionId } = await conn.cdp.send('Target.attachToTarget', { targetId, flatten: true })
   await conn.cdp.send('Page.enable', {}, sessionId)
   await conn.cdp.send('Runtime.enable', {}, sessionId)
+  await conn.cdp.send('Network.enable', {}, sessionId)   // 在途请求计数（settle 判稳）
   const tab = { targetId, sessionId, device, url: '', at: Date.now() }
   setCurrentTab(tab)
   // GC：档案里没记的杂页 + 超额旧页，收掉（别挡道，失败就算了）
@@ -356,11 +367,14 @@ async function emulateDevice(conn, sessionId, device) {
     d.touch ? { enabled: true, maxTouchPoints: 5 } : { enabled: false }, sessionId)
 }
 
-/** 等页面"安静"：load 事件 + readyState=complete + 连续两次 DOM 节点数稳定 */
+/** 等页面"安静"：load 事件 + readyState=complete + 连续两次 DOM 稳定 + **网络在途请求清零**。
+ *  旧版只看 DOM 节点数——SPA 首屏 DOM 早就不变了，但 XHR 还在陆陆续续往里塞东西，
+ *  读到的永远是半成品。现在加上网络安静判定，读到的至少是"这轮请求都回来了一拍"的页面。 */
 async function settle(conn, sessionId, waitMs) {
   const deadline = Date.now() + Math.max(3000, Number(waitMs) || 8000)
-  try { await conn.cdp.waitEvent((m) => m.method === 'Page.loadEventFired' && m.sessionId === sessionId, deadline - Date.now()) } catch (e) { swallow(e, 'browser:loadWait') }
+  try { await conn.cdp.waitEvent((m) => m.method === 'Page.loadEventFired' && m.sessionId === sessionId, Math.max(1000, deadline - Date.now())) } catch (e) { swallow(e, 'browser:loadWait') }
   let lastCount = -1
+  let lastNet = -1
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 500))
     try {
@@ -369,8 +383,10 @@ async function settle(conn, sessionId, waitMs) {
         returnByValue: true,
       }, sessionId)
       const v = r.result?.value ?? {}
-      if (v.rs === 'complete' && v.n === lastCount && v.n > 0) return v.u
+      const net = conn.cdp.inflight.get(sessionId) || 0
+      if (v.rs === 'complete' && v.n === lastCount && v.n > 0 && net === 0 && lastNet === 0) return v.u
       lastCount = v.n
+      lastNet = net
     } catch (e) { swallow(e, 'browser:settle') }
   }
   return ''
@@ -507,6 +523,12 @@ export async function browserRead(url, { device = 'auto', waitMs = 8000, maxChar
     await settle(conn, tab.sessionId, 4000).catch(() => {})
   }
   let page = await readPage(conn, tab.sessionId, { maxChars, offset, links })
+  // iframe 嵌入正文（公众号/门户常见）：同源 iframe 的文本拼到后面
+  try {
+    const ir = await conn.cdp.send('Runtime.evaluate', { expression: IFRAME_FN, returnByValue: true }, tab.sessionId)
+    const ft = String(ir.result?.value || '')
+    if (ft && !page.text.includes(ft.slice(0, 80))) page.text = (page.text ? page.text + '\n\n' : '') + ft
+  } catch (e) { swallow(e, 'browser:iframe') }
   // 登录墙/慢热 SPA：白等一拍再读一次，多数"第一下空"的页就出来了
   const joined = page.text || ''
   if ((joined.replace(/\s/g, '').length < 200 || LOGIN_MARKERS.some((m) => joined.includes(m))) && !full) {
@@ -547,6 +569,7 @@ export async function browserAct(action, ...args) {
   const s = await ensureSession(curDevice || 'pc')
   const { sessionId, conn } = s
   const ev = (expression) => conn.cdp.send('Runtime.evaluate', { expression, returnByValue: true }, sessionId)
+  const note = (target, detail) => { try { logAction(action, target, detail) } catch (e) { swallow(e, 'browser:note') } }
   /** 动作后的元素表回显（编号顺延） */
   async function refreshEls() {
     try {
@@ -570,9 +593,10 @@ export async function browserAct(action, ...args) {
         cr = await ev(`(() => { const els=[...document.querySelectorAll(${JSON.stringify(t.selector)})]; const el=els[0]; if(!el) return {ok:false, why:'没找到元素（'+${JSON.stringify(t.selector)}+'）'}; el.scrollIntoView({block:'center'}); const label=(el.innerText||el.value||el.getAttribute('aria-label')||'').trim().slice(0,40); el.click(); return {ok:true, label} })()`)
       }
       const v = cr.result?.value ?? {}
-      if (!v.ok) throw new Error(v.why || '点击失败')
+      if (!v.ok) { note(target, '失败：' + (v.why || '').slice(0, 60)); throw new Error(v.why || '点击失败') }
       await settle(conn, sessionId, 4000).catch(() => {})
       const els = await refreshEls()
+      note(target, '点了「' + (v.label || '') + '」')
       return `点了「${v.label || target}」${fmtEls(els)}`
     }
     case 'type': {
@@ -588,9 +612,10 @@ export async function browserAct(action, ...args) {
         tr = await ev(`(() => { const el=document.querySelector(${JSON.stringify(t.selector)}); if(!el) return {ok:false, why:'没找到输入框（'+${JSON.stringify(t.selector)}+'）'}; el.scrollIntoView({block:'center'}); el.focus(); if('value' in el) el.value=''; else el.textContent=''; return {ok:true} })()`)
       }
       const v = tr.result?.value ?? {}
-      if (!v.ok) throw new Error(v.why || '定位输入框失败')
+      if (!v.ok) { note(target, '失败：' + (v.why || '').slice(0, 60)); throw new Error(v.why || '定位输入框失败') }
       await conn.cdp.send('Input.insertText', { text }, sessionId)
       await ev(`document.activeElement.dispatchEvent(new Event('input', {bubbles:true})); document.activeElement.dispatchEvent(new Event('change', {bubbles:true})); true`)
+      note(target, '输入 ' + text.length + ' 字')
       return `已输入 ${text.length} 个字（还没提交，要发送就 browser enter，或 click 提交按钮）`
     }
     case 'enter': {
@@ -631,6 +656,11 @@ export async function browserShot(tag = '') {
   if (!r.data) throw new Error('截不出来（页面可能还没画完，等两秒再试）')
   const dir = SHOT_DIR()
   fs.mkdirSync(dir, { recursive: true })
+  // 内存守护：截图目录只留最近 100 张（每次 ~7KB，100 张封顶 ≈ 0.7MB）
+  try {
+    const shots = fs.readdirSync(dir).filter((f) => f.endsWith('.jpg')).sort()
+    for (const f of shots.slice(0, Math.max(0, shots.length - 100))) fs.rmSync(path.join(dir, f), { force: true })
+  } catch (e) { swallow(e, 'browser:shotGc') }
   const name = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + (tag ? '-' + String(tag).replace(/[^\w-]/g, '').slice(0, 20) : '') + '.jpg'
   const file = path.join(dir, name)
   fs.writeFileSync(file, Buffer.from(r.data, 'base64'))
@@ -668,4 +698,97 @@ export async function browserClose() {
 export async function browserDetach() {
   try { cdp?.ws.close() } catch (e) { swallow(e, 'browser:detach') }
   cdp = null; cdpPid = null; curDevice = null
+}
+
+/** 显式关一个 tab（browser close @编号 / close --all）；不带参数关当前页 */
+export async function closeTab(targetId) {
+  const conn = await connect()
+  const tid = targetId || readDaemon()?.current?.targetId
+  if (!tid) return '没有可关的页'
+  try { await conn.cdp.send('Target.closeTarget', { targetId: tid }) } catch (e) { swallow(e, 'browser:closeTab') }
+  const st = readDaemon()
+  if (st?.current?.targetId === tid) { delete st.current; writeDaemon(st) }
+  return '已关一页'
+}
+
+/** iframe 嵌入正文（公众号/门户把文章放 iframe 里）：抓同源 iframe 的文本拼到主文档后面 */
+export const IFRAME_FN = `(() => {
+  const out = []
+  try {
+    for (const f of document.querySelectorAll('iframe')) {
+      try {
+        const d = f.contentDocument
+        if (!d || !d.body) continue
+        const t = (d.body.innerText || '').replace(/[ \\t]+/g, ' ').replace(/\\n{2,}/g, '\\n').trim()
+        if (t.replace(/\\s/g, '').length > 80) out.push(t)
+      } catch (e) { /* 跨域 iframe 摸不到，正常 */ }
+    }
+  } catch (e) {}
+  return out.join('\\n\\n')
+})()`
+
+/** 开着的标签清单（落档案，跨进程可见）：[序号] 身份 · 标题 · URL。带 * 的是"当前页" */
+export async function browserTabs() {
+  const d = await probeDaemon()
+  if (!d) return '浏览器没在跑'
+  const conn = await connect()
+  const st = readDaemon()
+  const { targetInfos } = await conn.cdp.send('Target.getTargets')
+  const pages = targetInfos.filter((t) => t.type === 'page' && !/^devtools:/.test(t.url))
+  const lines = pages.map((t, i) => {
+    const mark = st?.current?.targetId === t.targetId ? '*' : ' '
+    return `${mark}[${i + 1}] ${t.title.slice(0, 30)} · ${t.url.slice(0, 70)}`
+  })
+  touchDaemon(d.pid)
+  return lines.join('\n') || '（没有开着的页）'
+}
+
+/** 全关（不关浏览器本体；登录态留着） */
+export async function browserCloseAll() {
+  const d = await probeDaemon()
+  if (!d) return '本来就没开'
+  const conn = await connect()
+  const { targetInfos } = await conn.cdp.send('Target.getTargets')
+  let n = 0
+  for (const t of targetInfos.filter((x) => x.type === 'page' && !/^devtools:/.test(x.url))) {
+    try { await conn.cdp.send('Target.closeTarget', { targetId: t.targetId }); n++ } catch (e) { swallow(e, 'browser:closeAll') }
+  }
+  const st = readDaemon()
+  if (st) { delete st.current; writeDaemon(st) }
+  touchDaemon(d.pid)
+  return `已关 ${n} 页（浏览器还在）`
+}
+
+/** 按清单序号关页（browser close @2） */
+export async function browserCloseTabAt(n) {
+  const d = await probeDaemon()
+  if (!d) return '浏览器没在跑'
+  const conn = await connect()
+  const { targetInfos } = await conn.cdp.send('Target.getTargets')
+  const pages = targetInfos.filter((t) => t.type === 'page' && !/^devtools:/.test(t.url))
+  const t = pages[Number(n) - 1]
+  if (!t) return `没有 [${n}] 这一页（一共 ${pages.length} 页，先 browser tabs 看清单）`
+  try { await conn.cdp.send('Target.closeTarget', { targetId: t.targetId }) } catch (e) { swallow(e, 'browser:closeAt') }
+  const st = readDaemon()
+  if (st?.current?.targetId === t.targetId) { delete st.current; writeDaemon(st) }
+  touchDaemon(d.pid)
+  return `已关 [${n}] ${t.title.slice(0, 30)}`
+}
+
+/** 动作日志（谁在什么时候点了/输了什么）：落 ~/.data/browser-actions.log */
+export async function browserActionsLog() {
+  const f = dataPath('browser-actions.log')
+  try {
+    const lines = fs.readFileSync(f, 'utf8').split('\n').filter(Boolean)
+    return lines.slice(-40).join('\n') || '（还没做过交互动作）'
+  } catch { return '（还没做过交互动作）' }
+}
+/** 动作日志写入（browserAct 内部调用；best-effort 不挡道） */
+export function logAction(action, target, detail = '') {
+  try {
+    const f = dataPath('browser-actions.log')
+    const t = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    fs.appendFileSync(f, `${t} ${action} ${String(target).slice(0, 60)}${detail ? ' ｜ ' + String(detail).slice(0, 80) : ''}\n`)
+  } catch (e) { swallow(e, 'browser:logAction') }
 }

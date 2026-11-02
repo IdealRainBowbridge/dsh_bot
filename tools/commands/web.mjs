@@ -17,7 +17,7 @@ import { swallow } from '../lib/swallow.mjs'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
 const LOG = () => dataPath('web-log.md')
-const PROXY = () => config().web?.proxy || 'http://127.0.0.1:7897'
+const PROXY = () => config().web?.proxy ?? config().browser?.proxy ?? ''
 const CURL = () => (fs.existsSync('C:/Windows/System32/curl.exe') ? 'C:/Windows/System32/curl.exe' : 'curl')
 
 function curlGet(url, { proxy = false, timeout = 30000 } = {}) {
@@ -65,11 +65,14 @@ export function searchWeb(kw) {
     // ✗ 别加 &count=15（10-27 实测）：带上这个参数，cn.bing.com 会返回一批**跟关键词完全无关**
     //   的结果（问"稻花香大米口感"给我淘宝和屏幕亮度），看着是"搜到了"，其实全是脏数据。
     //   去掉之后同一个问题前三条就命中"稻花香集团官方网站"。宁可少抓，不要脏抓。
-    const html = curlGet(`https://cn.bing.com/search?q=${encodeURIComponent(kw)}`)
-    const re = /<h2><a[^>]+href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>([\s\S]*?)<p[^>]*>([\s\S]*?)<\/p>/g
-    let m
-    while ((m = re.exec(html)) && results.length < 10) {
-      results.push({ title: htmlToText(m[2]).slice(0, 80), url: m[1], snippet: htmlToText(m[4]).slice(0, 150) })
+    const html = curlGet(`https://cn.bing.com/search?q=${encodeURIComponent(kw)}&format=rss`)
+    // 2026-11-03：HTML 版 SERP 混广告位（10-27 &count=15 脏数据事件的根源），改 RSS 版 —— 纯 <item> 结构，天然没广告
+    for (const it of html.match(/<item>[\s\S]*?<\/item>/g) || []) {
+      const title = htmlToText((it.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '')
+      const link = String((it.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '').trim()
+      const snip = htmlToText((it.match(/<description>([\s\S]*?)<\/description>/) || [])[1] || '')
+      if (title && /^https?:\/\//.test(link)) results.push({ title: title.slice(0, 80), url: link, snippet: snip.slice(0, 150) })
+      if (results.length >= 12) break
     }
   } catch (e) { swallow(e, 'web:searchWeb') }
   if (!results.length) {

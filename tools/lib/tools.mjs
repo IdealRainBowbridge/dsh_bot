@@ -124,6 +124,7 @@ export const CHAT_TOOLS = [
           url: { type: 'string', description: '要打开的 http(s) 链接' },
           device: { type: 'string', enum: ['auto', 'pc', 'mobile'], description: '设备身份：auto=按域名猜（默认），pc=电脑，mobile=手机' },
           links: { type: 'boolean', description: '要不要列出页面上可点的链接（想继续点就开）' },
+          full: { type: 'boolean', description: '懒加载页（要滑到底才加载的）传 true，自动滑到底喂全' },
         },
         required: ['url'],
       },
@@ -223,6 +224,7 @@ export async function runTool(name, args = {}) {
         const dev = ['pc', 'mobile'].includes(a.device) ? a.device : 'auto'
         const args = ['browser', 'read', url, '--device', dev]
         if (a.links) args.push('--links')
+        if (a.full) args.push('--full')
         const r = await runCli(args, 90000)
         if (!r.ok) return { ok: false, result: `浏览器没读成：${(r.err || r.out || '').slice(0, 200)}` }
         return { ok: true, result: String(r.out || '').slice(0, 1800) }
