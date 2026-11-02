@@ -41,14 +41,20 @@ export async function bindBody(deps) {
   const NIGHT = await import('../brain/organ/night.mjs')
 
   // 把"决定"写进 focus（focus 仍是"她此刻在做什么"的唯一真相）
+  // 2026-11-02 修：这里原来把**对象**传给 writeFocus(activity, min, note)，
+  //   String(activity) 得到 "[object Object]"，min/note 落默认值，until 恒 0。
+  //   后果不是"显示难看"：lib/index.js 的循环放行读 focus.activity →
+  //   isLoopActivity("[object Object]") = false → want = null →
+  //   正在跑的上网/B站**被停掉**且**永不拉起**，她的自主活动每 30 秒被自己掐死一次。
+  //   实测：改回正确调用后日志里不再出现"开始自由上网 → 30 秒后让位"。
   const syncFocus = async (activity, d) => {
     try {
       const F = await import('./focus.mjs')
-      F.writeFocus({
-        activity,
-        until: Date.now() + Math.max(5, Number(d?.spanMin || 30)) * 60_000,
-        why: d?.why || '',
-      })
+      F.writeFocus(
+        String(activity || ''),
+        Math.max(5, Number(d?.spanMin || 30)),
+        d?.why || '',
+      )
     } catch (e) { swallow(e, 'body:syncFocus') }
   }
 
