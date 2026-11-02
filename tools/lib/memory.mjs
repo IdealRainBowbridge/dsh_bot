@@ -155,6 +155,10 @@ export function remember(platform, chatId, userId, role, text, extra = {}) {
     // 但 recent() 会把它当"广播"而不是"对话"，避免把对话窗口挤满（10-26）。
     ...(extra.kind ? { kind: String(extra.kind) } : {}),
   }
+  // P0-4 (2026-11-03): timestamp-shape stamp on write (evidence only, no rewrite).
+  if (rec.ts > Date.now() + 5 * 60_000 || rec.ts % 1000 === 0) {
+    rec._tflags = [(rec.ts > Date.now() + 5 * 60_000 ? 'future' : ''), (rec.ts % 1000 === 0 ? 'alms' : '')].filter(Boolean).join('|')
+  }
   const file = episodeFile(p)
   const okWrite = appendEpisode(file, rec)
   if (!okWrite) { swallow(new Error('episode append failed'), 'memory:append-failed'); return null }

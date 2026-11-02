@@ -218,6 +218,15 @@ export function stream(rec, now = Date.now()) {
     text: String(rec.text || ''),          // ← 原文，不裁、不摘要、不改写
     ...(rec.meta ? { meta: rec.meta } : {}),
   }
+  // P0-4 (2026-11-03): timestamp-shape stamp on write. Evidence only - never
+  // rewrites or drops rows. Flags: future = beyond +5min clock skew (a caller
+  // passing a synthetic/shifted clock), alms = ms-aligned timestamp (Date.now()
+  // is aligned to the millisecond only by chance, synthetic clocks are not).
+  // Exact-interval series needs neighbours, so it is swept at read side.
+  const _fl = []
+  if (row.at > Date.now() + 5 * 60_000) _fl.push('future')
+  if (row.at % 1000 === 0) _fl.push('alms')
+  if (_fl.length) row._tflags = _fl.join('|')
   try { appendJsonl(innerStreamPath(), row) } catch { /* 流写不进去不能挡业务 */ }
   return row
 }
