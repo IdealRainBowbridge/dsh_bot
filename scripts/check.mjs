@@ -732,6 +732,56 @@ const FUNC_ALLOW = {
   // lib/index.js 的 apply() 是插件壳主闭包，同理
   'lib/index.js:apply': 1100,
 }
+// ── 16. 导出了但没有任何调用者的函数（2026-11-03 P0-3）───────────────────────
+// 为什么加：presence.mjs 在库里躺了整整一天——文件在、测试在、门禁全绿，
+// 但全仓没有任何一处 import 它（M60：引用为零）。器官写完了没人接线，
+// 静态上完全看得出来：export 了名字 X，而 X 在其它文件里一次都没出现。
+// 这类「入库未接线」必须在门禁里现形，而不是等评审。
+// 规则：扫 export function/const/class 的名字，在**其它文件**里找词级引用。
+//   · 引用包括 import、动态调度表里的名字、测试里的调用（测试也算调用者，
+//     但「只有测试用」的器官同样是欠账，会在报告里注出来）；
+//   · 入口文件（lib/index.js / client.js / scripts/）被宿主或浏览器直接加载，
+//     走 SKIP，不参与本条；
+//   · 例外登记 ZERO_CALL_ALLOW，写理由——是已知欠账，不是永久豁免。
+const ZERO_CALL_SKIP_FILES = new Set(['lib/index.js', 'client.js', 'tools/lib/_demo.mjs'])
+const ZERO_CALL_ALLOW = {
+  // 'tools/xxx.mjs:fnName': 'reason (ticket)'
+}
+function checkZeroCallers(files) {
+  const corpus = []
+  for (const f of files) {
+    const r = rel(f)
+    if (r.startsWith('scripts/')) continue
+    let src
+    try { src = fs.readFileSync(f, 'utf8') } catch (e) { continue }
+    corpus.push({ r, s: stripComments(src) })
+  }
+  const names = new Map()
+  for (const c of corpus) {
+    if (ZERO_CALL_SKIP_FILES.has(c.r)) continue
+    const re = /(?:^|\n)\s*export\s+(?:async\s+)?(?:function|const|class)\s+([A-Za-z_$][\w$]*)/g
+    let m
+    while ((m = re.exec(c.s)) !== null) {
+      const n = m[1]
+      if (!names.has(n)) names.set(n, { file: c.r, testsOnly: true })
+    }
+  }
+  const wordOf = (n) => new RegExp('(?<![\\w$])' + n + '(?![\\w$])', 'g')
+  for (const [n, info] of names) {
+    if (ZERO_CALL_ALLOW[info.file + ':' + n]) continue
+    const word = wordOf(n)
+    let uses = 0
+    for (const c of corpus) {
+      if (c.r === info.file) continue
+      let cnt = 0
+      let mm
+      while ((mm = word.exec(c.s)) !== null) cnt++
+      if (cnt > 0) { uses += cnt; if (!c.r.startsWith('test/')) info.testsOnly = false }
+    }
+    if (uses === 0) push('导出零调用', info.file, n + '() 全仓 0 处引用 —— 入库未接线?')
+  }
+}
+
 function checkSize(files) {
   for (const f of files) {
     const r = rel(f)
