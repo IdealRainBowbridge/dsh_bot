@@ -39,6 +39,7 @@ const COMMANDS = {
   avatar: '看头像：avatar 看自己的、avatar --owner 看老爸的（真看图，不是背设定）｜--refresh 重下',
   selfsrc: '看自己的代码（只读）：selfsrc tree 结构 ｜ selfsrc grep <词> 搜 ｜ selfsrc read <文件> --from N --lines N 读一段',
   'selfcon-seed': '一次性（幂等）：把现在的 identity/persona/腔调种进 selfcon.json 当账本起点（不发明新内容）',
+  sanitize: '脱敏器自检：sanitize test 验证拦截规则（该拦的拦、日常话不误伤）｜sanitize hits 看最近命中',
   selfmod: '改自己（全自主）：selfmod propose <文件> <为什么> --from <新内容文件> 提案 → selfmod selfApply 免审批落地（备份+语法+门禁+失败自动还原）｜selfmod snapshot 拍快照｜selfmod status',
   diary: '两本日记（--book owner|private）',
   mem: '三层记忆（remember/fact/lore/recall/old/stats）',

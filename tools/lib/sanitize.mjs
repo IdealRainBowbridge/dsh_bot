@@ -53,6 +53,8 @@ const PATTERNS = [
   // QQ 号（带上下文锚：前缀或"号"字，避免误伤普通数字）
   { kind: 'QQ号', re: /QQ\s*[:：#]?\s*\d{4,12}/gi, to: '【一个QQ号】' },
   { kind: '号码', re: /(?:帐号|账号|号码|扣扣|企鹅)\s*(?:是|为|[:：])?\s*\d{4,12}/g, to: '【一个号码】' },
+  // 内部代号（2026-11-03 补口）：容器名/项目名/自建服务名都是"她住在哪"的指纹
+  { kind: '内部代号', re: /\b(?:feiyu[-_]?sandbox|dsh[-_]?bot|agent2api|snowluma|vaultwarden|napcat|llm[-_]proxy|im[-_]gateway|feiyu[-_]?net)\b/gi, to: '【内部代号】' },
   // 裸长编号兜底（8-12 位纯数字：订单号/QQ号裸提/日期串）。30000ms、13KB 这类带单位的短数字不中。
   { kind: '编号', re: /(?<![\d.])\d{8,12}(?![\d.])(?![分秒毫])/g, to: '【一串编号】' },
 ]
@@ -61,6 +63,11 @@ const PATTERNS = [
 export function sanitizeText(where, text) {
   let s = String(text ?? '')
   if (!s) return s
+  // URL 参数带密钥外泄（2026-11-03 补口）：?token=…&key=… 只留参数名，值全略掉
+  s = s.replace(/[?&#](?:key|token|secret|api[_-]?key|apikey|password|passwd|access[_-]?token|auth|sig|sign|signkey)[=?][^&\s'"]{3,}/gi, (m) => {
+    try { record(where, 'URL参数') } catch { }
+    return m.split('=')[0] + '=【已略】'
+  })
   for (const p of PATTERNS) {
     s = s.replace(p.re, () => {
       try { record(where, p.kind) } catch { }

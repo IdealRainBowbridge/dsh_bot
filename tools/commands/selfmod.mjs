@@ -64,7 +64,7 @@ export async function run(argv = []) {
     const r = SM.selfApply(argv[1])
     if (!r.ok) { console.error('没落地：' + r.reason); process.exit(1) }
     console.log('✓ 已自主落地【' + r.id + '】（语法✓ 门禁✓，备份 ' + (r.backup ? r.backup.split('/').pop() : '有') + '）')
-    console.log('  要重启才生效。改动明细在 selfmod status / selfup 日志里。')
+    console.log('  没人说话时我会自己重启生效；急的话跟老爸说「重启」。明细在 selfmod status / selfup 日志里。')
     return
   }
 

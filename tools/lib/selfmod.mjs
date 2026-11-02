@@ -167,6 +167,14 @@ function backup(file) {
   const dest = path.join(dir, rel)
   fs.mkdirSync(path.dirname(dest), { recursive: true })
   fs.copyFileSync(file, dest)
+  // 30 天前的备份目录清掉（2026-11-03）：改得勤的时候一天能攒几十个
+  try {
+    const root = dataPath('selfmod-backups')
+    for (const d of fs.readdirSync(root)) {
+      const p = path.join(root, d)
+      try { if (fs.statSync(p).mtimeMs < Date.now() - 30 * 86400_000) fs.rmSync(p, { recursive: true, force: true }) } catch { }
+    }
+  } catch (e) { swallow(e, 'selfmod:backup-retain') }
   return { dir, dest }
 }
 
@@ -238,6 +246,53 @@ export function apply(id) {
   return { ok: true, id: item.id, checks, backup: bk.dir, needRestart: true }
 }
 
+
+/** 全量测试异步兜底（2026-11-03 补强）：门禁不挡逻辑错，这里补上。
+ *  单飞行：上一轮没跑完就跳过本轮（下次自改会连着一起测）。
+ *  挂了自动还原——但只还原"文件还是她改完的样子"的情况；期间又被改过就不动（别把新改动一起擦掉）。 */
+let testInFlight = false
+async function runFullTests(item, file, before, afterText) {
+  if (testInFlight) {
+    try {
+      execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
+        `【${item.id}】全量测试跳过一轮（上一轮还在跑，下次自改会连它一起测）`],
+        { timeout: 20000, stdio: 'pipe', cwd: ROOT })
+    } catch { }
+    return
+  }
+  testInFlight = true
+  try {
+    const { execFile } = await import('node:child_process')
+    await new Promise((res, rej) => {
+      execFile(process.execPath, [path.join(ROOT, 'tools', 'run-tests.mjs')],
+        { timeout: 600000, cwd: ROOT, maxBuffer: 64 * 1024 * 1024 },
+        (err, stdout) => { if (err) rej(Object.assign(err, { tail: String(stdout || '').slice(-1500) })); else res() })
+    })
+    try {
+      execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
+        `【${item.id}】全量测试通过（改动稳了）`], { timeout: 20000, stdio: 'pipe', cwd: ROOT })
+    } catch (e) { swallow(e, 'selfmod:fulltest-log') }
+  } catch (e) {
+    let untouched = false
+    try { untouched = fs.readFileSync(file, 'utf8') === afterText } catch { }
+    const why = String(e.tail || e.message).slice(0, 150)
+    try {
+      execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
+        untouched
+          ? `【${item.id}】全量测试没过，已自动还原 ${item.file}：${why}`
+          : `【${item.id}】全量测试没过，但文件随后又被改过，没敢自动还原——人工看一眼：${why}`],
+        { timeout: 20000, stdio: 'pipe', cwd: ROOT })
+    } catch { }
+    if (untouched) {
+      try { fs.writeFileSync(file, before) } catch { }
+      try {
+        const { sendOwnerQQ } = await import('./notify.mjs')
+        await sendOwnerQQ(`她的自改【${item.id}】（${item.file}）全量测试没过，文件已自动还原，代码跟改之前一样。`)
+      } catch { }
+    }
+  } finally { testInFlight = false }
+}
+
 /**
  * 全自主落地（2026-11-03 口径：审批撤了，她完全自主）。
  * 安全网从"等批准"换成"改不坏"：
@@ -298,6 +353,14 @@ export function selfApply(id) {
       `【${item.id}】自主改 ${item.file}：${item.why}（语法✓ 门禁✓，备份 ${path.basename(bk.dir)}）`],
       { timeout: 20000, stdio: 'pipe', cwd: ROOT })
   } catch (e) { swallow(e, 'selfmod:selfApply-log') }
+
+  // 提交日志（宿主 git autocommit 读它，把 SMY 号写进提交信息）
+  try { fs.appendFileSync(dataPath('selfmod-commit.log'), `${item.id} ${item.file}\n`) } catch (e) { swallow(e, 'selfmod:commit-log') }
+  // 重启 flag：qq-server 每分钟看一眼，10 分钟没人说话就自己重启生效
+  try { fs.writeFileSync(dataPath('selfmod-restart.flag'), JSON.stringify({ id: item.id, file: item.file, at: Date.now() })) } catch (e) { swallow(e, 'selfmod:restart-flag') }
+
+  // 全量测试异步兜底（不阻塞落地；挂了自动还原并通知老爸）
+  void runFullTests(item, file, before, item.change)
 
   return { ok: true, id: item.id, checks, backup: bk.dir, needRestart: true }
 }
