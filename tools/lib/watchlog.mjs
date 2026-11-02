@@ -57,9 +57,39 @@ function save(j) {
   writeJsonAtomic(FILE(), j)
 }
 
-/** 剧名归一（避免"可塑性记忆"和"可塑性记忆 "算两部）。 */
+/**
+ * 剧名归一（避免"可塑性记忆"和"可塑性记忆 "算两部）。
+ *
+ * 2026-11-02 端到端踩到：`binge --bvid` 时 show 传的是**完整视频标题**
+ * （「一口气看完【可塑性记忆】，记忆是可塑性的，回忆是永恒的」），
+ * 于是注入区块里她"在看"的东西读起来像一个文件路径，不像一部剧。
+ *
+ * 做法：从标题里**抽出书名号/引号里的那个名字**（那才是剧名），
+ * 抽不到就取去掉常见前缀/后缀后的主干。宁可选错也不能让整条标题糊上去。
+ */
 function showKey(name) {
-  return String(name || '').replace(/\s+/g, ' ').trim().slice(0, 60)
+  const raw = String(name || '').replace(/\s+/g, ' ').trim()
+  if (!raw) return ''
+  // ① 书名号里的一般就是剧名：「一口气看完【可塑性记忆】，记忆是可塑性的…」
+  //
+  // 但书名号里不一定是剧名：「【全748集】目前B站最全最细的Agent开发…教程」
+  // 抽出来是"全748集"——那是**计数**不是名字。所以书名号内容要做两道检查：
+  //   ① 是不是纯计数（全748集 / 12话 / 2026）
+  //   ② 是不是营销词（最新版/合集/教程…）
+  // 两道都过不了才用它；否则去找**下一个**书名号，或者退回主干。
+  const brackets = [...raw.matchAll(/[【《「『]([^】》」』]{2,40})[】》」』]/g)].map((m) => m[1].trim())
+  const isCount = (t) => /^[全]?[0-9０-９]+\s*[集话期篇]?$/.test(t) || /^[0-9０-９]{4}$/.test(t)
+  const isPromo = (t) => /最新版|完整版|高清|合集|教程|搬运|重传|补档/.test(t)
+  for (const inner of brackets) {
+    if (isCount(inner) || isPromo(inner)) continue
+    return inner.slice(0, 40)
+  }
+  // ② 去掉常见的"一口气看完/全集/解说"之类前缀，留主干
+  const stripped = raw
+    .replace(/^(?:一口气看完|一口气看完|合集|全集|全\d+集|【[^】]*】)+/g, '')
+    .replace(/[|｜].*$/, '')
+    .trim()
+  return (stripped || raw).slice(0, 40)
 }
 
 /**
