@@ -8,7 +8,7 @@
 //   ② 看：`binge --bvid BVxxx` 或 `binge --show 可塑性记忆 --ep 2`
 //        → debrief 四路材料（元信息 + 官方字幕 + 热评 + 简介）
 //        → LLM 只根据**材料**写"这一集讲了什么 + 我的感受"（没字幕就照实说没看成）
-//   ③ 记账：`~/.bot-ai/binge/<slug>.json` 存进度（第几集/到哪儿了），`binge --list` 能看
+//   ③ 记账：`~/.data/binge/<slug>.json` 存进度（第几集/到哪儿了），`binge --list` 能看
 //   ④ 落记忆：记住"我看完了第 X 集，剧情是…"，下次主人问起她真能答
 //   ⑤ 结承诺：`--promise p1abc` 传进来 → 成功 done / 失败 fail（写明为什么）
 //
@@ -548,7 +548,7 @@ export async function run(argv = []) {
       console.log(`【剧情】${r.plot}`)
       if (r.feel) console.log(`【我】${r.feel}`)
     }
-    if (!last.dry) console.log(`（看过 ${last.seen}/${last.total} 集，进度存在 ~/.bot-ai/binge/）`)
+    if (!last.dry) console.log(`（看过 ${last.seen}/${last.total} 集，进度存在 ~/.data/binge/）`)
     const failed = done.find((x) => !x?.ok)
     if (failed) console.log(`（第 ${failed.ep} 集没看上：${failed.via} —— 想换条投稿就 --bvid）`)
   } else {

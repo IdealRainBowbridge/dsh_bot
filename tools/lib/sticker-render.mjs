@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { homePath } from './paths.mjs'
+import { homePath, dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
 
 /** 柔和底色（浅色系，配深色字）。和 python 版保持同一套配色。 */
@@ -28,7 +28,7 @@ const INK = '262A34'
  * 最后还会用 `fc-match :lang=zh` 兜底（有 fontconfig 就一定找得到）。
  */
 const FONTS = [
-  () => homePath('.bot-ai', 'fonts', 'NotoSansCJK.ttc'),          // 容器里拷进去的那份
+  () => dataPath('fonts', 'NotoSansCJK.ttc'),          // 容器里拷进去的那份
   () => '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',   // Debian/Ubuntu
   () => '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',        // Arch
   () => '/usr/share/fonts/noto-cjk/NotoSansCJK-Light.ttc',          // Arch（备用字重）

@@ -9,7 +9,7 @@
 // 这里只被 doctor / 测试 / live 模式调用。
 import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
-import { homePath } from '../lib/paths.mjs'
+import { homePath, dataPath } from '../lib/paths.mjs'
 import * as memory from '../lib/memory.mjs'
 import {
   personaText, identityLine, ownerLine, clockBlock, capabilityBlock, groupFactBlock,
@@ -31,6 +31,7 @@ import * as anchor from './anchor.mjs'
 import * as schema from './schema.mjs'
 import * as competence from './competence.mjs'
 import { bump, setValue } from './metrics.mjs'
+import { swallow } from '../lib/swallow.mjs'
 
 export const DEFAULT_BUDGET = 5650
 
@@ -104,7 +105,7 @@ function slotList(ctx) {
   try {
     const ab = anchor.block({ now })
     if (ab) add('anchor', ab, 5)
-  } catch { }
+  } catch (e) { swallow(e, 'assemble:anchor') }
 
   add('honesty', HONESTY, 3, { keep: true })
   if (/微信|wechat/i.test(String(userText || '')) && !isGroup) add('wechat', WECHAT_PHRASE, 4)
@@ -153,11 +154,11 @@ function slotList(ctx) {
   try {
     const b = field.sense()
     if (b) feels.push('身体：' + b)
-  } catch { }
+  } catch (e) { swallow(e, 'assemble:field-sense') }
   try {
     const a = affect.sense()
     if (a) feels.push('心里：' + a)
-  } catch { }
+  } catch (e) { swallow(e, 'assemble:affect-sense') }
   if (feels.length) add('feel', feels.join('\n'), 31)
 
   // affect.line() 仍保留调用点给需要第二人称/带数字的地方，
@@ -178,10 +179,10 @@ function slotList(ctx) {
   //   ③ 更重要：line() 会拼上"（还有 X 分钟）"—— 那是任务管理器的语言，明确被否掉过。
   //      这里只取 lean。
   try {
-    const st = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
+    const st = JSON.parse(fs.readFileSync(dataPath('brain', 'meta', 'self-state.json'), 'utf8'))
     const lean = String(st?.current?.lean || '').trim()
     if (lean) add('selfstate', '【此刻】' + lean, 18)
-  } catch { }
+  } catch (e) { swallow(e, 'assemble:selfstate') }
 
   // ══════════════════════════════════════════════════════════════════════
   // 去重：working 里两个槽和下面的【你想起来的事】说的是同一句
@@ -315,7 +316,7 @@ function slotList(ctx) {
           12)
       }
     }
-  } catch { }
+  } catch (e) { swallow(e, 'assemble:dream') }
 
   const fb = facts.promptBlock({ limit: 4, now })
   if (fb) add('facts', fb, 22)
@@ -378,7 +379,7 @@ function slotList(ctx) {
     try {
       const sk = takeSkipped(chatId)
       if (sk) add('skipped', sk, 19)
-    } catch {}
+    } catch (e) { swallow(e, 'assemble:skipped') }
   }
   if (quote) add('quote', quote, 25)
   const hintKey = isGroup ? `${platform}-group` : platform

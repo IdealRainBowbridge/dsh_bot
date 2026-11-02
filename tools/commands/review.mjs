@@ -16,7 +16,7 @@ const SELF_HEADER = '## 她的自我迭代（复盘自动追加，主人可随�
 
 /** 把一句自我认识追加进 persona.md 的自我迭代区（最多留 10 条；区里有手写内容就只追加不动旧文）。 */
 function appendSelfNote(date, note) {
-  const file = homePath('.bot-ai', 'persona.md')
+  const file = dataPath('persona.md')
   let text = ''
   try { text = fs.readFileSync(file, 'utf8') } catch {}
   const line = `- [${date}] ${note}`

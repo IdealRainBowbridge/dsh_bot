@@ -1,7 +1,7 @@
 // web —— 她的上网工具（10-25）：全网瞎溜达的手脚。
 //   node bot.mjs web search "关键词"        # 搜索（Bing 国内直连优先，DDG 走代理兜底）
 //   node bot.mjs web fetch <url>            # 读网页正文（内网/外网都行，≤4000 字）
-//   node bot.mjs web log                    # 翻她的上网日志（~/.bot-ai/web-log.md）
+//   node bot.mjs web log                    # 翻她的上网日志（~/.data/web-log.md）
 // 设计给 DSH 会话里的她直接调用：搜到→fetch→记 lore→写日记，是"自由活动"的底座。
 // 每次搜索/访问都写 web-log.md —— 活动可审计。
 import fs from 'node:fs'

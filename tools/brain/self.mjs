@@ -93,8 +93,12 @@ export function write(section, text, { by = 'self', reason = '', prov = [], forc
   const next = setSection(before, section, text)
   try {
     fs.writeFileSync(selfPath(), next)
+    // 2026-11-02 修：以前这里只 +version 不写 hash，而 manifest() 比较的是 meta.hash，
+    // 于是**每一次合法写入都会把自己判成 drift**（doctor O10 长期红）。
+    // 写闸写的东西必须自己认账 —— 写和 hash 必须在同一个事务里。
     mutateJson(selfMetaPath(), {}, (m) => ({
       ...(m || {}), version: Number(m?.version || 0) + 1, updatedAt: Date.now(),
+      hash: shortHash(next, 16), hashedAt: Date.now(),   // ← 新增：写完即认账
       lastSection: section, lastBy: by, lastReason: String(reason).slice(0, 120), prov: (prov || []).slice(0, 4),
     }))
     return { ok: true, version: readMeta().version }

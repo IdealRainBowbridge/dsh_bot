@@ -3,7 +3,7 @@
 //
 // 两个 home 的语义（与 bili-whale 一致，避免分叉）：
 //   · DSH_HOME  —— DSH 的根（配置、会话、night 状态）
-//   · HOME      —— 用户主目录（凭据、账本、记忆、情绪等"随人走"的东西放 ~/.bot-ai）
+//   · HOME      —— 用户主目录（凭据、账本、记忆、情绪等"随人走"的东西放 ~/.data）
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'

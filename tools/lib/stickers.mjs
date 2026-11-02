@@ -13,13 +13,13 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { homePath } from './paths.mjs'
+import { homePath, dataPath } from './paths.mjs'
 import { config } from './config.mjs'
 import { findPythonWith } from './python-runtime.mjs'
 import { renderSticker, available as stickerRendererAvailable } from './sticker-render.mjs'
 import { swallow } from './swallow.mjs'
 
-export const STICKER_DIR = homePath('.bot-ai', 'stickers')
+export const STICKER_DIR = dataPath('stickers')
 
 /** 内置兜底标签（文件夹空着也不影响 prompt 里出现这几个）。 */
 export const DEFAULT_TAGS = ['开心', '无语', '委屈', '生气', '困', '比心']
@@ -44,7 +44,7 @@ export const BILI_FACES = [
 ]
 
 // 完整名单（447 个）从 B站表情面板拉，缓存 24h；拉不到就用上面那 16 个
-const FACE_CACHE = homePath('.bot-ai', 'bili-faces.json')
+const FACE_CACHE = dataPath('bili-faces.json')
 
 /** 读缓存；过期或没有就返回 null。 */
 export function readFaceCache() {

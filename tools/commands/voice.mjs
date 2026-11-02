@@ -91,7 +91,7 @@ export async function run(argv = []) {
       })
     }
     console.log(`✓ 数据集就绪：${ds.count} 句 / 约 ${ds.approxMinutes || '?'} 分钟 —— ${ds.dir}`)
-    console.log(`🏋️ 开始训练 ${epochs} 轮（bs=${batch}，全程日志 ~/.bot-ai/rvc/train-${name}.log，挂后台别关机）…`)
+    console.log(`🏋️ 开始训练 ${epochs} 轮（bs=${batch}，全程日志 ~/.data/rvc/train-${name}.log，挂后台别关机）…`)
     const t0 = Date.now()
     const out = await rvc.trainVoice({ name, datasetDir: ds.dir, epochs, batch, saveEvery, log: (l) => console.log('  ' + String(l).slice(0, 110)) })
     console.log(`✅ 训练完成（${Math.round((Date.now() - t0) / 60000)} 分钟）`)

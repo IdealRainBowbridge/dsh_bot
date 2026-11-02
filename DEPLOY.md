@@ -1,4 +1,4 @@
-# 部署与依赖清单（dsh-feiyu v0.4.0）
+# 部署与依赖清单（dsh_bot v0.4.0）
 
 > 这份文档回答一个问题：**要复现这只大肥鱼，需要装什么、什么版本、放在哪、怎么验证**。
 > 版本号取自 2026-10-25 实际跑通的那台机器（Windows 11 / x64 / RTX 显卡）。
@@ -49,7 +49,7 @@
 
 脚本：`douyin_interact.py`（子命令 `feed / comments / comment / reply / comment-reply / self-info / my-videos / dm-send / dm-read / dm-list / login / cdp-start`）
 
-> 登录态：`~/.feiyu-ai/douyin-cookies.json`；当前登录号 **顾思苡**（`sec_uid` 由 `feiyu douyin self` 读出并缓存到 `~/.feiyu-ai/douyin-self.json`）。
+> 登录态：`~/.data/douyin-cookies.json`；当前登录号 **顾思苡**（`sec_uid` 由 `feiyu douyin self` 读出并缓存到 `~/.data/douyin-self.json`）。
 
 ---
 
@@ -122,7 +122,7 @@
 | 参考图上传（Pollinations 需要公网 URL） | `tmpfiles.org` API | — | 60 分钟过期自动重传 |
 | 本地文字贴纸 | Pillow 画的 PNG | `tools/lib/sticker_render.py` | 不联网 |
 
-**根本形象链**：`~/.feiyu-ai/sticker-ref.jpg` + `sticker-refs/ref-{哭,举手,得意,微笑}.jpg`（按文案情绪自动挑）→ 硅基 `images/generations`（`image: <dataURI>`）→ 存 `~/.feiyu-ai/stickers/<标签>/sf-*.jpg`
+**根本形象链**：`~/.data/sticker-ref.jpg` + `sticker-refs/ref-{哭,举手,得意,微笑}.jpg`（按文案情绪自动挑）→ 硅基 `images/generations`（`image: <dataURI>`）→ 存 `~/.data/stickers/<标签>/sf-*.jpg`
 
 规则（写进代码了）：
 
@@ -142,7 +142,7 @@
 | 2. 配图 | 硅基 `Qwen-Image-Edit-2509`（锁她的形象）× N 张 | `imageGen` |
 | 3. 旁白 | GPT-SoVITS `/tts` 念旁白（她的音色） | `voice` |
 | 4. 成片 | **ffmpeg** 图片序列 + 音频 → mp4 | `D:\GPT-SoVITS\runtime\ffmpeg.exe` |
-| 5. 落地 | `~/.feiyu-ai/douyin-posts/<日期-标题>/`（`img-*.jpg` + `narration.wav` + `video.mp4` + 文案） | — |
+| 5. 落地 | `~/.data/douyin-posts/<日期-标题>/`（`img-*.jpg` + `narration.wav` + `video.mp4` + 文案） | — |
 | 6. 发布 | **她不能自己发** —— 成片等你在面板点发布 | 设计如此 |
 
 ```bash
@@ -182,14 +182,14 @@ node tools/bot.mjs produce ["主题"]     # 每天有额度（douyin.produce.dai
 # 0) 前置：DSH 桌面端 + Node 24（DSH 自带）+ Python 3.12 ×3 个 venv
 
 # 1) 插件
-dsh plugin --profile desktop add "link:D:\dsh-feiyu"
+dsh plugin --profile desktop add "link:D:\dsh_bot"
 #    重启 DSH → 设置里出现「🐟 大肥鱼」
 
 # 2) 最小配置 ~/.dsh/feiyu.config.json
 #    identity / owner.qq / llm.api_key  → 面板里填也行
 
 # 3) B站凭据
-#    浏览器 F12 拷贝 SESSDATA/bili_jct/buvid3 → POST /dsh-feiyu/api/cookie
+#    浏览器 F12 拷贝 SESSDATA/bili_jct/buvid3 → POST /dsh_bot/api/cookie
 node tools/bot.mjs nav            # 验证登录态
 node tools/bot.mjs selftest       # 全量体检
 
@@ -211,7 +211,7 @@ node tools/bot.mjs voice list
 node tools/bot.mjs sing cover "天黑黑" --dry
 
 # 8) 生图 / 表情包（可选）
-#    硅基 key → imageGen.api_key；参考图 → ~/.feiyu-ai/sticker-ref.jpg
+#    硅基 key → imageGen.api_key；参考图 → ~/.data/sticker-ref.jpg
 node tools/bot.mjs sticker gen "本鱼饿了" --tag 开心
 
 # 9) 最后开自主行为
@@ -239,7 +239,7 @@ npm test                                      # 8 套测试全过
 | `llm.base_url` | `https://maas.qianwenaiapi.com/compatible-mode/v1` | OpenAI 兼容端点 | 可换任何兼容服务（含本地 vLLM）；主挂自动落 `llm.fallback` |
 | `vision.model` | `qwen3-vl-plus` | 看图（表情包形象校验、图片消息理解） | 换更强的 VL 更准；主挂自动落 `vision.fallback` |
 | `imageGen.model` | `Qwen/Qwen-Image-Edit-2509`（另有三段兜底：`imageGen.qwen.model` → Pollinations） | 锁形象生图 | 换成纯文生图会丢形象一致性 |
-| `imageGen.refImage` | `~/.feiyu-ai/sticker-ref.jpg` | 根本形象 | 换图 = 换她的长相 |
+| `imageGen.refImage` | `~/.data/sticker-ref.jpg` | 根本形象 | 换图 = 换她的长相 |
 | `voice.sovits_url` | `http://127.0.0.1:9880/tts` | 说话 | — |
 | `voice.ref_audio_path` | `D:/GPT-SoVITS/models/yinlang/yinlang.wav` | 零样本参考音 | 换音色 |
 | `voice.prompt_text` | 参考音的原话 | GPT-SoVITS 需要 | 必须与参考音一致 |
@@ -253,7 +253,7 @@ npm test                                      # 8 套测试全过
 
 | 现象 | 真因 | 处置 |
 |---|---|---|
-| 表情包出来不是鲸鱼娘 | 硅基失败走了 Pollinations 兜底 | 看 `~/.feiyu-ai/imggen.log`；`sf-` 才是根本形象 |
+| 表情包出来不是鲸鱼娘 | 硅基失败走了 Pollinations 兜底 | 看 `~/.data/imggen.log`；`sf-` 才是根本形象 |
 | 语音没声音 | GPT-SoVITS 9880 没起 | 插件会自动拉；或手动 `python api_v2.py` |
 | 翻唱跑一半失败 | yt-dlp 取不到源 / ffmpeg 路径不对 | `feiyu sing cover "歌名" --url <直链>` 绕开搜索 |
 | 生图 502 / 超时 | 硅基额度或网络 | 会回落 Pollinations（只作临时图，不入库） |
@@ -271,5 +271,5 @@ npm test                                      # 8 套测试全过
 | `D:\GPT-SoVITS` | 数 GB | 含 runtime + 底模 |
 | `D:\rvc` | 数 GB | torch cu128 + 底模 + 她的 .pth |
 | `D:\social-auto-upload` | 数百 MB | patchright + venv |
-| `~/.feiyu-ai` | 数十 MB | 记忆 / 表情 / 日记 / 凭据 |
+| `~/.data` | 数十 MB | 记忆 / 表情 / 日记 / 凭据 |
 | `~/.dsh/sessions` | 随聊天增长 | 她的会话（完全自由痕迹） |

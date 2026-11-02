@@ -242,6 +242,52 @@ export function busy(now = Date.now()) {
   return { busy: busyNow, label: s.label, remainMin: s.remainMin, why: s.why, activity: s.activity }
 }
 
+/**
+ * 把 self-state.json 投影成 mind-plan.json（2026-11-02）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么要有它：mindTick 曾经是**第二决策源**
+ * ══════════════════════════════════════════════════════════════════════
+ * 旧 mindTick 每 60 秒自己问一次 LLM「接下来做什么」，然后写 mind-plan + focus。
+ * 而 heartbeat 里的 self.decide() 也在决定同一件事。两个决策源各写一份，
+ * 实测同一分钟里三个文件三个答案：
+ *      self-state = watch 73min ｜ mind-plan = free 30min ｜ bot-focus = bilibili
+ * 这和「一个灵魂操纵一个身体」直接矛盾 —— 判断只能有一个地方。
+ *
+ * 现在：决定权 100% 归 self.decide()，这里只做**只读投影**，
+ * 让还在读 mind-plan.json 的老代码（persona 兜底、面板）看到同一件事。
+ * 投影不是第二份真相：它没有自己的判断，只是把 self-state 换个字段名。
+ *
+ * @returns {{ok:boolean, activity?:string, at?:number, reason?:string}}
+ */
+export function projectFromSelfState(now = Date.now()) {
+  try {
+    const st = JSON.parse(fs.readFileSync(dataPath('brain', 'meta', 'self-state.json'), 'utf8'))
+    const c = st?.current
+    if (!c || !Number(c.until || 0)) return { ok: false, reason: 'no-self-state' }
+
+    // decide() 的 action → mind.mjs 的活动词表（老读者认这几个词）
+    const MAP = {
+      watch: 'bilibili', browse: 'web', rest: 'rest', free: 'free',
+      sleep: 'rest', consolidate: 'rest', reply: 'free', write: 'free', think: 'free',
+    }
+    const activity = MAP[String(c.action || '')] || 'free'
+    const planObj = {
+      activity,
+      min: Math.max(1, Math.round(Number(c.spanMin || 30))),
+      why: String(c.why || c.lean || '').slice(0, 80),
+      at: Number(c.since || now),
+      until: Number(c.until || 0),
+      context: { hour: new Date(now).getHours(), source: 'self-state' },
+    }
+    writeJsonAtomic(PLAN_PATH(), planObj)
+    return { ok: true, activity, at: planObj.at }
+  } catch (e) {
+    swallow(e, 'mind:project')
+    return { ok: false, reason: String((e && e.message) || e) }
+  }
+}
+
 /** 一行供提示语使用：「你正在看番（还剩 23 分钟，理由：…）」。 */
 export function planLine(now = Date.now()) {
   const s = planSnapshot(now)

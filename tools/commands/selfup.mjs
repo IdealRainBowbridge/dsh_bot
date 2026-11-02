@@ -1,7 +1,7 @@
 // selfup —— 她的自我升级安全底座（10-25）：备份 → 改 → 测试 → 日志。
 //   node bot.mjs selfup backup              # 改代码前先跑：快照整个插件+配置（保留最近 10 份）
 //   node bot.mjs selfup log "改了什么为什么"  # 改完必跑：写自我升级日志
-//   node bot.mjs selfup log                 # 翻日志（~/.bot-ai/selfup-log.md）
+//   node bot.mjs selfup log                 # 翻日志（~/.data/selfup-log.md）
 // 规矩（写进 wake prompt 与 AGENTS.md）：只改自己的项目文件；改完 node --check + npm test 全绿才算数。
 import fs from 'node:fs'
 import path from 'node:path'

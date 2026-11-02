@@ -11,7 +11,7 @@ import { lastUnansweredPush } from './memory.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config } from './config.mjs'
-import { homePath } from './paths.mjs'
+import { homePath, dataPath } from './paths.mjs'
 import * as mood from './mood.mjs'
 import * as memory from './memory.mjs'
 import { takeSkipped } from './skipped-messages.mjs'
@@ -40,7 +40,7 @@ const CLI_INVOKE = (() => {
 /** 人设文件（与 B站会话共用同一份，换机器连 ~/.bot-ai 一起拷）。 */
 export function personaText() {
   try {
-    const t = fs.readFileSync(homePath('.bot-ai', 'persona.md'), 'utf8').trim()
+    const t = fs.readFileSync(dataPath('persona.md'), 'utf8').trim()
     if (t) return t.slice(0, 3000)
   } catch (e) {
     // 10-31 审计：以前这里吞掉一切错误 —— 人格文件读失败时她**静默变成没有设定的人**，
@@ -60,10 +60,10 @@ export function personaText() {
  */
 export function keepPersonaCopy(when = new Date()) {
   try {
-    const src = homePath('.bot-ai', 'persona.md')
+    const src = dataPath('persona.md')
     if (!fs.existsSync(src)) return ''
     const day = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`
-    const dir = homePath('.bot-ai', 'persona.history')
+    const dir = dataPath('persona.history')
     fs.mkdirSync(dir, { recursive: true })
     const dst = path.join(dir, `${day}.md`)
     if (!fs.existsSync(dst)) fs.copyFileSync(src, dst)
@@ -286,12 +286,17 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 那是任务管理器的语言，不是内心的语言。保留"大概多久"这种模糊感才对。
   //
   // 权重怎么来的、骰子在哪掷的 —— **一律不写**。她不该知道自己是被算出来的。
+  // 2026-11-02 修：这里原来和下面 mind-plan 那段**各自推一个【此刻】**，
+  // 两段都命中时 system 里出现两个【此刻】且互相矛盾（实测 self-state=watch 73min、
+  // mind-plan=free 30min）。self-state 是 decide() 的唯一真相，它给了 lean 就以它为准；
+  // mind-plan 只作老数据的兜底。
+  let selfStateSaid = false
   try {
-    const sj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'meta', 'self-state.json'), 'utf8'))
+    const sj = JSON.parse(fs.readFileSync(dataPath('brain', 'meta', 'self-state.json'), 'utf8'))
     const c = sj?.current
     if (c && Number(c.until || 0) > Date.now()) {
       const lean = String(c.lean || '').trim()   // decide() 写的"她自己的说法"
-      if (lean) parts.push('【此刻】' + lean)
+      if (lean) { parts.push('【此刻】' + lean); selfStateSaid = true }
     }
   } catch (e) { swallow(e, 'persona:selfState') }
 
@@ -306,7 +311,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 而且模型会盯着"最新那 4 句"调整（recency bias），等于用最近的话污染人格。
   // 这里只读文件，不触发采样 —— 换锚是低频动作，不该发生在对话路径上。
   try {
-    const aj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'meta', 'anchor.json'), 'utf8'))
+    const aj = JSON.parse(fs.readFileSync(dataPath('brain', 'meta', 'anchor.json'), 'utf8'))
     const items = Array.isArray(aj?.items) ? aj.items.filter((x) => x && x.text).slice(0, 4) : []
     if (items.length >= 2) {
       parts.push('【你自己说过的话】\n' + items.map((x) => '· ' + x.text).join('\n') +
@@ -318,7 +323,8 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 目的：她说"我刚在看番"不是编的 —— 那是真计划，还能说出理由。
   // 这里同步读文件而不是 import mind.mjs：buildMessages 是同步的，且避免循环依赖。
   try {
-    const mp = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'mind-plan.json'), 'utf8'))
+    if (selfStateSaid) throw new Error('self-state 已给出此刻，跳过 mind-plan')
+    const mp = JSON.parse(fs.readFileSync(dataPath('mind-plan.json'), 'utf8'))
     const act = String(mp.activity || '')
     if (act && Number(mp.until || 0) > Date.now()) {
       // 已由上面的【此刻】取代。这里保留读取但**不再注入时限与理由** ——
@@ -340,7 +346,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     let seg2 = []
     // ① 她此刻真在做的事（mind-plan，上面已经读过一次，这里再取一次拿 why）
     try {
-      const mp = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'mind-plan.json'), 'utf8'))
+      const mp = JSON.parse(fs.readFileSync(dataPath('mind-plan.json'), 'utf8'))
       const act = String(mp.activity || '')
       const LABEL = { web: '自由上网', bilibili: '刷B站', binge: '看番/看剧', rest: '歇着', free: '自由时间' }
       if (act && Number(mp.until || 0) > Date.now()) {
@@ -349,7 +355,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     } catch (e) { swallow(e, 'persona:openThread:mind') }
     // ② 情绪值（低/高都不该装作没事）
     try {
-      const mj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'mood.json'), 'utf8'))
+      const mj = JSON.parse(fs.readFileSync(dataPath('mood.json'), 'utf8'))
       const v = Math.round(Number(mj.value) || 60)
       if (v < 45) seg.push(`你情绪偏低（${v}/100），别装作没事`)
       else if (v > 75) seg.push(`你心情不错（${v}/100）`)
@@ -366,7 +372,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     //    "我下午翻了半天鲸类声学的论文" 比 "我歇着" 有信息量一百倍。
     //    web-log.md 最新在上（## 日期段在文件头），要取"今天的段落"的头部几条。
     try {
-      const wl = fs.readFileSync(homePath('.bot-ai', 'web-log.md'), 'utf8')
+      const wl = fs.readFileSync(dataPath('web-log.md'), 'utf8')
       const today = new Date()
       const dk = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       // ⚠️ 踩过：跨零点后"今天"段为空（11-02 凌晨 00:05 查 11-01 的记录）→ 什么都不注入。
@@ -382,7 +388,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     if (seg2.length) seg.push('你今天在网上干的：' + seg2.join('；'))
     // ⑤ 最近挂在心上（lore.json 直接读，不依赖 memory 模块，避免循环依赖）
     try {
-      const lj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'lore.json'), 'utf8'))
+      const lj = JSON.parse(fs.readFileSync(dataPath('lore.json'), 'utf8'))
       const arr = Array.isArray(lj) ? lj : (Array.isArray(lj?.items) ? lj.items : [])
       if (arr.length) {
         const last = arr[arr.length - 1]
@@ -439,7 +445,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
     try {
       const selfQQ = String(cfg.qq?.selfQQ || '').replace(/\D/g, '')
       if (selfQQ) {
-        const f = homePath('.bot-ai', 'avatar', `qq-${selfQQ}.jpg`)
+        const f = dataPath('avatar', `qq-${selfQQ}.jpg`)
         if (fs.existsSync(f)) {
           parts.push(
             `【你自己的QQ头像】你的号 ${selfQQ}，头像文件在 ${f}（本地已缓存）。\n` +
@@ -686,7 +692,7 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   //   那才是"细节要了才给"的真实形态 —— 想不起来的部分就该模糊。
   let cueBlock = ''
   try {
-    const sj = JSON.parse(fs.readFileSync(homePath('.bot-ai', 'brain', 'seg', 'index.json'), 'utf8'))
+    const sj = JSON.parse(fs.readFileSync(dataPath('brain', 'seg', 'index.json'), 'utf8'))
     const all = [...(Array.isArray(sj?.segments) ? sj.segments : [])]
     if (sj?.open) all.push(sj.open)
     const rows = all

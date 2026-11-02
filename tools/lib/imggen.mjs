@@ -121,7 +121,7 @@ function uploadRef(localPath) {
 function pickRefFor(cap) {
   const fallback = String(config().imageGen?.refImage || '').trim()
   try {
-    const dir = homePath('.bot-ai', 'sticker-refs')
+    const dir = dataPath('sticker-refs')
     const files = fs.readdirSync(dir).filter((f) => /^ref-/.test(f) && /\.(jpg|jpeg|png)$/i.test(f))
     if (!files.length) return fallback
     const c = String(cap || '')

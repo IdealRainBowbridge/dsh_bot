@@ -1,6 +1,6 @@
 // selftest —— 启动体检：装完立刻跑这一条（bili-whale 实战里"绝大多数人卡住的地方"）。
 // 检查：配置 / 凭据 / 格式 / 登录态（真打一次 nav）/ 数据目录可写 / 熔断状态 / ffmpeg（可选）。
-// 通过后写 ~/.bot-ai/selftest-passed.json，结尾打印"接下来要做的两件事"。
+// 通过后写 ~/.data/selftest-passed.json，结尾打印"接下来要做的两件事"。
 //
 //   node bot.mjs selftest [--json]
 import fs from 'node:fs'
@@ -64,7 +64,7 @@ export async function run(argv = []) {
   // ④ 数据目录可写（记忆/账本/情绪都住这里）
   // 10-31：这一项以前只说"能不能写"，但最常见的失败是 **DSH 沙箱**而不是文件权限：
   //   宿主上 docker exec 跑 selftest 全绿，她自己的会话里却 EACCES —— 因为 DSH 的
-  //   workspace-write 只允许写 session.cwd（~/.dsh/bot-work），而记忆在 ~/.bot-ai。
+  //   workspace-write 只允许写 session.cwd（~/.dsh/bot-work），而记忆在 ~/.data。
   // 现在把原因写清楚，并告诉人怎么修（面板「修复记忆写入」或 session 权限设 danger-full-access）。
   try {
     fs.mkdirSync(dataPath(), { recursive: true })
@@ -78,7 +78,7 @@ export async function run(argv = []) {
     const hint = sandboxish
       ? (hasDsh
         ? ' —— 这是 DSH 文件沙箱（workspace-write 只允许写会话工作目录）；把 panel「修复记忆写入」点一下，或把该会话权限设成 danger-full-access'
-        : ' —— 文件权限问题：检查 ~/.bot-ai 的属主与 mode（应 700/600）')
+        : ' —— 文件权限问题：检查 ~/.data 的属主与 mode（应 700/600）')
       : ''
     add('数据目录', false, msg + hint)
   }

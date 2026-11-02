@@ -1,4 +1,4 @@
-# dsh-feiyu —— 大肥鱼·私享版
+# dsh_bot —— 大肥鱼·私享版
 
 > **dsh_bot** · 作者 **idealrainbowbridge**
 
@@ -58,10 +58,10 @@
 
 | 空间 | 路径 | 内容 | 谁读写 |
 |---|---|---|---|
-| **主记忆** | `~/.feiyu-ai/episodes.jsonl`（+ `episodes-YYYY-MM.jsonl` 分片）、`facts.json`、`lore.json` | 情节事件流 / 关系事实 / 世界设定与兴趣 | B站、抖音、上网、工具链 |
-| **QQ 记忆** | `~/.feiyu-ai/qq/` | `episodes.jsonl`、`summary-<会话>.json`（每 6 轮压一次摘要）、`owner-profile.md`（主人画像） | qq-server + qq-memory |
-| **微信记忆** | `~/.feiyu-ai/wechat/<wxid>/` | `episodes.jsonl` + `profile.md` + `meta.json` | 微信机器人 |
-| **情绪** | `~/.feiyu-ai/mood.json` | 情绪值 / 饥饿度，会自己漂移 | mood |
+| **主记忆** | `~/.data/episodes.jsonl`（+ `episodes-YYYY-MM.jsonl` 分片）、`facts.json`、`lore.json` | 情节事件流 / 关系事实 / 世界设定与兴趣 | B站、抖音、上网、工具链 |
+| **QQ 记忆** | `~/.data/qq/` | `episodes.jsonl`、`summary-<会话>.json`（每 6 轮压一次摘要）、`owner-profile.md`（主人画像） | qq-server + qq-memory |
+| **微信记忆** | `~/.data/wechat/<wxid>/` | `episodes.jsonl` + `profile.md` + `meta.json` | 微信机器人 |
+| **情绪** | `~/.data/mood.json` | 情绪值 / 饥饿度，会自己漂移 | mood |
 
 ### 3.2 统一时序回忆 —— 「一份记忆，多个窗口」
 
@@ -112,8 +112,8 @@
 
 ### 3.5 「我是谁」自述与快照
 
-- `~/.feiyu-ai/persona.md` 尾部有「自我迭代区」，她自己每晚回顾时改写
-- 每次改写**之前**自动存一份当日快照 `~/.feiyu-ai/persona.history/<YYYY-MM-DD>.md`（改坏能回退）
+- `~/.data/persona.md` 尾部有「自我迭代区」，她自己每晚回顾时改写
+- 每次改写**之前**自动存一份当日快照 `~/.data/persona.history/<YYYY-MM-DD>.md`（改坏能回退）
 - 人格进化日（`personality.evolve`）也会先存快照
 
 ### 3.6 检索：不上向量库
@@ -195,7 +195,7 @@ O10 自我模型 · O11 交付账 · O12 实体/关系 · O13 能力自评
 }
 ```
 
-回滚一行：`brain.mode = "off"`（旧路径原样）。脑的数据全在 `~/.feiyu-ai/brain/`，**删掉等于回到 10-29 早上**，旧记忆文件一个字节没动。
+回滚一行：`brain.mode = "off"`（旧路径原样）。脑的数据全在 `~/.data/brain/`，**删掉等于回到 10-29 早上**，旧记忆文件一个字节没动。
 
 **身体/工具协议**（脑出任务、常驻体执行，绝不在事件循环里干重活）：
 
@@ -218,7 +218,7 @@ kind 是白名单（`binge/produce/dm-read/card-open/tts/web-search/backup`）�
 | **生物钟**（`night`） | 窗口内随机醒（拟人，不整点），跨零点、最小间隔，每次刷 N 条视频 |
 | **完全自由**（`freedom`） | 开了之后按间隔 + 概率给她"自由时间"：上网、刷B站/抖音、写小说、写游戏、发说说、自我升级 |
 | **自定唤醒**（`selfwake`） | 她自己说"我 23:40 再醒"，到点**真的**叫起来（优先于概率）。`node bot.mjs selfwake 23:40 --note "把那篇小说收尾"` |
-| **真的看番/看剧**（`binge`，10-27 新增 / 10-28 修续集） | 不是"看标题和热评"，是**真看完一集**：`binge --search "可塑性记忆"` → `binge --show "可塑性记忆" --ep next --go`（不给 `--ep` 且账本里已有这本，也按下一集走）。材料优先用弹幕（番剧字幕轨串片率极高，实测拿到过 ED 歌词和钢化膜测评），LLM 读完写 `{剧情, 感受}` 进她的记忆；进度落 `~/.feiyu-ai/binge/<番名>.json`，`--list` 查看到第几集。**一个投稿看不明白会自动换源重试**（同一集在合集/单集投稿里的弹幕密度差三倍），P 数不够或"其实是别的集（备份分 P）"会立刻放弃、不硬看。**节奏她自己定**：`--count 3`=连看三集、`--count all`=看到底、`--to 6`=看到第 6 集；`binge.dailyMax` 默认 **0 = 不限**（只是可选保险，不是日常规矩） |
+| **真的看番/看剧**（`binge`，10-27 新增 / 10-28 修续集） | 不是"看标题和热评"，是**真看完一集**：`binge --search "可塑性记忆"` → `binge --show "可塑性记忆" --ep next --go`（不给 `--ep` 且账本里已有这本，也按下一集走）。材料优先用弹幕（番剧字幕轨串片率极高，实测拿到过 ED 歌词和钢化膜测评），LLM 读完写 `{剧情, 感受}` 进她的记忆；进度落 `~/.data/binge/<番名>.json`，`--list` 查看到第几集。**一个投稿看不明白会自动换源重试**（同一集在合集/单集投稿里的弹幕密度差三倍），P 数不够或"其实是别的集（备份分 P）"会立刻放弃、不硬看。**节奏她自己定**：`--count 3`=连看三集、`--count all`=看到底、`--to 6`=看到第 6 集；`binge.dailyMax` 默认 **0 = 不限**（只是可选保险，不是日常规矩） |
 | **承诺有账本**（`promises`，10-27 新增 / 10-28 改独立执行） | 她说"这就去看"会被 `catchFromReply` 记成一条带截止时间的承诺；**执行器独立跑**（`runDuePromises()` 60s tick，不掷骰子、不占搭话日额，启动 25 秒先补做一次夜里的欠账），`binge` 成功就结清、没材料才照实记失败；额度满就顺延到明天 09:30，进程崩了只顺延 6 小时不判她失信。`promises` 查全部、`promises --due` 查到期 |
 | **看得懂引用**（10-27 新增） | 主人引用她（或别人）某条消息再说话时，她读到的是**被引用的原文**，不是"【引用回复了一条消息】"。做法：她发出去的每条都记 `message_id → 正文`（环形表 400 条落 `msg-index.json`），收到引用先查本地表，没命中走 NapCat `get_msg`，再没有就把最近 40~50 条历史拉一遍（`get_msg` 对老消息只回"消息不存在"，所以启动时和每 10 分钟预热一次）。引用的是图片还会过一次 VL。开关 `qq.quote = {enabled, seeImage, historyCount}` |
 | **自己作品下的评论真的回**（10-27 修） | `replies --own-only` 走 ⓪ 路：先 `listOwnVideos()` 认出投稿（手填 `ownBvids` → 本地 `bvid.txt`/`bili-debut.json` → `space/wbi/arc/search`，space 路默认开且 `soft` 不熔断），再逐条回（任何类型：文字/图/纯表情）。`produce --debut-posted <BV>` 必须跑一次，否则本地不知道你发过什么，这条路永远是空的。楼中楼**不能带图**（B站 硬限制），带图稿会自动降级纯文字。额度走独立桶 `ownDailyMax`（默认 20），**不占**"主动出击"那条 `dailyMax` |
@@ -240,7 +240,7 @@ kind 是白名单（`binge/produce/dm-read/card-open/tts/web-search/backup`）�
 ## 五、架构
 
 ```
-dsh-feiyu/
+dsh_bot/
 ├── lib/                        宿主壳（跑在 DSH 的 Electron 里）
 │   ├── index.js                路由（status/cookie/selftest/config/memory/persona/services/report/watch）
 │   │                           + 生物钟 + QQ 网关(NapCat)自愈 + 自由上网自愈 + GPT-SoVITS 自愈
@@ -270,7 +270,7 @@ dsh-feiyu/
 ├── douyin_interact.py          抖音浏览器自动化（feed/comments/comment/reply/comment-reply/
 │                               self-info/my-videos/dm-send/dm-read/engage 子命令）
 ├── wechat/wechat_bot.py        微信机器人（副本；运行的是 D:/wechat-bot/ 那份）
-├── test/                       23 套测试（client-smoke / client-render / stickers / imggen /
+├── test/                       44 套测试（client-smoke / client-render / stickers / imggen /
 │                               memory / memory-recall / qq-human / vision / focus-one-thing /
 │                               reply-style / memory-hygiene（10-27 记忆卫生）/ …）
 └── package.json
@@ -284,9 +284,9 @@ QQ / 微信 / 抖音需要实时响应，走直连 API。
 ## 六、安装
 
 ```powershell
-# 1) 把本目录放到固定位置，例如 C:\Users\<你>\.dsh\plugins\dsh-feiyu
+# 1) 把本目录放到固定位置，例如 C:\Users\<你>\.dsh\plugins\dsh_bot
 # 2) 用 DSH 桌面端自带的 dsh 命令安装（npm CLI 改不了 desktop profile）
-dsh plugin --profile desktop add "link:C:\Users\<你>\.dsh\plugins\dsh-feiyu"
+dsh plugin --profile desktop add "link:C:\Users\<你>\.dsh\plugins\dsh_bot"
 # 3) 重启一次 DSH（bundle 层要重启才组装）
 ```
 
@@ -358,7 +358,7 @@ QQ 收到消息 → 摇中 voice_chance → lib/tts.mjs POST 9880/tts
 文案/标签 → buildImagePrompt（DeepSeek 翻英文 prompt）
   → 硅基 images/generations(model=Qwen-Image-Edit-2509, image=<参考图 dataURI>,
       prompt="保持她的发型/五官/服装配色不变，画出她<情绪>的样子 + 手绘气泡写汉字")
-  → 存 ~/.feiyu-ai/stickers/<标签>/sf-<hash>.jpg  （sf = 根本形象，才允许发送）
+  → 存 ~/.data/stickers/<标签>/sf-<hash>.jpg  （sf = 根本形象，才允许发送）
   硅基失败 → Pollinations flux 兜底（存 自制/px-*.jpg，永不入库、永不发送）
 ```
 
@@ -390,7 +390,7 @@ produce --reuse <已有投稿包目录>          # 图没毛病、只重做配�
   ④ ffmpeg 真剪辑：片头卡 → 各幕（真片段，或静图运镜：推/拉/摇/移 + 幕内双帧交叉淡入）+ 幕间转场
      + 逐句 ASS 字幕烧制 + 本地合成 BGM（侧链避让人声）+ loudnorm 统一响度 → 1080p
   ⑤ 成片再自检一遍音画同步（逐句量偏差写 sync.json，>0.3s 会喊"建议重剪"）
-  ⑥ 封面单独一张；落地 ~/.feiyu-ai/{bili,douyin}-posts/<日期-标题>/
+  ⑥ 封面单独一张；落地 ~/.data/{bili,douyin}-posts/<日期-标题>/
       {plan.json, img-*.jpg, line-*.wav(原始), voice-*.wav(剪过静音), subtitle.ass,
        video.mp4, cover.jpg, sync.json, meta.json, 投稿说明.md}
   ⑦ 停在这里 —— 她不能自己发，等你在面板点发布
@@ -418,7 +418,7 @@ produce --reuse <已有投稿包目录>          # 图没毛病、只重做配�
 social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--backfill]
 ```
 
-她评论/回评/弹幕/动态/点赞/投币/关注/投稿都落进 `~/.feiyu-ai/bili-social.jsonl`，
+她评论/回评/弹幕/动态/点赞/投币/关注/投稿都落进 `~/.data/bili-social.jsonl`，
 每条标着"有没有 @ 你"。`social` 先列**没 @ 你**的那些（那才是你漏掉的部分）；
 `socialDigest` 每天 23:30（≥3 条才推）自动推一条摘要到你 QQ；`--backfill` 能把
 老的散文台账 `bili-outbox.md` 历史灌进流水（幂等，实测补了 91 条）。
@@ -456,7 +456,7 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
             "model": "deepseek-v4.1-flash-1017", "params": { "enable_thinking": false },
             "fallback": { "api_key": "DeepSeek key", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat" } },
   "imageGen": { "enabled": true, "provider": "siliconflow", "model": "Qwen/Qwen-Image-Edit-2509",
-                "refImage": "~/.feiyu-ai/sticker-ref.jpg" },   // 根本形象：所有表情包都锁它
+                "refImage": "~/.data/sticker-ref.jpg" },   // 根本形象：所有表情包都锁它
   "night":   { "windows": [{ "start": "17:00", "end": "24:00", "wakes": 3 }], "skipChance": 0.3, "maxVideos": 5 },
   "freedom": { "enabled": true, "wakeEveryMin": 20, "chance": 0.7, "engageEveryMin": 120 },
   "personality": { "nightly": { "enabled": true, "at": "23:00" }, "evolve": { "enabled": false, "days": 2 } },
@@ -471,10 +471,10 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
 }
 ```
 
-`~/.feiyu-ai/credentials.json` —— B站凭据（`0600`，永不回显）：`{ "sessdata": "…", "bili_jct": "…", "buvid3": "…" }`
+`~/.data/credentials.json` —— B站凭据（`0600`，永不回显）：`{ "sessdata": "…", "bili_jct": "…", "buvid3": "…" }`
 
 > 取法：浏览器 bilibili.com → F12 → Application → Cookies（`SESSDATA` 是 HttpOnly）。
-> 也可以直接 POST 给 `/dsh-feiyu/api/cookie`（带清洗和实时 nav 验证）。
+> 也可以直接 POST 给 `/dsh_bot/api/cookie`（带清洗和实时 nav 验证）。
 
 ---
 
@@ -604,7 +604,7 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 | B站评论 | B站表情码 + 颜文字 | `[大笑]` `[doge]` `[吃瓜]`（447 个官方码白名单） |
 | 抖音评论 | emoji + 颜文字 | 方括号码不认，发布前剥掉 |
 
-**图库只放"根本形象"**：`~/.feiyu-ai/stickers/<标签>/`（开心/无语/委屈/生气/困/比心，各 2~3 张）
+**图库只放"根本形象"**：`~/.data/stickers/<标签>/`（开心/无语/委屈/生气/困/比心，各 2~3 张）
 
 - `sf-*.jpg` = 硅基 `Qwen-Image-Edit` + 你的参考图（`sticker-ref.jpg`）生成 —— **形象锁死，只发这种**
 - `px-*.jpg` = Pollinations 免费兜底，**永不入库、永不发送**（会出来普通卡通，不是她）
@@ -644,9 +644,9 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 | 生物钟不醒 | 用桌面端自带 dsh CLI；看 `~/.dsh/feiyu-night.json` 的 `reason` |
 | 发评论 CSRF 失败 | `bili_jct` 和 `SESSDATA` 不是同一个账号 |
 | HTTP 412 | B站 IP 限流，等 `api-ban.json` 里的时间过了再动 |
-| QQ「服务在跑却不回」 | 网关 NapCat 没起（管理员注入 QQ）；看 `~/.feiyu-ai/qq-server.log`，`/health` 里 `napcat.ok` |
+| QQ「服务在跑却不回」 | 网关 NapCat 没起（管理员注入 QQ）；看 `~/.data/qq-server.log`，`/health` 里 `napcat.ok` |
 | QQ 语音没声音 | GPT-SoVITS(9880) 没起；插件会自动拉，或手动 `start_api.bat` |
-| 微信不回复 | 看 `~/.feiyu-ai/wechat-bot.log`（收/想好/发出/跳过/失败） |
+| 微信不回复 | 看 `~/.data/wechat-bot.log`（收/想好/发出/跳过/失败） |
 | 抖音私信不回 | `curl 127.0.0.1:8095/health` 看 `failStreak`/`ticking`；`douyin-dm.log` 里找 `主人：` 那行 |
 | 抖音回复"发成功"却没内容 | 新号在**别人**视频下的评论回复会被审核吞掉（接口 200 但不落地）；先在**自己作品**下互动 |
 | 她答"我没写过/我不知道" | 看 `mem recallall --chat <通道>`：是不是该有的行没进去（12 小时窗口 / 通道过滤） |
@@ -659,13 +659,13 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 |---|---|
 | `~/.dsh/feiyu.config.json` | 配置（面板写的就是它） |
 | `~/.dsh/feiyu-night.json` · `feiyu-freedom.json` · `feiyu-review.json` · `feiyu-next-wake.json` · `feiyu-evolve.json` | 作息/自由唤醒/每日回顾/自定唤醒/人格进化的状态 |
-| `~/.feiyu-ai/credentials.json` | B站凭据（0600） |
-| `~/.feiyu-ai/episodes.jsonl`（+`episodes-YYYY-MM.jsonl`）· `facts.json` · `lore.json` | 主记忆 |
-| `~/.feiyu-ai/qq/` | QQ 记忆（episodes + 摘要 + 主人画像） |
-| `~/.feiyu-ai/wechat/<wxid>/` | 微信按联系人记忆 |
-| `~/.feiyu-ai/mood.json` · `quota.json` · `reports/` | 情绪 / 额度 / 日报 |
-| `~/.feiyu-ai/persona.md` + `persona.history/` | 她的人设 + 每日快照 |
-| `~/.feiyu-ai/stickers/<标签>/` | 表情库（只放根本形象） |
+| `~/.data/credentials.json` | B站凭据（0600） |
+| `~/.data/episodes.jsonl`（+`episodes-YYYY-MM.jsonl`）· `facts.json` · `lore.json` | 主记忆 |
+| `~/.data/qq/` | QQ 记忆（episodes + 摘要 + 主人画像） |
+| `~/.data/wechat/<wxid>/` | 微信按联系人记忆 |
+| `~/.data/mood.json` · `quota.json` · `reports/` | 情绪 / 额度 / 日报 |
+| `~/.data/persona.md` + `persona.history/` | 她的人设 + 每日快照 |
+| `~/.data/stickers/<标签>/` | 表情库（只放根本形象） |
 | `~/.dsh/feiyu-work/AGENTS.md` · `feiyu-diary*.md` · `creative/` | 人格流程 / 两本日记 / 她的作品 |
 | `~/.dsh/sessions/…/feiyu/` | 她的会话（完全自由的一切痕迹都在这） |
 

@@ -60,6 +60,16 @@ export const BEAT = {
   promiseEveryBeats: 2,     // 60s  ← 原 runDuePromises 60s
   quoteWarmEveryBeats: 20,  // 10 分钟 ← 原 warmQuoteIndex 10min
   qzoneEveryBeats: 60,      // 30 分钟 ← 原 tryQzone 30min
+  brainEveryBeats: 1,       // 30s  ← 脑编排：消费 inbox → episode / 意图补做 / 巩固判断
+    // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但这里从来没调用过它。
+    //
+    // 事实更正（17:5x 实测）：**事件流并没有断**。ep/2026-11.jsonl 有 122 行、
+    // 17:54 还在写；inbox 四个文件的游标全部追平（120/120、3/3、1/1、6/6）。
+    // 之前"停在 10:14 / 积压 100"是把**某个进程自己的最后写入时间**当成了全局断流 ——
+    // 而且 ep 里确实有一条 11:02 的 notify 事件排在 17:50 之后（乱序写入，不是卡住）。
+    //
+    // 真正的问题只是：心跳没有主动调用它，所以脑编排**只在 qq-server 那条路径上跑**。
+    // 补上这一拍是为了让"每次心跳都推进一次脑"，不是为了修一场不存在的断流。
 }
 
 let _beatCount = 0
@@ -156,20 +166,54 @@ export async function beat(now = Date.now()) {
     if (_beatCount % BEAT.qzoneEveryBeats === 0 && ex.vitals?.qzone) {
       try { await ex.vitals.qzone(now); out.vital.push('qzone') } catch (e) { swallow(e, 'beat:vital:qzone') }
     }
+    // 脑编排事务：消费 inbox → 建 episode / 意图补做 / 判断该不该巩固。
+    // 2026-11-02 修：这一段以前只写在 body.mjs 的注释里说"已收拢"，
+    // 但心跳从来没调过它 —— 文档说收拢了，代码没收拢。
+    if (_beatCount % BEAT.brainEveryBeats === 0 && ex.vitals?.brain) {
+      try { await ex.vitals.brain(now); out.vital.push('brain') } catch (e) { swallow(e, 'beat:vital:brain') }
+    }
 
     // ── ③ 唯一的决策点 ─────────────────────────────────────────
     // 问一次：接下来做什么。不叠加、不投票、不并行。
     const hasInterrupt = !!(ex.pendingInterrupt && ex.pendingInterrupt())
     const urge = hasInterrupt ? (Number(ex.interruptUrgency?.()) || 1) : 0
-    const d = await self.decide({ now, hasInterrupt, interruptUrgency: urge })
+
+    // 丘脑门控（2026-11-02 接线）：打断不是"有就一定能进来"，要先过通道阈值。
+    // 以前 thalamus.mjs 229 行 8 个导出全仓零调用 —— 一个装饰品。
+    // 现在它真的参与决策：owner 通道 base 0.10 + 疲劳增益 0.15（累到极点门槛也只到 0.25），
+    // 所以"他的消息几乎永远进得来"是**算出来的**，不是写死的；高显著（salience→1）阈值再打 0.12 折，
+    // 这就是设计里说的"睡着也能被叫醒"。
+    let interruptPass = hasInterrupt
+    try {
+      if (hasInterrupt) {
+        const sig = thalamus.admit({
+          channel: 'owner',
+          strength: Math.max(0.6, Number(urge) || 1),
+          salience: Number(urge) >= 1.4 ? 0.9 : 0.2,
+          now,
+        })
+        interruptPass = sig.pass
+        out.thalamus = { pass: sig.pass, effective: sig.effective, threshold: sig.threshold, why: sig.why }
+        if (!sig.pass) _log('[thalamus] 打断被门压掉：' + sig.why)
+      }
+    } catch (e) { swallow(e, 'beat:thalamus:admit') }
+
+    const d = await self.decide({ now, hasInterrupt: interruptPass, interruptUrgency: interruptPass ? urge : 0 })
     out.action = d.action
     out.why = d.why
     out.kept = !!d.kept
 
     // ── ④ 按决定执行（能力只执行，不判断）──────────────────────
+    // 丘脑焦点：决定下来的这件事成为"当前焦点"，其他通道在这段时间里更难挤进来
+    // （side inhibition 是 thalamus.admit 里已经写好的机制，以前没人给它设过 focus）。
+    try {
+      thalamus.focus({ channel: 'self', label: String(d.action || ''), ttlMin: Math.max(1, Math.round(Number(d.spanMin || 5))), now })
+    } catch (e) { swallow(e, 'beat:thalamus:focus') }
     if (ex[d.action]) {
       try { await ex[d.action](d, now) } catch (e) { swallow(e, 'beat:exec:' + d.action) }
     }
+    // 执行完释放焦点（"这件事做完了"，别一直压着别的通道）
+    try { thalamus.release(now) } catch (e) { swallow(e, 'beat:thalamus:release') }
     return out
   } finally {
     _running = false

@@ -1,5 +1,5 @@
 // sticker —— 表情包工坊：AI 生成一张入库（Pollinations 免费无 key，走本机 Clash 代理）。
-// 生成完存进 ~/.bot-ai/stickers/<标签|自制>/，QQ/B站表情系统立刻能用它。
+// 生成完存进 ~/.data/stickers/<标签|自制>/，QQ/B站表情系统立刻能用它。
 //
 //   node bot.mjs sticker gen "本鱼饿了" [--tag 生气] [--send]
 //   · --tag  → 生成"标签"样式存进标签目录（图库增长，以后 [表情:标签] 直接用）
