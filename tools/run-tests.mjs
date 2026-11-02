@@ -133,7 +133,7 @@ const NODE = process.env.BOT_NODE || process.execPath
 // Every suite builds its sandbox via os.tmpdir(); pointing TMPDIR at a fresh
 // per-run dir here moves all of them onto reliable disk without touching the
 // individual test files.
-const RUN_TMP = path.join(HERE, '..', '.tmp', 'run-' + process.pid + '-' + Date.now())
+const RUN_TMP = path.join(HERE, '..', 'test', '.tmp', 'run-' + process.pid + '-' + Date.now())
 try { fs.mkdirSync(RUN_TMP, { recursive: true }) } catch (e) { /* fall back to system tmp */ }
 let bad = 0
 for (const t of picked) {
