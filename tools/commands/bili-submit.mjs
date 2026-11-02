@@ -6,6 +6,7 @@ import path from 'node:path'
 import { loadCred } from '../lib/cred.mjs'
 import { makeHeaders } from '../lib/bili-api.mjs'
 import { swallow } from '../lib/swallow.mjs'
+import { sanitizeText } from '../lib/sanitize.mjs'
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 /* chunk_size 由 preupload 返回值决定 */
@@ -98,9 +99,9 @@ async function submitArchive(cred, opts) {
     source: '',
     tid: Number(opts.tid) || 21,
     cover: opts.cover || '',
-    title: String(opts.title || '未命名').slice(0, 80),
+    title: sanitizeText('bili-submit', String(opts.title || '未命名').slice(0, 80)),   // 公开发布口（2026-11-03）
     desc_format_id: 0,
-    desc: String(opts.desc || '').slice(0, 2000),
+    desc: sanitizeText('bili-submit', String(opts.desc || '')).slice(0, 2000),
     dynamic: '',
     subtitle: { open: 0, lan: '' },
     tag: String(opts.tags || '自制'),

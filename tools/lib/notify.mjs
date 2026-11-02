@@ -8,6 +8,7 @@ import * as memory from './memory.mjs'
 import * as brainDelivery from '../brain/delivery.mjs'
 import * as brainEvent from '../brain/event.mjs'
 import { swallow } from './swallow.mjs'
+import { sanitizeText } from './sanitize.mjs'
 
 /**
  * 给主人发一条 QQ 私聊（成功后记进 QQ 记忆，对话流里她"记得自己说过"）。
@@ -19,7 +20,7 @@ export async function sendOwnerQQ(text) {
   const ownerQQ = String(cfg.owner?.qq || '').trim()
   const napcat = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   if (!ownerQQ) { console.log('[notify] owner.qq 未配置，跳过'); return false }
-  const content = String(text || '').slice(0, 500)
+  const content = sanitizeText('notify', String(text || '').slice(0, 500))   // 出站硬脱敏（2026-11-03）
   const body = JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'text', data: { text: content } }] })
   // 重试：NapCat 偶尔会抖一下（10-27 上午 10:01 就丢过一条，11:01 同一条路又好了）。
   // 网络异常 / 5xx 重试两次（0.5s、1.5s）；4xx 和 retcode≠0 不重试，那是真错，重试只会重复打扰。

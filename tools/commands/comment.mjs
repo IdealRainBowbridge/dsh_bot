@@ -12,6 +12,7 @@ import { validateShare } from '../lib/share-policy.mjs'
 import * as guard from '../lib/guard.mjs'
 import * as memory from '../lib/memory.mjs'
 import { sanitizeFor, loadBiliFaces } from '../lib/stickers.mjs'
+import { sanitizeText } from '../lib/sanitize.mjs'
 import { swallow } from '../lib/swallow.mjs'
 
 function arg(argv, name) {
@@ -65,6 +66,7 @@ export async function run(argv = []) {
   // 评论区发不了图片：剥掉 [表情:x]，只留文字 + 颜文字 + B站自带表情码（[大笑]/[doge]）
   const faces = await loadBiliFaces()   // 447 个官方表情码，缓存 24h
   message = sanitizeFor('bilibili', message, faces)
+  message = sanitizeText('comment', message)   // 出站硬脱敏（2026-11-03）：公开发布口
   if (!message) { console.error('✗ 清洗后内容为空'); process.exit(1) }
   const chatId = `bilibili:${bvid}`
 

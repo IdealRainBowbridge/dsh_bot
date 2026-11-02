@@ -5,6 +5,7 @@
 //     permission: 1=所有人可见(默认) 4=好友可见 64=仅自己
 import { config } from '../lib/config.mjs'
 import { swallow } from '../lib/swallow.mjs'
+import { sanitizeText } from '../lib/sanitize.mjs'
 
 function arg(argv, name) {
   const i = argv.indexOf(name)
@@ -17,7 +18,8 @@ export async function run(argv = []) {
   if (!QQ.enabled) { console.error('✗ qq.enabled=false —— 先在 bot.config.json 里开 QQ 开关'); process.exit(1) }
   const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
 
-  const content = arg(argv, '--content') || argv.find(a => !a.startsWith('--')) || ''
+  let content = arg(argv, '--content') || argv.find(a => !a.startsWith('--')) || ''
+  content = sanitizeText('qzone', content)   // 出站硬脱敏（2026-11-03）
   if (!content) { console.error('用法：node bot.mjs qzone --content "…" [--image URL] [--permission 1|4|64]'); process.exit(2) }
 
   const images = argv.filter((a, i) => argv[i - 1] === '--image').map(s => s.trim()).filter(Boolean)

@@ -322,6 +322,11 @@ export async function snapshot() {
   await new Promise((res, rej) => {
     execFile('tar', args, { timeout: 240000 }, (err) => (err ? rej(err) : res()))
   })
+  // 只留最近 3 张：她自己拍几张也不至于把盘吃满（每张 ~260M）
+  try {
+    const olds = fs.readdirSync(dir).filter((f) => f.startsWith('self-')).sort()
+    while (olds.length > 3) fs.unlinkSync(path.join(dir, olds.shift()))
+  } catch (e) { swallow(e, 'selfmod:snapshot-retain') }
   const mb = (fs.statSync(out).size / 1048576).toFixed(1)
   return { ok: true, name, mb }
 }

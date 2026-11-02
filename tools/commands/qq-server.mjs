@@ -200,6 +200,7 @@ export async function run(argv = []) {
     const currentChat = payload?.user_id ? platform + ':' + payload.user_id
       : payload?.group_id ? platform + ':group:' + payload.group_id : (ctx?.chatId || '')
 
+    if (String(action).startsWith("send_")) payload = sanitizeOutbound(action, payload)   // 出站硬脱敏（2026-11-03）：先滤再分流，非QQ平台的出站队列也走这里
     // ── 非 QQ 平台：不调 OneBot，落到该平台自己的出站队列 ──────────────────────
     // v5 修正：出站只认**本次上下文**的 platform，且必须带 chatId。
     // 旧代码没有 chatId 时会写一条空 chatId 的出站记录，拉取端只能靠猜。
@@ -213,7 +214,6 @@ export async function run(argv = []) {
       return true
     }
 
-    if (String(action).startsWith("send_")) payload = sanitizeOutbound(action, payload)   // 出站硬脱敏（2026-11-03）
     if (String(action).startsWith("send_") && isDup(payload, currentChat)) return true
     if (String(action).startsWith("send_")) await showTyping(payload)
     const j = await callApi(action, payload)
@@ -747,6 +747,7 @@ export async function run(argv = []) {
           out = fixed
         }
       }
+      out = sanitizeText('reply', out)   // 出站硬脱敏（2026-11-03）：她说出去的话先过过滤器；语音/贴纸说明都从这段派生，滤这里=全覆盖
       if (!out) return
 
       // 声称-证据闸（v3 O11）：有证据放行；账本有反证才改成「还没…」；查不到一个字都不改（只记账）。
