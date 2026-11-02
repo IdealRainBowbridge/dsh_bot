@@ -204,7 +204,7 @@ async function roamLoop() {
         const url = String(plan.url).trim()
         let text = ''
         try {
-          text = fetchWeb(url)
+          text = await browseSmart(url).catch(() => fetchWeb(url))   // 浏览器优先，curl 兜底
         } catch (e) {
           // 读不到就明确记一笔"别再来"，并把这条链接从下一轮候选里去掉 —— 否则她会一直读同一页空壳
           console.log('  ✗ ' + String(e.message).slice(0, 140))

@@ -125,6 +125,12 @@ function touchDaemon(pid) {
   const st = readDaemon()
   if (st && st.pid === pid) writeDaemon({ ...st, at: Date.now() })
 }
+/** 记住"当前页"：CLI 是一次性进程，tab 归属必须落在档案文件里跨进程传，
+ *  不然下一个命令起来是空记忆，会另开一个空白页去点东西（真踩过）。 */
+function setCurrentTab(tab) {
+  const st = readDaemon()
+  if (st) writeDaemon({ ...st, current: { targetId: tab.targetId, device: tab.device, url: tab.url || '', at: Date.now() } })
+}
 
 /** 探活：daemon 档案新鲜且 CDP 端口答话，返回 {port, ws, pid} */
 export async function probeDaemon() {
@@ -261,15 +267,67 @@ async function connect() {
   return { cdp, port: d.port }
 }
 
-/** 拿当前 tab（没有就建一个），返回 {sessionId, targetId} */
-async function currentTab(conn) {
-  const { targetInfos } = await conn.cdp.send('Target.getTargets')
-  const page = targetInfos.find((t) => t.type === 'page' && !/^devtools:/.test(t.url))
-  const targetId = page?.targetId ?? (await conn.cdp.send('Target.createTarget', { url: 'about:blank' })).targetId
+/** 解析动作目标：@3 = 第 3 号可交互元素（read 时编的号）；text=登录 = 按可见文本找；其余当 CSS 选择器 */
+function parseTarget(t) {
+  const s = String(t ?? '').trim()
+  if (/^@\d+$/.test(s)) return { by: 'index', n: Number(s.slice(1)) }
+  if (s.startsWith('text=')) return { by: 'text', text: s.slice(5) }
+  return { by: 'selector', selector: s }
+}
+
+/** 多标签：browserRead 每次独立开 tab（不互相抢页面）；交互落在档案里记的"当前页"。
+ *  页面总数超 4 个时收掉最旧的（当前页除外）—— GC 靠档案，不靠进程内存。 */
+const MAX_TABS = 4
+
+async function openTab(conn, device) {
+  const { targetId } = await conn.cdp.send('Target.createTarget', { url: 'about:blank' })
   const { sessionId } = await conn.cdp.send('Target.attachToTarget', { targetId, flatten: true })
   await conn.cdp.send('Page.enable', {}, sessionId)
   await conn.cdp.send('Runtime.enable', {}, sessionId)
-  return { sessionId, targetId }
+  const tab = { targetId, sessionId, device, url: '', at: Date.now() }
+  setCurrentTab(tab)
+  // GC：档案里没记的杂页 + 超额旧页，收掉（别挡道，失败就算了）
+  try {
+    const st = readDaemon()
+    const keep = new Set([targetId])
+    const { targetInfos } = await conn.cdp.send('Target.getTargets')
+    const pages = targetInfos.filter((t) => t.type === 'page' && !/^devtools:/.test(t.url))
+    let extra = pages.length - MAX_TABS
+    for (const t of pages) {
+      if (t.targetId === targetId) continue
+      if (st?.prevTabs?.includes(t.targetId) && extra <= 0) { keep.add(t.targetId); continue }
+      if (extra > 0) { extra--; continue }
+      keep.add(t.targetId)
+    }
+    for (const t of pages) if (!keep.has(t.targetId)) await conn.cdp.send('Target.closeTarget', { targetId: t.targetId }).catch(() => {})
+    writeDaemon({ ...st, prevTabs: pages.filter((t) => keep.has(t.targetId) && t.targetId !== targetId).map((t) => t.targetId) })
+  } catch (e) { swallow(e, 'browser:tabGc') }
+  return tab
+}
+
+/** 交互落在最近读的那页（档案里记的 targetId，跨 CLI 进程有效） */
+async function ensureSession(device) {
+  const conn = await connect()
+  const st = readDaemon()
+  if (st?.current?.targetId) {
+    try {
+      const { targetInfos } = await conn.cdp.send('Target.getTargets')
+      const hit = targetInfos.find((t) => t.targetId === st.current.targetId && t.type === 'page')
+      if (hit) {
+        const { sessionId } = await conn.cdp.send('Target.attachToTarget', { targetId: st.current.targetId, flatten: true })
+        await conn.cdp.send('Page.enable', {}, sessionId)
+        await conn.cdp.send('Runtime.enable', {}, sessionId)
+        curDevice = st.current.device || device
+        touchDaemon(st.pid)
+        return { targetId: st.current.targetId, sessionId, device: curDevice, url: st.current.url, conn }
+      }
+    } catch (e) { swallow(e, 'browser:ensureReattach') }
+  }
+  // 没有当前页（或已关）—— 开一个新的空页（caller 里没有元素可点会自然提示先 read）
+  const t = await openTab(conn, device)
+  await emulateDevice(conn, t.sessionId, device)
+  curDevice = device
+  return { ...t, conn }
 }
 
 // ── 页面动作 ────────────────────────────────────────────────────────────────
@@ -343,8 +401,46 @@ export const EXTRACT_FN = `(() => {
   return { title: document.title || '', url: location.href, text: lines.join('\\n') }
 })()`
 
-/** 读当前页（正文 + 标题 + 可选链接）。maxChars 截断防刷屏，offset 续读。 */
-async function readPage(conn, sessionId, { maxChars = 8000, offset = 0, links = false } = {}) {
+/** 可交互元素编号（browser_use 风格）：读页时顺手把可点/可填的东西编上号，
+ *  她点东西不用写选择器 —— click @3 就行。编号存在页面里（chromium 常驻所以跨命令存活），
+ *  CLI 进程虽是一次性的，编号不丢。 */
+export const ELEMENTS_FN = `(() => {
+  const VIS = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' }
+  const BAD = /script|style|noscript|template|svg|nav\\b|header|footer|aside/i
+  const cands = []
+  const labelOf = (el) => {
+    let label = (el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('title') || '').trim().replace(/\\s+/g, ' ')
+    if (!label && el.tagName === 'INPUT') label = el.type === 'password' ? '密码框' : (el.value ? '输入框(已有值)' : '输入框')
+    if (!label && el.tagName === 'TEXTAREA') label = '文本域'
+    if (!label && el.tagName === 'SELECT') label = '下拉框'
+    if (el.type === 'checkbox') label = (label || '勾选') + (el.checked ? '（已勾）' : '')
+    return String(label || '').slice(0, 60)
+  }
+  const push = (el, kind) => {
+    if (!el || cands.length > 300) return
+    if (BAD.test(el.tagName || '') || el.closest('[aria-hidden=true]')) return
+    if (!VIS(el)) return
+    const label = labelOf(el)
+    if (!label) return
+    const r = el.getBoundingClientRect()
+    cands.push({ el, kind, label, x: Math.round(r.left), y: Math.round(r.top + window.scrollY) })
+  }
+  for (const el of document.querySelectorAll('a[href],button,[role=button],[role=link],[role=tab],[role=menuitem],summary'))
+    if (!el.querySelector('a[href],button')) push(el, 'click')   // 套娃的只留外层
+  for (const el of document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]),textarea,select,[contenteditable=true]'))
+    push(el, el.tagName === 'SELECT' ? 'select' : 'type')
+  // 去重（同标签同位置只留一个）+ 按页面顺序编号
+  const seen = new Set(); const uniq = []
+  for (const c of cands) { const k = c.kind + '|' + c.label + '|' + c.x + ',' + c.y; if (seen.has(k)) continue; seen.add(k); uniq.push(c) }
+  uniq.sort((a, b) => a.y - b.y || a.x - b.x)
+  window.__feiyuElEls = uniq
+  window.__feiyuEls = uniq.map((c, i) => ({ n: i + 1, kind: c.kind, label: c.label }))
+  return window.__feiyuEls
+})()`
+
+/** 读当前页（正文 + 标题 + 可选链接 + 可交互元素编号）。maxChars 截断防刷屏，offset 续读。 */
+async function readPage(conn, sessionId, opts = {}) {
+  const { maxChars = 8000, offset = 0, links = false, elements = true } = opts
   const r = await conn.cdp.send('Runtime.evaluate', { expression: EXTRACT_FN, returnByValue: true }, sessionId)
   const v = r.result?.value ?? { title: '', url: '', text: '' }
   let text = String(v.text || '')
@@ -366,6 +462,12 @@ async function readPage(conn, sessionId, { maxChars = 8000, offset = 0, links = 
   if (text.length > maxChars) { text = text.slice(0, maxChars); more = true }
   const out = { title: v.title || '', url: v.url || '', text, more, ...(fallback ? { fallback: true } : {}) }
   if (more) out.nextOffset = offset + maxChars
+  if (elements) {
+    try {
+      const er = await conn.cdp.send('Runtime.evaluate', { expression: ELEMENTS_FN, returnByValue: true }, sessionId)
+      out.elements = (er.result?.value ?? []).slice(0, 80)
+    } catch (e) { swallow(e, 'browser:elements') }
+  }
   if (links) {
     const lr = await conn.cdp.send('Runtime.evaluate', {
       expression: `(() => { const out=[]; for (const a of document.querySelectorAll('a[href]')) { const h=a.href; if(!/^https?:/.test(h)) continue; const t=(a.innerText||'').trim(); if(t && out.length<60) out.push({href:h, text:t.slice(0,50)}) } return out })()`,
@@ -377,70 +479,125 @@ async function readPage(conn, sessionId, { maxChars = 8000, offset = 0, links = 
 }
 
 // ── 对外入口 ────────────────────────────────────────────────────────────────
-let curDevice = null   // 当前 tab 的身份（换身份后导航才生效）
+let curDevice = null   // 最近读的那页的身份
 
-async function ensureSession(device) {
-  const conn = await connect()
-  const tab = await currentTab(conn)
-  if (curDevice !== device) {
-    await emulateDevice(conn, tab.sessionId, device)
-    curDevice = device
-  }
-  return { ...tab, conn }
-}
+/** 登录墙特征：命中说明"要登录"，重试一次（SPA 慢热），还不行就明说怎么登 */
+const LOGIN_MARKERS = ['登录后你可以', '扫码登录', '请先登录', '登录/注册', '请登录后', '登录查看']
 
-/** 读一个网页：导航 → 等渲染 → 提正文。CDP 全挂时抛错（上层落回 curl）。 */
-export async function browserRead(url, { device = 'auto', waitMs = 8000, maxChars = 8000, offset = 0, links = false } = {}) {
+/** 读一个网页：独立开 tab → 导航 → 等渲染 → 提正文+元素编号。CDP 全挂时抛错（上层落回 curl）。
+ *  full=true 先把页面滑到底再回来（懒加载的"上滑加载更多"全喂出来）。 */
+export async function browserRead(url, { device = 'auto', waitMs = 8000, maxChars = 8000, offset = 0, links = false, full = false } = {}) {
   const href = await guardUrl(url)
   const dev = pickDevice(href, device)
-  const s = await ensureSession(dev)
+  const conn = await connect()
+  const tab = await openTab(conn, dev)
+  await emulateDevice(conn, tab.sessionId, dev)
+  curDevice = dev
   try {
-    await s.conn.cdp.send('Page.navigate', { url: href }, s.sessionId)
+    await conn.cdp.send('Page.navigate', { url: href }, tab.sessionId)
   } catch (e) { throw new Error('打开失败：' + String(e.message).slice(0, 100)) }
-  await settle(s.conn, s.sessionId, waitMs)
-  const page = await readPage(s.conn, s.sessionId, { maxChars, offset, links })
+  await settle(conn, tab.sessionId, waitMs)
+  if (full) {
+    await conn.cdp.send('Runtime.evaluate', { expression: `(() => { window.__fyAuto = 0; return true })()`, returnByValue: true }, tab.sessionId).catch(() => {})
+    for (let i = 0; i < 6; i++) {
+      await conn.cdp.send('Runtime.evaluate', { expression: `window.scrollBy(0, document.body.scrollHeight * 0.8); true`, returnByValue: true }, tab.sessionId).catch(() => {})
+      await new Promise((r) => setTimeout(r, 900))
+    }
+    await conn.cdp.send('Runtime.evaluate', { expression: `window.scrollTo(0, 0); true`, returnByValue: true }, tab.sessionId).catch(() => {})
+    await settle(conn, tab.sessionId, 4000).catch(() => {})
+  }
+  let page = await readPage(conn, tab.sessionId, { maxChars, offset, links })
+  // 登录墙/慢热 SPA：白等一拍再读一次，多数"第一下空"的页就出来了
+  const joined = page.text || ''
+  if ((joined.replace(/\s/g, '').length < 200 || LOGIN_MARKERS.some((m) => joined.includes(m))) && !full) {
+    await settle(conn, tab.sessionId, Math.min(waitMs + 4000, 15000))
+    const again = await readPage(conn, tab.sessionId, { maxChars, offset, links })
+    if (again.text.replace(/\s/g, '').length > page.text.replace(/\s/g, '').length) page = again
+  }
+  tab.url = page.url || href
+  setCurrentTab(tab)
+  touchDaemon(readDaemon()?.pid)
   if (!page.text || page.text.replace(/\s/g, '').length < 30) {
-    throw new Error(`页面几乎没内容（${page.title || href}）—— 可能要登录或被拦：可以 browser shot 截图看看，或换 --pc/--mobile 重开`)
+    const login = LOGIN_MARKERS.some((m) => (page.text || '').includes(m))
+    throw new Error(login
+      ? `这页要登录（${page.title || href}）—— browser type @编号 "账号" 输进去，再 browser click text=登录`
+      : `页面几乎没内容（${page.title || href}）—— 可以 browser shot 截图看看，或换 --pc/--mobile 重开`)
   }
   return { ...page, device: dev }
 }
 
-/** 读当前开着的页（不重新导航）：正文续读 / 看链接用 */
-export async function browserPeek({ maxChars = 8000, offset = 0, links = false } = {}) {
+/** 读当前开着的页（不重新导航）：正文续读 / 看链接 / 刷新元素编号用 */
+export async function browserPeek({ maxChars = 8000, offset = 0, links = false, full = false } = {}) {
   const s = await ensureSession(curDevice || 'pc')
+  if (full) {
+    for (let i = 0; i < 5; i++) {
+      await s.conn.cdp.send('Runtime.evaluate', { expression: `window.scrollBy(0, document.body.scrollHeight * 0.8); true`, returnByValue: true }, s.sessionId).catch(() => {})
+      await new Promise((r) => setTimeout(r, 800))
+    }
+    await s.conn.cdp.send('Runtime.evaluate', { expression: `window.scrollTo(0, 0); true`, returnByValue: true }, s.sessionId).catch(() => {})
+    await settle(s.conn, s.sessionId, 3000).catch(() => {})
+  }
   return readPage(s.conn, s.sessionId, { maxChars, offset, links })
 }
 
-/** 交互：click <选择器> [序号] | type <选择器> <文本> | enter | key <名> | scroll <±px> | back */
+/** 交互：click @3|text=登录|.选择器 | type @5 "文字" | enter | key | scroll ±px | back
+ *  定位顺序：@编号（read 时发的元素表）→ text=可见文本 → CSS 选择器。
+ *  动作完成后自动回一份新的元素表 —— 她不用再 read 一遍就能接着点下一步。 */
 export async function browserAct(action, ...args) {
   const s = await ensureSession(curDevice || 'pc')
   const { sessionId, conn } = s
   const ev = (expression) => conn.cdp.send('Runtime.evaluate', { expression, returnByValue: true }, sessionId)
+  /** 动作后的元素表回显（编号顺延） */
+  async function refreshEls() {
+    try {
+      const er = await ev(`(${ELEMENTS_FN})()`)
+      return (er.result?.value ?? []).slice(0, 30)
+    } catch (e) { swallow(e, 'browser:refreshEls'); return [] }
+  }
+  const fmtEls = (els) => els.length ? '\n' + els.map((e) => `[@${e.n}] ${e.kind === 'type' ? '输入' : ''}${e.label}`).join('\n') : ''
+
   switch (action) {
     case 'click': {
-      const sel = String(args[0] || '')
-      if (!sel) throw new Error('要告诉鱼点哪个元素：browser click "选择器"')
-      const idx = Number(args[1]) || 0
-      const r = await ev(`(() => { const els=[...document.querySelectorAll(${JSON.stringify(sel)})]; const el=els[${idx}]; if(!el) return {ok:false, n:els.length}; el.scrollIntoView({block:'center'}); el.click(); return {ok:true, text:(el.innerText||el.value||el.getAttribute('aria-label')||'').trim().slice(0,40)} })()`)
-      const v = r.result?.value ?? {}
-      if (!v.ok) throw new Error(`没找到元素（${sel} 共 ${v.n ?? 0} 个）—— 先 browser links 或 shot 看看页面上有什么`)
+      const target = String(args[0] || '')
+      if (!target) throw new Error('要告诉鱼点哪个：browser click @3 / click text=登录 / click ".选择器"')
+      const t = parseTarget(target)
+      let cr
+      if (t.by === 'index') {
+        cr = await ev(`(() => { const c=(window.__feiyuElEls||[])[${t.n - 1}]; const el=c && c.el; if(!el) return {ok:false, why:'没这个编号（页面刷新过？重新 browser read 一次）', total:(window.__feiyuEls||[]).length}; el.scrollIntoView({block:'center'}); const label=(window.__feiyuEls||[])[${t.n - 1}]?.label||''; el.click(); return {ok:true, label} })()`)
+      } else if (t.by === 'text') {
+        cr = await ev(`(() => { const want=${JSON.stringify(t.text.toLowerCase())}; const els=[...document.querySelectorAll('a[href],button,[role=button],[role=link],[role=tab],input[type=submit],summary,[onclick],label,span[role],div[role=button]')]; const el=els.find((x)=>{const l=(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLowerCase(); return l&&(l===want||l.includes(want))}); if(!el) return {ok:false, why:'页面上没有写着「'+${JSON.stringify(t.text)}+'」的可点元素'}; el.scrollIntoView({block:'center'}); const label=(el.innerText||el.value||'').trim().slice(0,40); el.click(); return {ok:true, label} })()`)
+      } else {
+        cr = await ev(`(() => { const els=[...document.querySelectorAll(${JSON.stringify(t.selector)})]; const el=els[0]; if(!el) return {ok:false, why:'没找到元素（'+${JSON.stringify(t.selector)}+'）'}; el.scrollIntoView({block:'center'}); const label=(el.innerText||el.value||el.getAttribute('aria-label')||'').trim().slice(0,40); el.click(); return {ok:true, label} })()`)
+      }
+      const v = cr.result?.value ?? {}
+      if (!v.ok) throw new Error(v.why || '点击失败')
       await settle(conn, sessionId, 4000).catch(() => {})
-      return `点了「${v.text || sel}」，页面已更新`
+      const els = await refreshEls()
+      return `点了「${v.label || target}」${fmtEls(els)}`
     }
     case 'type': {
-      const sel = String(args[0] || '')
-      const text = String(args[1] ?? '')
-      if (!sel || !text) throw new Error('用法：browser type "输入框选择器" "要输入的字"')
-      const r = await ev(`(() => { const els=[...document.querySelectorAll(${JSON.stringify(sel)})]; const el=els[${Number(args[2]) || 0}]; if(!el) return false; el.scrollIntoView({block:'center'}); el.focus(); el.value=''; return true })()`)
-      if (!r.result?.value) throw new Error(`没找到输入框（${sel}）`)
+      const target = String(args[0] || '')
+      const text = String(args.slice(1).join(' ') ?? '')
+      if (!target || !text) throw new Error('用法：browser type @5 "要输入的字" 或 type ".选择器" "字"')
+      const t = parseTarget(target)
+      if (t.by === 'text') throw new Error('输入框没有可见文本，用 @编号 或 .选择器 定位（read 一下就有编号）')
+      let tr
+      if (t.by === 'index') {
+        tr = await ev(`(() => { const c=(window.__feiyuElEls||[])[${t.n - 1}]; const el=c && c.el; if(!el) return {ok:false, why:'没这个编号（页面刷新过？重新 browser read 一次）'}; el.scrollIntoView({block:'center'}); el.focus(); if('value' in el) el.value=''; else el.textContent=''; return {ok:true} })()`)
+      } else {
+        tr = await ev(`(() => { const el=document.querySelector(${JSON.stringify(t.selector)}); if(!el) return {ok:false, why:'没找到输入框（'+${JSON.stringify(t.selector)}+'）'}; el.scrollIntoView({block:'center'}); el.focus(); if('value' in el) el.value=''; else el.textContent=''; return {ok:true} })()`)
+      }
+      const v = tr.result?.value ?? {}
+      if (!v.ok) throw new Error(v.why || '定位输入框失败')
       await conn.cdp.send('Input.insertText', { text }, sessionId)
       await ev(`document.activeElement.dispatchEvent(new Event('input', {bubbles:true})); document.activeElement.dispatchEvent(new Event('change', {bubbles:true})); true`)
-      return `已输入 ${text.length} 个字（还没提交，要发送就 browser enter）`
+      return `已输入 ${text.length} 个字（还没提交，要发送就 browser enter，或 click 提交按钮）`
     }
     case 'enter': {
       await ev(`(() => { const el=document.activeElement; if(el && el.form && el.form.requestSubmit) { el.form.requestSubmit(); return true } if(el) el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); return true })()`)
       await settle(conn, sessionId, 5000).catch(() => {})
-      return '回车已发，页面已更新'
+      const els = await refreshEls()
+      return `回车已发，页面已更新${fmtEls(els)}`
     }
     case 'key': {
       const key = String(args[0] || 'Enter')
@@ -459,7 +616,8 @@ export async function browserAct(action, ...args) {
       if (i <= 0) throw new Error('已经是最早一页了')
       await conn.cdp.send('Page.navigateToHistoryEntry', { entryId: h.entries[i - 1].id }, sessionId)
       await settle(conn, sessionId, 5000).catch(() => {})
-      return '已后退一步'
+      const els = await refreshEls()
+      return `已后退一步${fmtEls(els)}`
     }
     default:
       throw new Error(`不认识的动作：${action}（click/type/enter/key/scroll/back）`)

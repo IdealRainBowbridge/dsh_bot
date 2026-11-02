@@ -178,6 +178,20 @@ export async function run(argv = []) {
     ? ok('直连记账', directLog + '（' + fs.statSync(directLog).size + ' 字节）')
     : warn('直连记账', '还没有记录 —— 下次 QQ/微信/抖音 聊天后会有（10-31 新增）'))
 
+  // 4.5) 内置浏览器：chromium 在不在（在就能 browser read / browse_page；不在自动落回 curl）
+  try {
+    const bin = cfg.browser?.chromiumBin || 'chromium'
+    let ver = ''
+    try { ver = execFileSync(bin, ['--version'], { encoding: 'utf8', timeout: 10000 }).trim() } catch { ver = '' }
+    if (ver) {
+      const daemon = (() => { try { return JSON.parse(fs.readFileSync(dataPath('browser-daemon.json'), 'utf8')) } catch { return null } })()
+      const alive = daemon?.pid && (() => { try { process.kill(daemon.pid, 0); return true } catch { return false } })()
+      items.push(ok('内置浏览器', ver + (alive ? '（引擎在跑 pid=' + daemon.pid + '）' : '（引擎随用随起）')))
+    } else {
+      items.push(warn('内置浏览器', bin + ' 不在 PATH —— browser 命令会自动落回 curl 读静态页；apt install chromium 后恢复'))
+    }
+  } catch (e) { items.push(warn('内置浏览器', '体检失败：' + e.message)) }
+
   // 5) 空 catch 留痕日志
   const sw = dataPath('logs', 'swallowed.log')
   items.push(fs.existsSync(sw)

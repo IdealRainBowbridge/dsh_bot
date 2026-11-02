@@ -18,16 +18,21 @@ function argOf(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? ar
 async function runSub(sub, argv) {
   if (sub === 'read' || sub === 'open') {
     const url = argv[1]
-    if (!url) { console.log('用法：browser read <url> [--pc|--mobile] [--chars 8000] [--links] [--wait 8000]'); return }
+    if (!url) { console.log('用法：browser read <url> [--pc|--mobile] [--chars 8000] [--links] [--full] [--wait 8000]'); return }
     const p = await browserRead(url, {
       device: deviceOf(argv),
       maxChars: Number(argOf(argv, '--chars', 8000)) || 8000,
       links: argv.includes('--links'),
+      full: argv.includes('--full'),
       waitMs: Number(argOf(argv, '--wait', 8000)) || 8000,
     })
     const head = `${p.title}\n${p.url}\n[身份：${p.device === 'pc' ? '电脑' : '手机'}${p.more ? ' · 正文未完，browser text --offset ' + p.nextOffset + ' 续读' : ''}]`
     console.log(head + '\n\n' + p.text)
     if (p.links?.length) console.log('\n—— 可点的链接 ——\n' + p.links.map((l) => `${l.text} → ${l.href}`).join('\n'))
+    if (p.elements?.length) {
+      console.log('\n—— 可点/可填的（browser click @编号 即可）——')
+      for (const e of p.elements.slice(0, 40)) console.log(`[@${e.n}] ${e.kind === 'type' ? '输入 ' : ''}${e.label}`)
+    }
     return
   }
   if (sub === 'text') {
@@ -59,11 +64,11 @@ async function runSub(sub, argv) {
   }
   if (sub === 'close') { console.log(await browserClose()); return }
 
-  console.log('内置浏览器（电脑/手机两种识别，可点击可输入可截图）')
-  console.log('  browser read <url> [--pc|--mobile] [--chars N] [--links]   读正文（默认按域名自动选身份）')
-  console.log('  browser text [--offset N] [--chars N] | links              续读正文 / 看链接')
-  console.log('  browser click "选择器" [序号] | type "选择器" "文字" | enter  交互')
-  console.log('  browser scroll ±px | back | shot [--tag 名] | status | close')
+  console.log('内置浏览器（电脑/手机双身份，可点可填可截图）')
+  console.log('  browser read <url> [--pc|--mobile] [--chars N] [--links] [--full]   读正文+可交互元素编号（@1 @2…）')
+  console.log('  browser text [--offset N] | links | shot [--tag 名]                 续读 / 看链接 / 截图')
+  console.log('  browser click @3 | click text=登录 | type @5 "字" | enter           交互（点完自动回新的元素表）')
+  console.log('  browser scroll ±px | back | status | close')
 }
 
 export async function run(argv = []) {
