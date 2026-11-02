@@ -96,7 +96,7 @@ function snapshotTmp() {
   const dir = os.tmpdir()
   try { return new Set(fs.readdirSync(dir)) } catch { return new Set() }
 }
-function cleanupNewTmp(before) {
+function cleanupNewTmp(before, ageMs = 120_000) {
   const dir = os.tmpdir()
   let after = []
   try { after = fs.readdirSync(dir) } catch { return 0 }
@@ -104,6 +104,13 @@ function cleanupNewTmp(before) {
   for (const name of after) {
     if (before.has(name)) continue
     if (!TEST_TMP_PREFIXES.some((p) => name.startsWith(p))) continue
+    // 2026-11-03 高压修缮：加年龄闸。以前"新增即垃圾"——并发跑 run-tests（她的 selfApply
+    // 兜底 × 老爸这边）时，A 会把 B 正在用的目录当垃圾删掉（实测 video/atomic 批跑报
+    // No such file / readJsonSafe=null）。只清已存在 ≥2 分钟的：测试残留够老，活跃目录都年轻。
+    try {
+      const st = fs.statSync(path.join(dir, name))
+      if (Date.now() - st.mtimeMs < ageMs) continue
+    } catch { continue }
     try { fs.rmSync(path.join(dir, name), { recursive: true, force: true }); n++ } catch { /* 删不掉就算了 */ }
   }
   return n

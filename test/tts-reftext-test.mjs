@@ -28,6 +28,7 @@ const ok = (name, cond, extra = '') => {
 
 // 造一个假音色目录：wav + 同名 .txt（= 真实转写）
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-ref-'))
+process.on('exit', () => { try { fs.rmSync(tmp, { recursive: true, force: true }) } catch { } })   // 断言抛出/硬退出也不留 /tmp 残骸（2026-11-03）
 const modelDir = path.join(tmp, 'yinlang')
 fs.mkdirSync(modelDir)
 const wav = path.join(modelDir, 'yinlang.wav')

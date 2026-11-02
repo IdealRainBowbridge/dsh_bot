@@ -13,6 +13,7 @@ import http from 'node:http'
 import assert from 'node:assert/strict'
 
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-wanvid-'))
+process.on('exit', () => { try { fs.rmSync(SANDBOX, { recursive: true, force: true }) } catch { } })   // 断言抛出/硬退出也不留 /tmp 残骸（2026-11-03）
 process.env.USERPROFILE = SANDBOX
 process.env.HOME = SANDBOX
 process.env.DSH_HOME = path.join(SANDBOX, '.dsh')

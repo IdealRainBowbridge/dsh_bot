@@ -278,7 +278,7 @@ export async function run(argv = []) {
     const py = await import('../lib/python-runtime.mjs')
     const p = py.findPythonWith(['numpy'])
     if (!p.ok) items.push(bad('python 运行时', p.why + ' —— 语音韵律打分 / 自制表情的 python 分支都不可用'))
-    else if (p.missing.length) items.push(warn('python 运行时', p.bin + ' 可用，但缺库：' + p.missing.join(', ') + '（韵律打分将全 0 → 择优=选第一条）'))
+    else if (p.missing?.length) items.push(warn('python 运行时', p.bin + ' 可用，但缺库：' + p.missing.join(', ') + '（韵律打分将全 0 → 择优=选第一条）'))
     else items.push(ok('python 运行时', p.bin))
   } catch (e) { items.push(warn('python 运行时', '检查失败：' + e.message)) }
 

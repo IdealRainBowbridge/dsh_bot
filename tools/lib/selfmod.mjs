@@ -52,18 +52,20 @@ export function safeResolve(rel) {
  * 她提一个改动。
  * @param {{file:string, why:string, change:string, by?:string}} p
  */
-export function propose({ file, why, change, by = 'self' } = {}) {
+export function propose({ file, why, change, by = 'self', create = false } = {}) {
   const s = readState()
   const target = safeResolve(file)
   if (!target) return { ok: false, reason: `不允许改项目外的文件：${file}` }
-  if (!fs.existsSync(target)) return { ok: false, reason: `文件不存在：${file}` }
+  if (create && fs.existsSync(target)) return { ok: false, reason: `文件已存在，改动别带 create：${file}` }
+  if (!create && !fs.existsSync(target)) return { ok: false, reason: `文件不存在：${file}（新建请带 create:true / CLI --new）` }
   if (s.pending.length >= MAX_PENDING) return { ok: false, reason: `待批改动太多（${MAX_PENDING} 条），先处理旧的` }
 
   const id = 'SM' + Date.now().toString(36).slice(-6).toUpperCase()
   const item = {
     id, file: String(file), abs: target, why: String(why || '').slice(0, 400),
     change: String(change || '').slice(0, 4000), by,
-    state: 'pending', at: Date.now(), sizeBefore: fs.statSync(target).size,
+    create: create === true,
+    state: 'pending', at: Date.now(), sizeBefore: create ? 0 : fs.statSync(target).size,
   }
   s.pending.unshift(item)
   writeState(s)
@@ -111,7 +113,7 @@ export function plan(id) {
   const file = safeResolve(item.file)
   if (!file) return { ok: false, reason: '路径非法' }
 
-  const before = fs.readFileSync(file, 'utf8')
+  const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
   const after = String(item.change || '')
   const A = before.split('\n')
   const B = after.split('\n')
@@ -178,6 +180,14 @@ function backup(file) {
   return { dir, dest }
 }
 
+/** 按"这是新建还是改动"选还原动作：改动→写回原文；新建→删掉半成品（2026-11-03 --new）。 */
+function restoreTo(file, before, wasNew) {
+  try {
+    if (wasNew) fs.rmSync(file, { force: true })
+    else fs.writeFileSync(file, before)
+  } catch (e) { swallow(e, 'selfmod:restore') }
+}
+
 /**
  * 真正落地一条已批准的改动。
  * @returns {{ok:boolean, id?:string, checks?:object, reason?:string, rolledBack?:boolean}}
@@ -191,16 +201,20 @@ export function apply(id) {
   const file = safeResolve(item.file)
   if (!file) return { ok: false, reason: '路径非法' }
 
-  // ① 备份（失败就不改）
-  let bk
-  try { bk = backup(file) } catch (e) { return { ok: false, reason: '备份失败，不敢改：' + e.message } }
+  // ① 备份（新建文件没有"改前"，跳过备份；失败就不改）
+  let bk = null
+  if (!item.create) {
+    try { bk = backup(file) } catch (e) { return { ok: false, reason: '备份失败，不敢改：' + e.message } }
+  }
 
-  // ② 写文件
-  const before = fs.readFileSync(file, 'utf8')
+  // ② 写文件（新建时先建父目录；写失败：新建删半成品，改动写回原文）
+  const isNew = item.create === true || !fs.existsSync(file)
+  const before = isNew ? '' : fs.readFileSync(file, 'utf8')
   try {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, item.change)
   } catch (e) {
-    try { fs.copyFileSync(bk.dest, file) } catch (e) { swallow(e, 'selfmod:apply') }
+    restoreTo(file, before, isNew)
     return { ok: false, reason: '写入失败：' + e.message, rolledBack: true }
   }
 
@@ -212,7 +226,7 @@ export function apply(id) {
       checks.syntax = true
     } catch (e) {
       // 回滚：宁可不改，也别让她把自己弄成语法错误
-      fs.writeFileSync(file, before)
+      restoreTo(file, before, isNew)
       return { ok: false, reason: '语法检查没过，已还原：' + String(e.stderr || e.message).slice(0, 200), rolledBack: true }
     }
   }
@@ -222,11 +236,11 @@ export function apply(id) {
     const out = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'check.mjs')], { timeout: 120000, stdio: 'pipe', cwd: ROOT })
     checks.gate = /门禁通过/.test(String(out))
     if (!checks.gate) {
-      fs.writeFileSync(file, before)
+      restoreTo(file, before, isNew)
       return { ok: false, reason: '门禁没过，已还原：' + String(out).slice(-300), rolledBack: true }
     }
   } catch (e) {
-    fs.writeFileSync(file, before)
+    restoreTo(file, before, isNew)
     return { ok: false, reason: '门禁跑挂，已还原：' + String(e.stderr || e.message).slice(0, 300), rolledBack: true }
   }
 
@@ -284,7 +298,7 @@ async function runFullTests(item, file, before, afterText) {
         { timeout: 20000, stdio: 'pipe', cwd: ROOT })
     } catch { }
     if (untouched) {
-      try { fs.writeFileSync(file, before) } catch { }
+      try { if (item.create) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, before) } catch { }
       try {
         const { sendOwnerQQ } = await import('./notify.mjs')
         await sendOwnerQQ(`她的自改【${item.id}】（${item.file}）全量测试没过，文件已自动还原，代码跟改之前一样。`)
@@ -307,15 +321,20 @@ export function selfApply(id) {
   const file = safeResolve(item.file)
   if (!file) return { ok: false, reason: '路径非法' }
 
-  // ① 备份（失败就不改）
-  let bk
-  try { bk = backup(file) } catch (e) { return { ok: false, reason: '备份失败，不敢改：' + e.message } }
+  // ① 备份（新建文件没有"改前"，跳过备份；失败就不改）
+  let bk = null
+  if (!item.create) {
+    try { bk = backup(file) } catch (e) { return { ok: false, reason: '备份失败，不敢改：' + e.message } }
+  }
 
-  // ② 写文件
-  const before = fs.readFileSync(file, 'utf8')
-  try { fs.writeFileSync(file, item.change) }
-  catch (e) {
-    try { fs.writeFileSync(file, before) } catch { }
+  // ② 写文件（新建时先建父目录；写失败：新建删半成品，改动写回原文）
+  const isNew = item.create === true || !fs.existsSync(file)
+  const before = isNew ? '' : fs.readFileSync(file, 'utf8')
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, item.change)
+  } catch (e) {
+    restoreTo(file, before, isNew)
     return { ok: false, reason: '写文件失败：' + e.message }
   }
 
@@ -326,7 +345,7 @@ export function selfApply(id) {
     execFileSync(process.execPath, ['--check', file], { timeout: 30000, stdio: 'pipe' })
     checks.syntax = true
   } catch (e) {
-    fs.writeFileSync(file, before)
+    restoreTo(file, before, isNew)
     return { ok: false, reason: '语法检查没过，已还原：' + String(e.stderr || e.message).slice(0, 200), rolledBack: true }
   }
 
@@ -335,11 +354,11 @@ export function selfApply(id) {
     const out = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'check.mjs')], { timeout: 120000, stdio: 'pipe', cwd: ROOT })
     checks.gate = /门禁通过/.test(String(out))
     if (!checks.gate) {
-      fs.writeFileSync(file, before)
+      restoreTo(file, before, isNew)
       return { ok: false, reason: '门禁没过，已还原：' + String(out).slice(-300), rolledBack: true }
     }
   } catch (e) {
-    fs.writeFileSync(file, before)
+    restoreTo(file, before, isNew)
     return { ok: false, reason: '门禁跑挂，已还原：' + String(e.stderr || e.message).slice(0, 300), rolledBack: true }
   }
 
@@ -399,6 +418,13 @@ export async function snapshot() {
 export function rollback(id) {
   const s = readState()
   const item = id ? s.history.find((x) => x.id === id) : s.history.find((x) => x.state === 'applied')
+  if (item.create) {
+    try { fs.rmSync(path.resolve(ROOT, item.file), { force: true }) } catch (e) { return { ok: false, reason: e.message } }
+    item.state = 'rolledback'
+    item.rolledBackAt = Date.now()
+    writeState(s)
+    return { ok: true, id: item.id, file: item.file, removed: true, needRestart: true }
+  }
   if (!item || !item.backup) return { ok: false, reason: '没有可回滚的记录' }
   const rel = path.relative(ROOT, path.resolve(ROOT, item.file))
   const src = path.join(item.backup, rel)

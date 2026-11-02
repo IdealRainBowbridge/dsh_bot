@@ -772,13 +772,14 @@ function checkZeroCallers(files) {
     const word = wordOf(n)
     let uses = 0
     for (const c of corpus) {
-      if (c.r === info.file) continue
       let cnt = 0
       let mm
       while ((mm = word.exec(c.s)) !== null) cnt++
+      const decl = (c.s.match(new RegExp('export\s+(?:async\s+)?(?:function|const|class)\s+' + n + '(?![\w$])', 'g')) || []).length
+      cnt = Math.max(0, cnt - decl)
       if (cnt > 0) { uses += cnt; if (!c.r.startsWith('test/')) info.testsOnly = false }
     }
-    if (uses === 0) push('导出零调用', info.file, n + '() 全仓 0 处引用 —— 入库未接线?')
+    if (uses === 0) push('导出零调用', info.file, n + '() 全仓 0 处引用（含自身） —— 入库未接线?')
   }
 }
 

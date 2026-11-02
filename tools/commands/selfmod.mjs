@@ -29,8 +29,9 @@ export async function run(argv = []) {
     const why = argv[2]
     const i = argv.indexOf('--from')
     const from = i >= 0 ? argv[i + 1] : ''
+    const isNewFile = argv.includes('--new')
     if (!file || !why) {
-      console.error('用法：selfmod propose <项目内相对路径> <为什么> --from <含新内容的文件>')
+      console.error('用法：selfmod propose <项目内相对路径> <为什么> --from <含新内容的文件> [--new 新建文件]')
       process.exit(1)
     }
     let change = ''
@@ -41,7 +42,7 @@ export async function run(argv = []) {
       console.error('必须用 --from 指定新内容文件（不让你在命令行里内联整段代码）')
       process.exit(1)
     }
-    const r = SM.propose({ file, why, change })
+    const r = SM.propose({ file, why, change, create: isNewFile })
     if (!r.ok) { console.error('提案失败：' + r.reason); process.exit(1) }
     console.log(`✓ 已提案【${r.id}】${r.file}`)
     console.log('  确认没问题就 selfmod selfApply 落地（备份→写→语法→门禁，失败自动还原）。')
