@@ -4,7 +4,7 @@
 //   node bot.mjs browser links                              # 当前页的可点链接
 //   node bot.mjs browser click "选择器" [序号] | type "选择器" "文字" | enter
 //   node bot.mjs browser scroll ±px | back | shot [--tag 名] | status | close
-import { browserRead, browserAct, browserShot, browserStatus, browserClose, browserPeek, browserDetach, browserTabs, browserCloseAll, browserCloseTabAt, browserActionsLog } from '../lib/browser.mjs'
+import { browserRead, browserAct, browserShot, browserStatus, browserClose, browserPeek, browserDetach, browserTabs, browserCloseAll, browserCloseTabAt, browserActionsLog, browserFind } from '../lib/browser.mjs'
 
 function deviceOf(argv) {
   const d = argv[argv.indexOf('--device') + 1]
@@ -45,6 +45,14 @@ async function runSub(sub, argv) {
     console.log(p.links?.length ? p.links.map((l) => `${l.text} → ${l.href}`).join('\n') : '（这页没有可点的链接，或还没打开页面）')
     return
   }
+  if (sub === 'find') {
+    const term = argv.slice(1).join(' ').trim()
+    if (!term) { console.log('用法：browser find "词" —— 查当前页有没有提到这个词'); return }
+    const r = await browserFind(term)
+    if (!r.count) { console.log(`这页没提到「${term}」`); return }
+    console.log(`「${term}」在这页出现 ${r.count} 次` + (r.context ? `\n第一处：…${r.context}…` : ''))
+    return
+  }
   if (['click', 'type', 'enter', 'key', 'scroll', 'back'].includes(sub)) {
     const args = sub === 'type' ? [argv[1], argv.slice(2).join(' ')] : argv.slice(1)
     console.log(await browserAct(sub, ...args))
@@ -77,7 +85,7 @@ async function runSub(sub, argv) {
 
   console.log('内置浏览器（电脑/手机双身份，可点可填可截图）')
   console.log('  browser read <url> [--pc|--mobile] [--chars N] [--links] [--full]   读正文+可交互元素编号（@1 @2…）')
-  console.log('  browser text [--offset N] | links | shot [--tag 名]                 续读 / 看链接 / 截图')
+  console.log('  browser text [--offset N] | links | find "词" | shot [--tag 名]      续读 / 链接 / 快筛词 / 截图')
   console.log('  browser click @3 | click text=登录 | type @5 "字" | enter           交互（点完自动回新的元素表）')
   console.log('  browser tabs | close @2 | close --all | close                       标签管理 / 关当前页')
   console.log('  browser scroll ±px | back | status | actions | close                滚动/后退/状态/动作日志')

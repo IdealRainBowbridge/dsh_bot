@@ -504,7 +504,8 @@ const LOGIN_MARKERS = ['登录后你可以', '扫码登录', '请先登录', '�
  *  full=true 先把页面滑到底再回来（懒加载的"上滑加载更多"全喂出来）。 */
 export async function browserRead(url, { device = 'auto', waitMs = 8000, maxChars = 8000, offset = 0, links = false, full = false } = {}) {
   const href = await guardUrl(url)
-  const dev = pickDevice(href, device)
+  const wanted = device === 'auto' ? null : device   // 显式指定就不自动换身份
+  let dev = pickDevice(href, device)
   const conn = await connect()
   const tab = await openTab(conn, dev)
   await emulateDevice(conn, tab.sessionId, dev)
@@ -539,6 +540,26 @@ export async function browserRead(url, { device = 'auto', waitMs = 8000, maxChar
   tab.url = page.url || href
   setCurrentTab(tab)
   touchDaemon(readDaemon()?.pid)
+  // 双身份互救：auto 模式下第一遍几乎没内容、也没登录墙 → 换另一种身份重开一次（有些站只认电脑版/手机版）
+  if (!wanted && page.text.replace(/\s/g, '').length < 80 && !LOGIN_MARKERS.some((m) => (page.text || '').includes(m))) {
+    const alt = dev === 'pc' ? 'mobile' : 'pc'
+    try {
+      const tab2 = await openTab(conn, alt)
+      await emulateDevice(conn, tab2.sessionId, alt)
+      await conn.cdp.send('Page.navigate', { url: href }, tab2.sessionId)
+      await settle(conn, tab2.sessionId, Math.min(waitMs, 8000))
+      const p2 = await readPage(conn, tab2.sessionId, { maxChars, offset, links })
+      if (p2.text.replace(/\s/g, '').length > page.text.replace(/\s/g, '').length * 3 && p2.text.replace(/\s/g, '').length >= 80) {
+        curDevice = alt
+        dev = alt
+        page = p2
+        tab2.url = page.url || href
+        setCurrentTab(tab2)
+      } else {
+        try { await conn.cdp.send('Target.closeTarget', { targetId: tab2.targetId }) } catch (e) { swallow(e, 'browser:altClose') }
+      }
+    } catch (e) { swallow(e, 'browser:altRetry') }
+  }
   if (!page.text || page.text.replace(/\s/g, '').length < 30) {
     const login = LOGIN_MARKERS.some((m) => (page.text || '').includes(m))
     throw new Error(login
@@ -586,7 +607,7 @@ export async function browserAct(action, ...args) {
       const t = parseTarget(target)
       let cr
       if (t.by === 'index') {
-        cr = await ev(`(() => { const c=(window.__feiyuElEls||[])[${t.n - 1}]; const el=c && c.el; if(!el) return {ok:false, why:'没这个编号（页面刷新过？重新 browser read 一次）', total:(window.__feiyuEls||[]).length}; el.scrollIntoView({block:'center'}); const label=(window.__feiyuEls||[])[${t.n - 1}]?.label||''; el.click(); return {ok:true, label} })()`)
+        cr = await ev(`(() => { const c=(window.__feiyuElEls||[])[${t.n - 1}]; const el=c && c.el; if(!el) return {ok:false, why:'没这个编号（页面刷新过？重新 browser read 一次）', total:(window.__feiyuEls||[]).length}; if(!el.isConnected) return {ok:false, why:'这个元素已被页面刷掉了（SPA 换了内容）—— 重新 browser read 一次拿新编号'}; el.scrollIntoView({block:'center'}); const label=(window.__feiyuEls||[])[${t.n - 1}]?.label||''; el.click(); return {ok:true, label} })()`)
       } else if (t.by === 'text') {
         cr = await ev(`(() => { const want=${JSON.stringify(t.text.toLowerCase())}; const els=[...document.querySelectorAll('a[href],button,[role=button],[role=link],[role=tab],input[type=submit],summary,[onclick],label,span[role],div[role=button]')]; const el=els.find((x)=>{const l=(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLowerCase(); return l&&(l===want||l.includes(want))}); if(!el) return {ok:false, why:'页面上没有写着「'+${JSON.stringify(t.text)}+'」的可点元素'}; el.scrollIntoView({block:'center'}); const label=(el.innerText||el.value||'').trim().slice(0,40); el.click(); return {ok:true, label} })()`)
       } else {
@@ -647,6 +668,26 @@ export async function browserAct(action, ...args) {
     default:
       throw new Error(`不认识的动作：${action}（click/type/enter/key/scroll/back）`)
   }
+}
+
+/** 在当前页里找词：命中几次 + 第一处上下文 —— 她"这页值不值得细读"的快筛 */
+export async function browserFind(term) {
+  const s = await ensureSession(curDevice || 'pc')
+  const r = await s.conn.cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const t = (document.body && document.body.innerText) || ''
+      const q = ${JSON.stringify(String(term || ''))}
+      if (!q) return { count: 0, term: '' }
+      const lower = t.toLowerCase(); const qq = q.toLowerCase()
+      let i = 0, count = 0, first = -1
+      while ((i = lower.indexOf(qq, i)) !== -1) { if (first < 0) first = i; count++; i += qq.length }
+      if (!count) return { count: 0, term: q }
+      const context = t.slice(Math.max(0, first - 40), first + qq.length + 80).replace(/\\s+/g, ' ').trim()
+      return { count, term: q, context }
+    })()`,
+    returnByValue: true,
+  }, s.sessionId)
+  return r.result?.value ?? { count: 0, term: String(term || '') }
 }
 
 /** 截图存档，返回文件路径（她可以拿去发/看） */

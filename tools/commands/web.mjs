@@ -58,6 +58,24 @@ function htmlToText(html) {
     .trim()
 }
 
+/** 搜索三级链：RSS(curl) → 内置浏览器开 SERP → DDG(curl)。RSS 被封/改版时浏览器层能过风控。 */
+export async function searchSmart(kw) {
+  let results = searchWeb(kw)
+  if (results.length) return results
+  try {
+    const { browserRead, browserDetach } = await import('../lib/browser.mjs')
+    const p = await browserRead(`https://cn.bing.com/search?q=${encodeURIComponent(kw)}`, { waitMs: 6000, maxChars: 3000, links: true })
+    for (const l of (p.links || []).slice(0, 14)) {
+      if (!/^https?:/.test(l.href) || /bing\.com|microsoft\.com/i.test(l.href)) continue
+      results.push({ title: String(l.text || '').slice(0, 80), url: l.href, snippet: '(经内置浏览器 SERP 读取，正文用 browse_page 读)' })
+      if (results.length >= 10) break
+    }
+  } catch (e) { swallow(e, 'web:searchBrowser') } finally {
+    try { const m2 = await import('../lib/browser.mjs'); await m2.browserDetach() } catch (e2) { swallow(e2, 'web:searchDetach') }
+  }
+  return results
+}
+
 /** 搜索：Bing 国内直连优先，0 结果/失败走 DDG（代理）。返回 [{title, url, snippet}] */
 export function searchWeb(kw) {
   const results = []
@@ -200,7 +218,7 @@ async function roamLoop() {
       console.log(`\n[roam #${round}] ${act}：${String(plan.why || plan.query || plan.topic || plan.url || '').slice(0, 60)}`)
 
       if (act === '搜索' && String(plan.query || '').trim()) {
-        const rs = searchWeb(String(plan.query).trim())   // searchWeb 内部已记日志
+        const rs = await searchSmart(String(plan.query).trim())   // searchWeb 内部已记日志
         for (const r of rs.slice(0, 5)) console.log('  ·', r.title, '—', r.url)
         lastResults = rs
         try { const { remember } = await import('../lib/memory.mjs'); remember('web', 'web:roam', cfg.identity?.name ?? 'dsh_bot', 'assistant', `（搜索了「${String(plan.query).slice(0, 40)}」，首选：${rs[0]?.title || ''}）`) } catch (e) { swallow(e, 'web:sleep') }      } else if (act === '读网页' && String(plan.url || '').trim()) {
@@ -296,7 +314,7 @@ export async function run(argv = []) {
   if (sub === 'search') {
     const kw = argv.slice(1).join(' ').trim()
     if (!kw) { console.log('用法：web search "关键词"'); return }
-    const rs = searchWeb(kw)
+    const rs = await searchSmart(kw)
     if (!rs.length) { console.log('（没搜到结果）'); return }
     console.log(`「${kw}」的搜索结果（${rs.length} 条）：`)
     for (const [i, r] of rs.entries()) console.log(`${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
