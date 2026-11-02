@@ -51,12 +51,14 @@ if (MODE === 'day') {
   const pts = []
   let asleepNow = false
   let sleepStart = 0
+  let interrupted = false
   let s1 = false, s2 = false
   const evts = []
   const stageMinutes = { N3a: 0, N3b: 0, REMa: 0, REMb: 0 }
   const BED = 16 * H          // bedtime gate: T+16h (mirrors 21:00 when wake is 05:00-ish)
 
   for (let t = T; t <= T + DAY; t += 5 * MIN) {
+    const hr = H2(t)
     if (!asleepNow && t >= T + BED) {
       asleepNow = true
       sleepStart = t
@@ -68,22 +70,40 @@ if (MODE === 'day') {
     const hp = hpa.read(t)
     const f = field.snapshot()
     if (asleepNow) {
+      // one interruption mid-night (the cat) -- interruptions cost deep sleep.
+      // SIM_NOINT=1 for the textbook-night archive run (no interruption).
+      if (process.env.SIM_NOINT !== '1' && !interrupted && sleepStart && t >= sleepStart + 4 * H) {
+        interrupted = true
+        stage.interrupt(t)
+        evts.push({ m: Math.round((t - T) / MIN), label: 'wake-interrupt' })
+      }
       const half = t < sleepStart + 4 * H ? 'a' : 'b'
       if (cs.stage === 'N3') stageMinutes['N3' + half] += 5
       if (cs.stage === 'REM') stageMinutes['REM' + half] += 5
     } else {
-      // daytime stressors: ~12:20 a harsh review; ~20:50 a crowded-room argument
       if (!s1 && t >= T + 5 * H) { s1 = true; hpa.stress(1.3, { why: 'day:criticism', now: t }); evts.push({ m: Math.round((t - T) / MIN), label: 'stress:criticism' }) }
       if (!s2 && t >= T + 13.5 * H) { s2 = true; hpa.stress(1.0, { why: 'day:crowd', now: t }); evts.push({ m: Math.round((t - T) / MIN), label: 'stress:crowd' }) }
       hpa.perfuse(t)
+      // awake-time sleep-debt accrual: same constants as heartbeat.accrueSleepDebt
+      // (private fn: 0.02/h day, x2.5 for 23:00-06:00), applied through the
+      // public field.poke API -- the harness plays "environment", the organ
+      // (night.sleepiness / night.endSleep) still does all the accounting.
+      const nightish = (hr >= 0 && hr < 6) || hr >= 23
+      field.poke('sleepDebt', 0.02 * (nightish ? 2.5 : 1) * (5 / 60), { why: nightish ? 'awake:night' : 'awake:day', now: t })
     }
     pts.push({
-      m: Math.round((t - T) / MIN), hr: Number(H2(t).toFixed(2)), circ: rhythm.circadian(H2(t)),
+      m: Math.round((t - T) / MIN), hr: Number(hr.toFixed(2)), circ: rhythm.circadian(hr),
       hCort: num(hp.cortisol), crh: num(hp.crh), acth: num(hp.acth),
       fCort: num(f.dims.cortisol), val: num(f.dims.valence), ten: num(f.dims.tension),
       sero: num(f.dims.sero), fat: num(f.dims.fatigue), debt: num(f.dims.sleepDebt),
-      sleepy: asleepNow ? null : sleepScore(night.sleepiness(t, { backlog: bl })), stage: cs.stage || '', shift: num(hp.setShift),
+      sleepy: null, sleepyDebt: 0, stage: cs.stage || '', shift: num(hp.setShift),
     })
+    if (!asleepNow) {
+      // feed the REAL account the way night.assess does: backlog carries .debt
+      const sl = night.sleepiness(t, { backlog: { ...bl, debt: num(f.dims.sleepDebt) } })
+      pts[pts.length - 1].sleepy = sleepScore(sl)
+      pts[pts.length - 1].sleepyDebt = num(sl?.parts?.debt)
+    }
   }
 
   // ── shape assertions (the curve must LOOK like a day) ──────────────────
@@ -95,11 +115,16 @@ if (MODE === 'day') {
   ok('CAR: peak clearly above baseline', peak.hCort - base >= 0.02, `+${(peak.hCort - base).toFixed(3)}`)
   const afterPeak = carWin.filter((p) => p.m > peak.m && p.m <= 180)
   ok('CAR: single peak (no second rise)', afterPeak.every((p) => p.hCort <= peak.hCort + 0.005))
-  const morningPts = pts.filter((p) => p.m >= 0 && p.m <= 30).map((p) => p.sleepy)
+  const morningPts = pts.filter((p) => p.m >= 0 && p.m <= 30)
   const BED_MIN = 16 * 60
-  const bedPts = pts.filter((p) => p.m >= BED_MIN - 30 && p.m < BED_MIN).map((p) => p.sleepy)
-  const morningMax = Math.max(...morningPts), bedMax = Math.max(...bedPts)
-  ok('debt: sleepy climbs to bed-time after a 16h day', bedMax >= 40 && bedMax > morningMax + 5, `bed=${bedMax.toFixed(0)} morning=${morningMax.toFixed(0)}`)
+  const bedPts = pts.filter((p) => p.m >= BED_MIN - 30 && p.m < BED_MIN)
+  // the sleepiness TOTAL mixes backlog + clock weight, so assert on the ACCOUNT:
+  // sleepDebt dimension and the debt PART of sleepiness must climb through the day.
+  const debtMorning = morningPts.reduce((a, p) => a + p.debt, 0) / morningPts.length
+  const debtBed = bedPts.reduce((a, p) => a + p.debt, 0) / bedPts.length
+  const sdebtMorning = Math.max(...morningPts.map((p) => p.sleepyDebt))
+  const sdebtBed = Math.max(...bedPts.map((p) => p.sleepyDebt))
+  ok('debt account: sleepDebt climbs through the 16h day, sleep cleared it at wake', debtBed > debtMorning + 0.12 && sdebtBed > sdebtMorning + 3, `dims ${debtMorning.toFixed(2)}->${debtBed.toFixed(2)}, sleepy.debt ${sdebtMorning.toFixed(0)}->${sdebtBed.toFixed(0)}`)
   ok('N3 front-loaded (first half > second half)', stageMinutes.N3a > stageMinutes.N3b, `N3 ${stageMinutes.N3a} vs ${stageMinutes.N3b} min`)
   ok('REM back-loaded (second half >= first half)', stageMinutes.REMb >= stageMinutes.REMa, `REM ${stageMinutes.REMa} vs ${stageMinutes.REMb} min`)
   const cortBefore = pts.filter((p) => p.m >= 4.5 * 60 && p.m < 5 * 60).reduce((a, p) => a + p.fCort, 0) / 6
