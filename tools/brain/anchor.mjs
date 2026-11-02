@@ -131,6 +131,18 @@ export function sample({ force = false, now = Date.now() } = {}) {
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s)
 
+  // P2-3 (2026-11-03): usage-dependent consolidation. A line she keeps
+  // re-deriving (near-duplicates of herself in the stream) is one her memory
+  // replays - hippocampal replay marks it for freezing. Count near-duplicates
+  // IN the candidate pool (similar()) and give repeats a capped bonus, then
+  // re-sort. Repeated lines therefore outrank fresher one-off lines.
+  for (const c of scored) {
+    let rep = 0
+    for (const d of scored) if (d !== c && similar(c.text, d.text)) rep++
+    c.s = Number((c.s + Math.min(2, rep * 0.5)).toFixed(2))
+  }
+  scored.sort((a, b) => b.s - a.s)
+
   if (!scored.length) return { st, changed: false, why: '没有够格的句子' }
 
   // 去重（文本相近的只留一条） + 分散（同一天的不要超过 2 句）
