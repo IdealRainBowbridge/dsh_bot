@@ -163,17 +163,8 @@ export async function doWander() {
       { kind: 'wander' })
   } catch (e) { swallow(e, 'tools/commands/wander.mjs:128') }
 
-  // 探索残余物（2026-11-02 晚）：这次探索的主题沉淀进新颖检测的见过池，
-  // 并记成 lastTopic —— 同主题的下一次好奇会脱敏。探索的先验由此被经历改变。
-  try {
-    const nv = await import('../lib/novelty.mjs')
-    const allOk = results.length > 0 && results.every((r) => r.ok)
-    // 惊喜度用器官自己量（二轮）：探索带回来的结果本身有多陌生 = 这次收获有多大。
-    // 全熟（习惯化之后还在同一处打转）→ 分数自然低。失败按 0.2 兜底。
-    const got = results.map((r) => String(r.out || '')).join(' ')
-    const surprise = allOk ? Math.max(0.1, nv.surpriseOf(got)) : 0.2
-    nv.spark(idea.want + ' ' + idea.reason, { source: 'wander', surprise })
-  } catch (e) { swallow(e, 'tools/commands/wander.mjs:spark') }
+  // 探索残余物（三轮抽出可测）：沉淀见过池 / 量惊喜度 / 高惊喜→兴趣养成。见 settleExploration。
+  try { await settleExploration(idea, results) } catch (e) { swallow(e, 'tools/commands/wander.mjs:settle') }
 
   try {
     const { emit } = await import('../brain/event.mjs')
@@ -187,6 +178,35 @@ export async function doWander() {
   writeState(st)
 
   return { want: idea.want, reason: idea.reason, results, steps: idea.steps }
+}
+
+/**
+ * 探索的结算（三轮，从 doWander 抽出来 —— 可测试）：
+ *   ① 主题沉淀进新颖检测的见过池 + lastTopic —— 同主题下次脱敏（先验被经历改变）
+ *   ② 惊喜度由器官自己量：收获文本的陌生度 = 这次收获有多大（全熟→自然低，失败→0.2）
+ *   ③ 高惊喜且做成 → **兴趣养成**：memory.addLore('兴趣') —— 回报改变记忆。
+ *      兴趣池的下游全是现成的：聊天 hook「最近挂在心上」/ 写作素材 / 投稿选题 /
+ *      feed 候选打分 —— 惊喜大的方向会自然渗进她之后的说话与创作。
+ *   频率上限天然安全：wander dailyMax 护栏 × 同主题合并（topicKey）× 池封顶。
+ * @returns {{surprise:number, interest:boolean}} 给调用方/测试断言用
+ */
+export async function settleExploration(idea, results) {
+  const out = { surprise: 0, interest: false }
+  const nv = await import('../lib/novelty.mjs')
+  try {
+    const allOk = Array.isArray(results) && results.length > 0 && results.every((r) => r.ok)
+    const got = (results || []).map((r) => String(r.out || '')).join(' ')
+    out.surprise = allOk ? Math.max(0.1, nv.surpriseOf(got)) : 0.2
+    nv.spark(String(idea?.want || '') + ' ' + String(idea?.reason || ''), { source: 'wander', surprise: out.surprise })
+    if (allOk && out.surprise >= 0.5) {
+      try {
+        const memory = await import('../lib/memory.mjs')
+        memory.addLore('兴趣', '最近对 ' + String(idea?.want || '').slice(0, 40) + ' 上了心（探索收获很大）')
+        out.interest = true
+      } catch (e) { swallow(e, 'wander:settle:lore') }
+    }
+  } catch (e) { swallow(e, 'wander:settle') }
+  return out
 }
 
 export async function run(args) {

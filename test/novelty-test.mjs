@@ -103,5 +103,19 @@ ok('主文件路径与 memory.episodeFile 一致', (() => {
   ok('空收获不炸', typeof novelty.surpriseOf('', NOW + 203) === 'number')
 }
 
+// ⑩ settleExploration（三轮）：高惊喜 → 兴趣养成 —— 回报改变记忆
+{
+  const wanderMod = await import('../tools/commands/wander.mjs')
+  const r1 = await wanderMod.settleExploration(
+    { want: '图灵完备性概念的起源史', reason: '好奇这个词是怎么流行起来的' },
+    [{ step: 'x', ok: true, out: 'lambda calculus / 可计算性理论 / 哥哥不完备定理 / 陌生概念一大堆' }])
+  ok('高惊喜 → 兴趣养成', r1.interest === true, JSON.stringify(r1))
+  ok('兴趣池里有新方向', memory.loreInterests(5).some((t) => /图灵/.test(String(t))))
+  const r2 = await wanderMod.settleExploration(
+    { want: '随便逛逛', reason: '没什么特别的' },
+    [{ step: 'x', ok: false, out: '失败了' }])
+  ok('失败 → 不养成、惊喜低', r2.interest === false && r2.surprise <= 0.2, JSON.stringify(r2))
+}
+
 console.log(`\n${fail ? '✗' : '✓'} novelty-test：${pass} 通过 / ${fail} 失败`)
 if (fail) process.exitCode = 1
