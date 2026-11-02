@@ -13,6 +13,9 @@ import assert from 'node:assert/strict'
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-social-'))
 process.env.USERPROFILE = SANDBOX
 process.env.HOME = SANDBOX
+// 2026-11-02：swallow 必须在隔离之后动态 import —— 静态 import 会在 env 生效前
+// 加载 paths.mjs，把真实 HOME 缓存进去，社交流水就写进主人真的 ~/.data 了（已发生过）。
+const { swallow } = await import('../tools/lib/swallow.mjs')
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const V = await import('file:///' + path.join(ROOT, 'tools/lib/video.mjs').replace(/\\/g, '/'))
@@ -629,4 +632,4 @@ for (const [good, name, err] of results) {
 }
 console.log(`\n视频/社交测试：${pass}/${results.length} 通过`)
 if (pass !== results.length) process.exit(1)
-try { fs.rmSync(SANDBOX, { recursive: true, force: true }) } catch {}
+try { fs.rmSync(SANDBOX, { recursive: true, force: true }) } catch (e) { swallow(e, 'video-test:best-effort') }
