@@ -901,6 +901,25 @@ function checkZeroCallers(files) {
   }
 }
 
+// ── 7.5 host-user hardcode (2026-11-03) ──
+// Why: bili-audio.mjs had 4 of these. Host user paths break silently on
+// machine/user change or container rebuild. Derive from os.homedir()/env.
+// Rule: non-comment lines must not contain /home/feiyu/ or /home/baka/
+// literals. existsSync probes are exempt (they fail safe by design);
+// plain string literals and ||-defaults are not (they mask silently).
+function checkHomeHardcode(files) {
+  const re = /\/home\/(feiyu|baka)\//
+  for (const f of files) {
+    const r = rel(f)
+    const lines = fs.readFileSync(f, 'utf8').split('\n')
+    lines.forEach((line, i) => {
+      if (/^\s*(\/\/|\*|#)/.test(line)) return   // comments are documentation
+      if (line.includes('existsSync(')) return   // probe = fails safe
+      if (re.test(line)) push('宿主用户硬编码', r + ':' + (i + 1), '用 os.homedir()/env 派生，别写死宿主用户路径')
+    })
+  }
+}
+
 function checkSize(files) {
   for (const f of files) {
     const r = rel(f)
@@ -946,6 +965,7 @@ if (!FAST) {
   checkPerms()
   checkEmptyCatch(files)
   checkHardcodedPaths(files)
+  checkHomeHardcode(files)
   checkSyncThenable(files)
   checkUndeclaredIdentifiers(files)
   checkNoTimeout(files)

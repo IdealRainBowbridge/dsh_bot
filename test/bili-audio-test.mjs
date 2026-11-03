@@ -82,7 +82,7 @@ if (doc.ok) assert.equal(BA.asrReady(), true, 'doctor.ok=true 但 asrReady()=fal
     // 源码静态扫描：不再含 '/home/feiyu/' 形态的字符串字面量
     const src = fsmod.readFileSync(new URL('../tools/lib/bili-audio.mjs', import.meta.url), 'utf8')
     const hits = (src.match(/['\"`]\/home\/feiyu\//g) || []).length
-    assert.equal(hits, 0, `bili-audio.mjs 又出现 ${hits} 处硬编码 /home/feiyu/ 字符串`)
+    assert.equal(hits, 0, `bili-audio.mjs 又出现 ${hits} 处宿主用户硬编码字符串`)
   } finally {
     if (oldVenv === undefined) delete process.env.BOT_ASR_VENV; else process.env.BOT_ASR_VENV = oldVenv
     if (oldData === undefined) delete process.env.BOT_ASR_DATA_DIR; else process.env.BOT_ASR_DATA_DIR = oldData
