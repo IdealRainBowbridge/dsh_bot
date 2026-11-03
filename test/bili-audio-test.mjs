@@ -61,4 +61,33 @@ if (doc.ok) assert.equal(BA.asrReady(), true, 'doctor.ok=true 但 asrReady()=fal
   assert.equal(squash('哈哈哈哈'), '哈哈哈…（重复4次）')
 }
 
-console.log('✓ bili-audio-test 全部通过（表面/失败语义/doctor 自洽/重复压缩）')
+// ── 7. HOME 派生（2026-11-03）：路径不再允许硬编码 /home/feiyu ────────────
+//      为什么测：当初 4 处硬编码让换机器/换用户就瘫，现在全部从 os.homedir()/env 派生。
+//      钉两件事：① env 覆盖真的生效（BOT_ASR_VENV 指到空处→探测必败）；
+//      ②源码静态扫描不再含硬编码字符串（防回潮的牙）。
+{
+  const osmod = await import('node:os')
+  const fsmod = await import('node:fs')
+  const oldVenv = process.env.BOT_ASR_VENV
+  const oldData = process.env.BOT_ASR_DATA_DIR
+  const oldPy = process.env.BOT_ASR_PYTHON
+  try {
+    process.env.BOT_ASR_PYTHON = ''
+    process.env.BOT_ASR_DATA_DIR = ''
+    process.env.BOT_ASR_VENV = '/nonexistent-asr-venv-for-test'
+    const py = BA.asrPython()
+    // 容器里系统 python 没 faster_whisper → 必为 null；万一机器上系统 python 装了，也只允许回退到系统 python
+    assert.ok(py === null || py === '/usr/bin/python3',
+      `BOT_ASR_VENV 指到空处时应探测失败或回退系统 python，实际: ${py}`)
+    // 源码静态扫描：不再含 '/home/feiyu/' 形态的字符串字面量
+    const src = fsmod.readFileSync(new URL('../tools/lib/bili-audio.mjs', import.meta.url), 'utf8')
+    const hits = (src.match(/['\"`]\/home\/feiyu\//g) || []).length
+    assert.equal(hits, 0, `bili-audio.mjs 又出现 ${hits} 处硬编码 /home/feiyu/ 字符串`)
+  } finally {
+    if (oldVenv === undefined) delete process.env.BOT_ASR_VENV; else process.env.BOT_ASR_VENV = oldVenv
+    if (oldData === undefined) delete process.env.BOT_ASR_DATA_DIR; else process.env.BOT_ASR_DATA_DIR = oldData
+    if (oldPy === undefined) delete process.env.BOT_ASR_PYTHON; else process.env.BOT_ASR_PYTHON = oldPy
+  }
+}
+
+console.log('✓ bili-audio-test 全部通过（表面/失败语义/doctor 自洽/重复压缩/HOME派生）')
