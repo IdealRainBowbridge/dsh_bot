@@ -52,9 +52,9 @@ export function whyNoHear() { return lastHearWhy }
  *   · int8 在 GPU 上可用，且比 float32 快 25%
  *   · 结论：GPU 优先 int8，退 float32，再退 CPU int8
  */
-// ASR data dir (venv + models). 2026-11-03: no more hardcoded /home/feiyu.
+// ASR data dir (venv + models). 2026-11-03: no more hardcoded /home/dsh.
 // Precedence: BOT_ASR_DATA_DIR > parent of BOT_ASR_VENV > <homedir>/.data.
-// In-container equivalent of the old absolute path (feiyu home = /home/feiyu).
+// In-container equivalent of the old absolute path (feiyu home = /home/dsh).
 function asrDataDir() {
   if (process.env.BOT_ASR_DATA_DIR) return process.env.BOT_ASR_DATA_DIR
   const venv = process.env.BOT_ASR_VENV

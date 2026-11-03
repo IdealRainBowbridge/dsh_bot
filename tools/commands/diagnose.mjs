@@ -399,7 +399,7 @@ export async function run(argv = []) {
     const here = process.cwd()
     if (here.includes('dsh_bot')) items.push(ok('改名·挂载', '代码跑在 ' + here + '（dsh_bot 挂载点）'))
     else items.push(bad('改名·挂载', '工作目录 ' + here + ' 不是 dsh_bot 挂载点 —— 六层改名里第 2 层断了'))
-    if (fs.existsSync('/home/feiyu/plugins/dsh-feiyu')) items.push(warn('改名·挂载', '旧挂载 dsh-feiyu 仍存在 —— 双路径并存容易读错边'))
+    if (fs.existsSync('/home/dsh/plugins/dsh-feiyu')) items.push(warn('改名·挂载', '旧挂载 dsh-feiyu 仍存在 —— 双路径并存容易读错边'))
     if (fs.existsSync(dataPath('persona.md'))) items.push(ok('改名·数据根', 'persona.md 在数据根上（~/.data 对齐）'))
     else items.push(bad('改名·数据根', dataPath('persona.md') + ' 不存在 —— 数据根分叉（人格根本没加载的 P0 家族）'))
     try {

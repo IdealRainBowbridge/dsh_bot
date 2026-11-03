@@ -41,7 +41,7 @@ const PATTERNS = [
   { kind: '密钥', re: /\b(?:sk-[A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{20,})/g, to: '【一个密钥】' },
   { kind: '校验值', re: /\b[a-f0-9]{32,64}\b/g, to: '【一串校验值】' },
   // 主机路径（她身上的真实路径都是"本地资料在哪"的定位信息）
-  { kind: '本机路径', re: /\/(?:srv|mnt|home|opt)\/(?:feiyu|data|baka|dsh)[^\s，。；'"）)]*/g, to: '【本机路径】' },
+  { kind: '本机路径', re: /\/(?:srv|mnt|home|opt)\/(?:feiyu|data|baka|dsh[-_]?bot|dsh)[^\s，。；'"）)]*/g, to: '【本机路径】' },
   { kind: '本机路径', re: /\/root\/\.ssh[^\s，。；'"）)]*/g, to: '【本机路径】' },
   { kind: '本机路径', re: /[A-Za-z]:\\Users\\[^\s，。；'"）)]+/g, to: '【本机路径】' },
   // 内网/虚网地址（RFC1918 + Tailscale CGNAT 100.64/10）

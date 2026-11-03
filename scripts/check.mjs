@@ -943,7 +943,7 @@ function checkZeroCallers(files) {
 // ── 7.5 host-user hardcode (2026-11-03) ──
 // Why: bili-audio.mjs had 4 of these. Host user paths break silently on
 // machine/user change or container rebuild. Derive from os.homedir()/env.
-// Rule: non-comment lines must not contain /home/feiyu/ or /home/baka/
+// Rule: non-comment lines must not contain /home/dsh/ or /home/baka/
 // literals. existsSync probes are exempt (they fail safe by design);
 // plain string literals and ||-defaults are not (they mask silently).
 function checkHomeHardcode(files) {

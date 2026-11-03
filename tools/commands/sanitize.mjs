@@ -10,9 +10,9 @@ const CASES = [
   ['内网IP', '机器在 192.168.5.2 上', '192.168.5.2'],
   ['Tailscale IP', '服务器 100.91.165.107', '100.91.165.107'],
   ['密钥', 'key是sk-abc123def456ghi789jkl012', 'sk-abc123'],
-  ['本机路径', '代码在 /srv/feiyu-sandbox/app 里', '/srv/feiyu-sandbox'],
+  ['本机路径', '代码在 /home/dsh_bot/app 里', '/home/dsh_bot'],
   ['URL参数', '打开 https://x.com/api?token=abcdef123456&page=1', 'abcdef123456'],
-  ['内部代号', '我跑在 feiyu-sandbox 容器里', 'feiyu-sandbox'],
+  ['内部代号', '我跑在 dsh_bot 容器里', 'dsh_bot'],
   ['日常数字·不该拦', '心跳每 30000ms 一拍', null],
   ['集数·不该拦', '第 3 集看了 45 分钟', null],
 ]
