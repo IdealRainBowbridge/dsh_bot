@@ -655,7 +655,8 @@ function checkEvolvePersist(files) {
       .filter((f) => /\bevolve\s*\(/.test(stripComments(fs.readFileSync(f, 'utf8')))),
   )
   for (const f of hit) {
-    if (EVOLVE_PERSIST_FILES.includes(f) || EVOLVE_PERSIST_EXEMPT[f]) continue
+    const rel = f.startsWith(ROOT + '/') ? f.slice(ROOT.length + 1) : f
+    if (EVOLVE_PERSIST_FILES.includes(rel) || EVOLVE_PERSIST_EXEMPT[rel]) continue
     const lines = stripComments(fs.readFileSync(f, 'utf8')).split('\n')
     let inFn = false
     let brace = 0
