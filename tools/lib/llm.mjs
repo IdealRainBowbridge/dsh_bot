@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
+import { collateralize, recordBloodDebt, recordSideUse, describeCollateral } from './collateral.mjs'
 
 const _cfg = () => config().llm ?? {}
 
@@ -99,7 +100,7 @@ export function describe() {
   // chain pointing at the same origin is one point of failure wearing N hats.
   const hosts = new Set([host(c.base_url || 'https://api.deepseek.com/v1'), ...chain.map((x) => host(x.base_url))])
   const solo = chain.length && hosts.size === 1 ? ' · [single-provider risk: all levels same origin]' : ''
-  return `${c.model || 'deepseek-chat'} @ ${host(c.base_url || 'https://api.deepseek.com/v1')}` + tail + solo
+  return `${c.model || 'deepseek-chat'} @ ${host(c.base_url || 'https://api.deepseek.com/v1')}` + tail + solo + describeCollateral()
 }
 
 function endpointOf(c) {
@@ -368,6 +369,7 @@ export async function chat(messages, opts = {}) {
   const main = _cfg()
   const levels = [{ ...main, __key: 'main' }]
   if (!opts.noFallback) for (let i = 0; i < _chain().length; i++) levels.push({ ..._chain()[i], __key: 'fb' + (i + 1) })
+  collateralize(levels, opts)   // A1 侧支循环：主链全灭过（血债>0）才追加，见 collateral.mjs
 
   const tryOne = async (c) => {
     // 连接层重试（2026-11-02 新增）。
@@ -446,6 +448,7 @@ export async function chat(messages, opts = {}) {
       const out = await tryOne(c)
       if (i > 0) {
         bumpOk(key)
+        if (String(key).startsWith('fb-collateral')) recordSideUse(key)   // A1：侧支真通血了，血债清零
         fbLog(`主通道失败 → 已用 ${key}（${c.model}）`)
       } else {
         bumpOk('main')
@@ -458,6 +461,7 @@ export async function chat(messages, opts = {}) {
     }
   }
   // 全都失败：把每一级的失败原因都带上，别只说"主备都失败"（排障时那句话等于没说）
+  recordBloodDebt()   // A1 侧支循环：主链全灭 +1 血债，30s 试跳窗由此开启
   throw new Error('全部 ' + levels.length + ' 个 LLM 通道失败 → ' + errs.join('；'))
 }
 
@@ -467,6 +471,7 @@ export async function* chatStream(messages, opts = {}) {
   // 现在：主通道失败时退到备用链，并且同样记熔断（流式的失败原因与 chat 一致）。
   const levels = [{ ..._cfg(), __key: 'main' }]
   if (!opts.noFallback) for (let i = 0; i < _chain().length; i++) levels.push({ ..._chain()[i], __key: 'fb' + (i + 1) })
+  collateralize(levels, opts)   // A1 侧支循环：主链全灭过（血债>0）才追加，见 collateral.mjs
   const breakers = readBreakers()
   let chosen = null
   let lastErr = null
@@ -489,6 +494,7 @@ export async function* chatStream(messages, opts = {}) {
       bumpFail(c.__key, e)
     }
   }
+  recordBloodDebt()   // A1 侧支循环：流式全灭同账
   if (!chosen) throw new Error('流式：全部 ' + levels.length + ' 个通道失败 → ' + describeErr(lastErr).slice(0, 140))
   const r = chosen.r
   const reader = r.body.getReader()
@@ -521,6 +527,7 @@ export async function* chatStream(messages, opts = {}) {
 export async function chatRaw(messages, opts = {}) {
   const levels = [{ ..._cfg(), __key: 'main' }]
   if (!opts.noFallback) for (let i = 0; i < _chain().length; i++) levels.push({ ..._chain()[i], __key: 'fb' + (i + 1) })
+  collateralize(levels, opts)   // A1 侧支循环：主链全灭过（血债>0）才追加，见 collateral.mjs
   const breakers = readBreakers()
   const errs = []
   for (let i = 0; i < levels.length; i++) {
@@ -560,6 +567,7 @@ export async function chatRaw(messages, opts = {}) {
       errs.push(key + '（' + c.model + '）：' + describeErr(e).slice(0, 110))
     }
   }
+  recordBloodDebt()   // A1 侧支循环：主链全灭 +1 血债，30s 试跳窗由此开启
   throw new Error('全部 ' + levels.length + ' 个 LLM 通道失败 → ' + errs.join('；'))
 }
 
