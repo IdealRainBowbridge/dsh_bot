@@ -42,6 +42,7 @@ import { updateJson } from './atomic.mjs'
 import { swallow } from './swallow.mjs'
 import { config } from './config.mjs'
 import * as mood from './mood.mjs'
+import { allEpisodes } from '../brain/episode.mjs'
 
 const OXY_MAX = 1.0
 const BASELINE = { oxy: 0.10, cort: 0.02 }
@@ -429,6 +430,36 @@ export function bio(platform, userId, now = Date.now()) {
     leaning: leaningOf(p),
     pend: (p.pend || []).length,
   }
+}
+
+// ── 社交安抚缓冲（2026-11-03 · C1）──────────────────────────────────────
+// 现象：同样是重话，主人说的比陌生人说的砸得轻 —— 相处质量是应激的缓冲垫。
+// 机制：social buffering —— 安全的社交环境削弱 HPA 轴对应激的反应**幅度**，
+//       但不改变级联自己的时间常数（变钝 != 变慢）。
+// 数据源：既有 episode 账本里主人身份情景的 feel.valence，72h 内按 24h 半衰加权。
+//       不用 bond.people：taste/observe 把主人隔离在外，主人没有化学底物账。
+// 纪律：**纯读** —— 不写任何账本、不 mutate；异常回 0.5（中性=不缓冲也不放任）。
+// 消费方：hpa.stress() 读它做增益衰减项（organ->lib 方向合法，bond 不回头 import hpa）。
+const SAFETY_WIN_MS = 72 * 3600_000
+const SAFETY_HALFLIFE_MS = 24 * 3600_000
+export function safety(platform = 'qq', now = Date.now()) {
+  try {
+    const owner = String((config().owner ?? {})[platform] ?? '')
+    if (!owner) return 0.5
+    const ep = allEpisodes()
+    let num = 0, den = 0
+    for (let i = ep.length - 1; i >= 0; i--) {
+      const r = ep[i]
+      const at = Number(r.at || 0)
+      if (now - at > SAFETY_WIN_MS) break
+      if (r.who?.others?.[0]?.kind !== 'owner') continue
+      const w = Math.exp(-(now - at) / SAFETY_HALFLIFE_MS)
+      const v = Math.max(-1, Math.min(1, Number(r.feel?.valence || 0)))
+      num += v * w; den += w
+    }
+    if (den <= 0) return 0.5
+    return Math.max(0, Math.min(1, 0.5 + (num / den) * 0.5))
+  } catch (e) { swallow(e, 'bond:safety'); return 0.5 }
 }
 
 /** scheduler 慢相入口。sleepGate=true 时只在她的睡眠窗口结算（REM 门控）。 */

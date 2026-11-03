@@ -40,6 +40,7 @@ import { readJson, mutateJson } from '../json.mjs'
 import { hpaPath } from '../paths.mjs'
 import * as field from '../field.mjs'
 import { swallow } from '../../lib/swallow.mjs'
+import * as bond from '../../lib/bond.mjs'
 
 const MIN = 60_000
 const HOUR = 3_600_000
@@ -268,7 +269,15 @@ export function stress(strength = 1, o = {}) {
   const now = o.now ?? Date.now()
   const st = evolve(now)   // 先把之前的账算清（这一步会推进 at，是对的）
   const s = Math.max(0, Number(strength) || 0)
-  st.crh = clamp(st.crh + s * 0.6, 0, 3)
+  // C1（2026-11-03）社交安抚缓冲：安全的相处削弱这次应激的**幅度**。
+  // 只乘在 CRH 注入上，LAYERS 的 tau 一个都不动 —— 缓冲让峰变低，
+  // 但「升上去-降下来」的速度是级联自己的物理，不该被外面拽（变钝 != 变慢）。
+  // 映射：safety<=0.5 不缓冲（含无数据的中性 0.5，既有曲线不受扰动）；
+  //       safety=1 满缓冲（CRH 注入剩三成）。safety 纯读，读不到按中性走。
+  let damp = 1
+  try { damp = clamp(1 - 0.7 * Math.max(0, (Number(bond.safety(o.platform ?? 'qq', now)) - 0.5) * 2), 0.3, 1) }
+  catch (e) { swallow(e, 'hpa:safety') }
+  st.crh = clamp(st.crh + s * 0.6 * damp, 0, 3)
   // 反复激活 → 负反馈灵敏度下调。这一条是"慢性"的唯一来源。
   // 用 s 加权：压得越重，下调越多；但每次的边际效应递减（体内受体本来就有限）。
   if (s >= 0.4) {
