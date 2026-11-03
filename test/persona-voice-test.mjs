@@ -8,7 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-voice-'))
-process.on('exit', () => { try { fs.rmSync(TMP, { recursive: true, force: true }) } catch { } })   // 断言抛出/硬退出也不留 /tmp 残骸（2026-11-03）
+process.on('exit', () => { try { fs.rmSync(TMP, { recursive: true, force: true }) } catch { /* best-effort cleanup in exit hook */ } })   // 断言抛出/硬退出也不留 /tmp 残骸（2026-11-03）
 process.env.BOT_DATA_DIR = TMP
 process.env.BOT_CONFIG = path.join(TMP, 'cfg.json')
 fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({

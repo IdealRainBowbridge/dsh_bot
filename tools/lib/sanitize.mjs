@@ -65,12 +65,12 @@ export function sanitizeText(where, text) {
   if (!s) return s
   // URL 参数带密钥外泄（2026-11-03 补口）：?token=…&key=… 只留参数名，值全略掉
   s = s.replace(/[?&#](?:key|token|secret|api[_-]?key|apikey|password|passwd|access[_-]?token|auth|sig|sign|signkey)[=?][^&\s'"]{3,}/gi, (m) => {
-    try { record(where, 'URL参数') } catch { }
+    try { record(where, 'URL参数') } catch { /* redaction output unchanged even if logging fails */ }
     return m.split('=')[0] + '=【已略】'
   })
   for (const p of PATTERNS) {
     s = s.replace(p.re, () => {
-      try { record(where, p.kind) } catch { }
+      try { record(where, p.kind) } catch { /* redaction output unchanged even if logging fails */ }
       return p.to
     })
   }

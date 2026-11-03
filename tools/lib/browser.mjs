@@ -154,7 +154,7 @@ function spawnIdleReaper(pid) {
   const js = `const fs=require('fs');const f=${JSON.stringify(PORT_FILE())};const pid=${pid};
 const t=setInterval(()=>{let st=null;try{st=JSON.parse(fs.readFileSync(f,'utf8'))}catch{clearInterval(t);process.exit(0)}
 if(st.pid!==pid){clearInterval(t);process.exit(0)}
-if(Date.now()-(st.at||0)>${IDLE_EXIT_MS}){try{process.kill(pid,'SIGTERM')}catch{}clearInterval(t);process.exit(0)}},60000)`
+if(Date.now()-(st.at||0)>${IDLE_EXIT_MS}){try{process.kill(pid,'SIGTERM')}catch{/* process already gone */}clearInterval(t);process.exit(0)}},60000)`
   try {
     const c = spawn(process.execPath, ['-e', js], { detached: true, stdio: 'ignore' })
     c.unref()
@@ -810,7 +810,7 @@ export const IFRAME_FN = `(() => {
         if (t.replace(/\\s/g, '').length > 80) out.push(t)
       } catch (e) { /* 跨域 iframe 摸不到，正常 */ }
     }
-  } catch (e) {}
+  } catch (e) { /* page torn down mid-read; partial text is fine */ }
   return out.join('\\n\\n')
 })()`
 

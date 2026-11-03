@@ -397,7 +397,7 @@ export async function run(argv = []) {
                   // 也记进记忆 —— 不然重启后她不记得自己刚说要重开（记忆断档）
                   memory.remember('qq', chatId, userId, 'assistant', bye, { isGroup: false })
                 } catch (e) { swallow(e, 'qq-server:best-effort') }
-                try { fs.rmSync(dataPath('selfmod-restart.flag'), { force: true }) } catch { }   // 手动重启就不必再空闲重启一次
+                try { fs.rmSync(dataPath('selfmod-restart.flag'), { force: true }) } catch { /* flag remnant harmless, gateway tolerates */ }   // 手动重启就不必再空闲重启一次
                 log('[qq][selfmod] 收到重启指令，3 秒后退出交给 im-gateway 拉起')
                 setTimeout(() => { process.exit(0) }, 3000)
                 return

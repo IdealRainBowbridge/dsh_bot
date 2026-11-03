@@ -194,7 +194,7 @@ function backup(file) {
     const root = dataPath('selfmod-backups')
     for (const d of fs.readdirSync(root)) {
       const p = path.join(root, d)
-      try { if (fs.statSync(p).mtimeMs < Date.now() - 30 * 86400_000) fs.rmSync(p, { recursive: true, force: true }) } catch { }
+      try { if (fs.statSync(p).mtimeMs < Date.now() - 30 * 86400_000) fs.rmSync(p, { recursive: true, force: true }) } catch { /* single stale backup unlink, fine to skip */ }
     }
   } catch (e) { swallow(e, 'selfmod:backup-retain') }
   return { dir, dest }
@@ -311,7 +311,7 @@ async function runFullTests(item, file, before, afterText, appliedMtimeMs = 0) {
     try {
       untouched = fs.readFileSync(file, 'utf8') === afterText
         && fs.statSync(file).mtimeMs === appliedMtimeMs   // 内容相同但被后续落地重写过（mtime 变了）→ 不还（2026-11-03 幽灵还原修复）
-    } catch { }
+    } catch { /* stale-check inconclusive: keep no-restore safety */ }
     const why = String(e.tail || e.message).slice(0, 150)
     try {
       execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
@@ -319,13 +319,13 @@ async function runFullTests(item, file, before, afterText, appliedMtimeMs = 0) {
           ? `【${item.id}】全量测试没过，已自动还原 ${item.file}：${why}`
           : `【${item.id}】全量测试没过，但文件随后又被改过，没敢自动还原——人工看一眼：${why}`],
         { timeout: 20000, stdio: 'pipe', cwd: ROOT })
-    } catch { }
+    } catch { /* log failed; revert decision already made above */ }
     if (untouched) {
-      try { if (item.create) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, before) } catch { }
+      try { if (item.create) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, before) } catch { /* single-file revert, only chance to persist undo */ }
       try {
         const { sendOwnerQQ } = await import('./notify.mjs')
         await sendOwnerQQ(`她的自改【${item.id}】（${item.file}）全量测试没过，文件已自动还原，代码跟改之前一样。`)
-      } catch { }
+      } catch { /* owner alert failed; selfup log still records it */ }
     }
   } finally { testInFlight = false }
 }

@@ -253,6 +253,10 @@ function checkEmptyCatch(files) {
     const total = (src.match(/\bcatch\b/g) || []).length
     if (total < MIN_CATCH) continue
     const empty = (src.match(/catch\s*(?:\([^)]*\))?\s*\{\s*(?:\/\*[\s\S]*?\*\/\s*)?\}/g) || []).length
+    const bare = (src.match(/catch\s*(?:\([^)]*\))?\s*\{\s*\}/g) || []).length
+    if (bare > 0) {
+      push('空 catch 未加注释', rel(f), str(bare) + ' 处裸 catch{} —— best-effort/回滚类必须带同行注释说明为何可吞；record/通知失败类要 console.warn 或 swallow')
+    }
     const ratio = empty / total
     if (ratio > MAX_RATIO) {
       push('空 catch 过多', rel(f), empty + '/' + total + ' = ' + (ratio * 100).toFixed(0) + '%（阈值 ' + (MAX_RATIO * 100) + '%）—— 这块出错不会留下任何痕迹')
@@ -665,7 +669,7 @@ function checkMutualPairs(files) {
       if (!spec.startsWith('.') && !spec.startsWith('/')) continue
       const base = path.resolve(path.dirname(f), spec)
       for (const ext of ['.mjs', '.js', '', '/index.mjs', '/index.js']) {
-        try { if (fs.statSync(base + ext).isFile()) { edges.set(rel, (edges.get(rel) || new Set()).add(norm(base + ext))); break } } catch { }
+        try { if (fs.statSync(base + ext).isFile()) { edges.set(rel, (edges.get(rel) || new Set()).add(norm(base + ext))); break } } catch { /* next extension candidate */ }
       }
     }
   }
@@ -1004,7 +1008,7 @@ function checkRealCycles(files) {
       if (!spec.startsWith('.') && !spec.startsWith('/')) continue
       const base = path.resolve(path.dirname(f), spec)
       for (const ext of ['.mjs', '.js', '', '/index.mjs', '/index.js']) {
-        try { if (fs.statSync(base + ext).isFile()) { edges.set(rel, (edges.get(rel) || new Set()).add(norm(base + ext))); break } } catch { }
+        try { if (fs.statSync(base + ext).isFile()) { edges.set(rel, (edges.get(rel) || new Set()).add(norm(base + ext))); break } } catch { /* next extension candidate */ }
       }
     }
   }

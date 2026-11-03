@@ -11,7 +11,7 @@ import path from 'node:path'
 import assert from 'node:assert/strict'
 
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-social-'))
-process.on('exit', () => { try { fs.rmSync(SANDBOX, { recursive: true, force: true }) } catch { } })   // 断言抛出/硬退出也不留 /tmp 残骸（2026-11-03）
+process.on('exit', () => { try { fs.rmSync(SANDBOX, { recursive: true, force: true }) } catch { /* best-effort cleanup in exit hook */ } })   // 断言抛出/硬退出也不留 /tmp 残骸（2026-11-03）
 process.env.USERPROFILE = SANDBOX
 process.env.HOME = SANDBOX
 // 2026-11-02：swallow 必须在隔离之后动态 import —— 静态 import 会在 env 生效前
