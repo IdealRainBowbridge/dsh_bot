@@ -9,6 +9,7 @@ import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
 import { collateralize, recordBloodDebt, recordSideUse, describeCollateral } from './collateral.mjs'
+import { register as woundRegister } from './wound.mjs'
 
 const _cfg = () => config().llm ?? {}
 
@@ -331,6 +332,7 @@ function bumpFail(key, err) {
   if (cur.fails >= FAIL_N) {
     const extra = Math.min(12 * 60_000, (cur.fails - FAIL_N) * 60_000)
     cur.until = Date.now() + COOLDOWN_MS + extra
+    woundRegister('熔断', key, describeErr(err).slice(0, 100))   // A2 伤口账本：跳闸 = 开放性损伤（2026-11-03）
   }
   all[key] = cur
   writeBreakers(all)

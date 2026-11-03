@@ -51,6 +51,7 @@ import * as neuron from '../cell/neuron.mjs'
 import * as sleepstage from './sleepstage.mjs'
 import * as collateral from '../../lib/collateral.mjs'
 import * as immune from '../../lib/immune.mjs'
+import * as wound from '../../lib/wound.mjs'
 
 const MIN = 60_000
 
@@ -174,6 +175,11 @@ export async function beat(now = Date.now()) {
       const im = immune.tick(now)
       if (im && im.feverPulse && im.level >= 0.45) hpa.stress(0.05 + 0.05 * im.level, { now, source: 'fever' })
     } catch (e) { swallow(e, 'beat:immune') }
+    // 伤口巡视（2026-11-03 · A2）：化脓 = 该被感觉到的疼——log 出来才会被优先修。
+    try {
+      const wd = wound.tick(now)
+      if (wd && wd.infected && wd.infected.length) _log('[wound] 化脓 ' + wd.infected.length + ' 处：' + wd.infected.join('、'))
+    } catch (e) { swallow(e, 'beat:wound') }
 
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────
     // 这些是"身体自己在跑的部分"，不是她决定做的事。

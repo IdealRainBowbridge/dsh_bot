@@ -27,8 +27,8 @@ const MAX_SCARS = 100                  // 瘢痕库容量（LRU 修剪）
 const MAX_WOUNDS = 30
 
 const _cache = { st: null, at: 0 }
-function readState() {
-  if (_cache.st && Date.now() - _cache.at < 10_000) return _cache.st
+function readState(now = Date.now()) {
+  if (_cache.st && now - _cache.at < 10_000) return _cache.st
   const s = readJsonSafe(STATE_FILE(), null) || { wounds: [], scars: [], stats: { registered: 0, healed: 0, infected: 0, recurrent: 0 } }
   _cache.st = s; _cache.at = Date.now()
   return s
@@ -88,7 +88,7 @@ export function register(kind, subject, detail = '') {
  */
 export function tick(now = Date.now()) {
   try {
-    const s = readState()
+    const s = readState(now)
     if (!s.wounds.length) return null
     let changed = false
     const infected = []

@@ -13,6 +13,8 @@ import { execFileSync } from 'node:child_process'
 import { configPath, dataPath, credentialsPath, WORK_DIR, dshPath } from '../lib/paths.mjs'
 import { config, DEFAULTS } from '../lib/config.mjs'
 import { swallow } from '../lib/swallow.mjs'
+import { immuneSnapshot } from '../lib/immune.mjs'
+import { woundSnapshot } from '../lib/wound.mjs'
 
 const ok = (n, d = '') => ({ name: n, ok: true, detail: d })
 const bad = (n, d = '') => ({ name: n, ok: false, detail: d })
@@ -147,6 +149,19 @@ export async function run(argv = []) {
   try { llmMod = await import('../lib/llm.mjs') } catch (e) { swallow(e, 'diagnose:run') }
   if (llmMod) {
     try { items.push(ok('LLM 通道', llmMod.describe())) } catch (e) { swallow(e, 'diagnose:run') }
+    // B1/A2（2026-11-03）：免疫与伤口的状态进体检。
+    try {
+      const im = immuneSnapshot()
+      items.push(ok('免疫系统', '已见 ' + im.seen + ' · 丢弃 ' + im.dropped + ' · 抗原 ' + im.antigens + ' · 发热 ' + im.feverLevel.toFixed(2)))
+    } catch (e) { swallow(e, 'diagnose:immune') }
+    try {
+      const w = woundSnapshot()
+      if (w && (w.open || w.infected.length)) {
+        items.push(warn('开放伤口', w.infected.length ? ('化脓 ' + w.infected.length + ' 处：' + w.infected.join('、')) : (w.open + ' 处开放（瘢痕 ' + w.scars + ' · 旧伤复发 ' + w.recurrent + '）')))
+      } else if (w) {
+        items.push(ok('伤口', '无开放损伤（瘢痕 ' + w.scars + ' 条 · 旧伤复发 ' + w.recurrent + ' 次）'))
+      }
+    } catch (e) { swallow(e, 'diagnose:wound') }
     try {
       const snap = llmMod.breakerSnapshot()
       const open = snap.filter((x) => x.openUntil)

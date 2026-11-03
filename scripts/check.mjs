@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { closeIfHealed } from '../tools/lib/wound.mjs'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const FAST = process.argv.includes('--fast')
 const problems = []
@@ -909,6 +910,11 @@ const grouped = {}
 for (const p of problems) (grouped[p.kind] ||= []).push(p)
 
 if (!problems.length) {
+  // A2 伤口愈合（2026-11-03）：门禁全绿 = 全身检查通过 —— 开放伤口全部愈合并沉淀瘢痕。
+  try {
+    const w = closeIfHealed(notes.join('；') || '门禁全绿')
+    if (w.closed) notes.push('伤口愈合：' + w.closed + ' 处（沉淀瘢痕 ' + w.scarred + ' 条）')
+  } catch { /* 账本故障不挡门禁本身 */ }
   console.log(`✅ 门禁通过：${files.length} 个文件${FAST ? '（快速模式）' : ' · 语法/断链/双前缀/注册/权限/catch/路径/同步异步/未声明变量/超时/JSON/原子写/import方向/规模 全绿'}`)
   for (const n of notes) console.log(`   · ${n}`)
   process.exit(0)
