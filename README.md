@@ -171,7 +171,7 @@ O10 自我模型 · O11 交付账 · O12 实体/关系 · O13 能力自评
 | 巩固 | 6 轮吃完 → **29 条结构化事实**，0 条无证据；第 7 轮 `processed=0`（幂等） |
 | 召回 | 120 道真题 **Recall@6 0.875 / MRR 0.757**（权重由评测台标定后写回） |
 | 提示词 | 真主人私聊装配 **5608 字**（旧版实测 7371），预算 5650，截断 0 块 |
-| 体检 | `brain doctor` **17 项全绿**（8 条不变量 + 派生层门槛 + 任务队列） |
+| 体检 | `brain doctor` **22 项全绿**（8 条不变量 + 派生层门槛 + 任务队列 + C 系五器官读数） |
 
 **"说到做到"是怎么被保证的**（这是主人在意的第一条）：
 
@@ -507,7 +507,7 @@ node tools/bot.mjs promises --due                     # 只看到期的（qq-ser
 node tools/bot.mjs promises done <id> "看完了"         # 结清 / fail <id> "没字幕"
 
 # ── 脑（v3，10-29）：记忆/意图/自我/体检 ──────────────────────
-node tools/bot.mjs brain doctor                   # 17 项体检（8 条不变量 + 派生层门槛 + 任务队列）
+node tools/bot.mjs brain doctor                   # 22 项体检（8 条不变量 + 派生层门槛 + 任务队列 + C 系五器官读数）
 node tools/bot.mjs brain stats                    # 情景/事实/意图/巩固进度
 node tools/bot.mjs brain recall "烧鸭"             # 看它现在能召回什么（带 ‹ep-id› 可回溯）
 node tools/bot.mjs brain facts [--conflicts]      # 结构化事实（每条都带 prov）
