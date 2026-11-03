@@ -853,6 +853,45 @@ function selfmodCreatesSet() {
   } catch { return new Set() }
 }
 
+// ── C 系门禁（2026-11-03 R3）────────────────────────────────────────────
+// 规则一：脑层新器官文件必带「现象：」注释头（M58 口径：现象→机制→器官→…）。
+// 说不出自己解释什么现象的文件是配线，不是器官 —— 配线应该进既有文件，不该开新档。
+// 豁免：micro/（受体/突触是既有器官的部件）、paths/json/工具性文件。
+function checkOrganPhenomenonHeader(files) {
+  const isOrganFile = (rel) => /^tools\/brain\/.*\.mjs$/.test(rel)
+      && !/^tools\/brain\/(micro|cell)\//.test(rel)
+      && !/(paths|json|schema|metrics|clock|swallow|store|working|index-inv|index|event|taskqueue)\.mjs$/.test(rel)
+  let hit = 0
+  for (const f of files) {
+    const rel = String(f).replaceAll('\\', '/')
+    if (!isOrganFile(rel)) continue
+    hit++
+    const src = fs.readFileSync(f, 'utf8')
+    const head = src.slice(0, 2500)
+    if (!/现象/.test(head)) push('器官缺现象头', rel, 'tools/brain/ 下的器官文件开头 2500 字内必须写清它要解释的「现象」（M58 口径）。说不出现象的文件是配线，不是器官。')
+  }
+  if (hit) notes.push('C 系门禁：' + hit + ' 个脑层器官文件检查现象头')
+}
+
+// 规则二：bond.safety() 纯读纪律。C1 的正确性依赖它只读 —— 函数体里出现
+// 任何账本写调用（mutate/update/append/poke/setDim/drift/save）都是红灯。
+function checkSafetyPureRead(files) {
+  const f = files.find((x) => String(x).replaceAll('\\', '/').endsWith('tools/lib/bond.mjs'))
+  if (!f) return
+  const src = stripComments(fs.readFileSync(f, 'utf8'))
+  // 注意不能用 [^)]* 匹配参数：默认参数里有 Date.now()，内部的 ) 会截断匹配。
+  const decl = src.indexOf('export function safety(')
+  if (decl < 0) { push('safety 纯读', 'tools/lib/bond.mjs', '找不到 safety() —— C1 社交安抚缓冲的纯读口丢了或改名了'); return }
+  const open = src.indexOf('{', decl)
+  if (open < 0) { push('safety 纯读', 'tools/lib/bond.mjs', 'safety() 声明异常：找不到函数体开括号'); return }
+  let depth = 1, i = open + 1
+  while (i < src.length && depth > 0) { const c = src[i]; if (c === '{') depth++; else if (c === '}') depth--; i++ }
+  const body = src.slice(open + 1, i)
+  const writer = /\b(mutateJson|updateJson|appendJsonl|poke|setDim|driftSet|save|mutatePerson)\s*\(/.exec(body)
+  if (writer) push('safety 纯读', 'tools/lib/bond.mjs', `safety() 函数体内出现写调用 ${writer[1]} —— 社交安抚缓冲必须保持纯读（hpa.stress 在热路径上读它，写账本会锁住级联）`)
+  else notes.push('C 系门禁：bond.safety() 纯读纪律核查通过')
+}
+
 function checkZeroCallers(files) {
   const corpus = []
   for (const f of files) {
@@ -975,6 +1014,8 @@ if (!FAST) {
   checkEvolvePersist(files)
   checkMutualPairs(files)
   checkRealCycles(files)
+  checkOrganPhenomenonHeader(files)
+  checkSafetyPureRead(files)
   checkFieldSenses(files)
   checkSelfmodProtected(files)
   checkZeroCallers(files)
