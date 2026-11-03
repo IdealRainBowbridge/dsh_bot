@@ -551,6 +551,7 @@ const MULTI_WRITER = [
   'llm-collateral.json',
   'immune.json',
   'wounds.json',
+  'metabolism.json',
 ]
 
 /** 把 arguments 里出现的标识符名抠出来（去掉字符串字面量与数字）。 */

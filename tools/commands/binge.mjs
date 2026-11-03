@@ -31,6 +31,7 @@ import * as memory from '../lib/memory.mjs'
 import * as promises from '../lib/promises.mjs'
 import * as jsontext from '../lib/jsontext.mjs'
 import * as watchlog from '../lib/watchlog.mjs'
+import { eat as energyEat } from '../brain/organ/metabolism.mjs'
 import { swallow } from '../lib/swallow.mjs'
 
 const DIR = dataPath('binge')
@@ -321,6 +322,7 @@ async function watchOne(bvid, opt = {}) {
   // 注意：`watched=false` 也要记（ok:false）——"这次没真看懂"本身是有用的事实，
   // 否则她下次会把"只扫到简介"当成看过。
   try {
+    try { energyEat(0.12) } catch { /* 进食记账失败不挡追番 */ }   // B3：进食=精神回充+内容积压（2026-11-03）
     watchlog.record({
       show: name,
       ep,

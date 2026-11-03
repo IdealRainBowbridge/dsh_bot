@@ -11,6 +11,7 @@ import { appendJsonl, readJsonl, readJson, writeJsonAtomic } from './json.mjs'
 import { inboxFile, inboxCursor, inboxDir } from './paths.mjs'
 import { isoOf } from './clock.mjs'
 import { bump } from './metrics.mjs'
+import { spend as energySpend } from './organ/metabolism.mjs'
 import { swallow } from '../lib/swallow.mjs'
 
 export const ACTS = ['say', 'action', 'observe', 'promise', 'feel', 'push']
@@ -103,7 +104,12 @@ export function normalize(input = {}) {
  * 发一条事件（IO 进程唯一的写动作）。永不抛。
  * @returns {{ok:boolean, reason?:string, event?:object}}
  */
+/**
+ * B3 能量（2026-11-03）：每条进脑的事件都是一次思考消耗（大脑烧糖）。
+ * 放咽喉处：私聊/群聊/引用全走 emit，一处接线全覆盖。绝不能反过来挡消息。
+ */
 export function emit(input = {}) {
+  try { energySpend(0.004) } catch { /* 能量记账失败不挡消息 */ }
   try {
     const n = normalize(input)
     if (!n.ok) return n

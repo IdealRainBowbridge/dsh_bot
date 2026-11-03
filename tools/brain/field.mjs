@@ -34,6 +34,7 @@
 import { readJson, mutateJson } from './json.mjs'
 import { feverSense as immuneFeverSense } from '../lib/immune.mjs'
 import { acheSense as painAcheSense } from './organ/pain.mjs'
+import { sense as metabolismSense } from './organ/metabolism.mjs'
 import { fieldPath } from './paths.mjs'
 import * as receptor from './micro/receptor.mjs'
 
@@ -601,6 +602,11 @@ export function sense(s = null) {
     const ache = painAcheSense()
     if (ache) bits.push(ache)
   } catch { /* 痛感失败不挡身体感 */ }
+  // 饿感（2026-11-03 · B3）：认知能量低 = 「脑子转不动/想吃点轻松的」；积压 = 「脑子里堆着没消化的」。
+  try {
+    const hunger = metabolismSense()
+    if (hunger) bits.push(hunger)
+  } catch { /* 饿感失败不挡身体感 */ }
   } catch { /* 病感失败就当没病，不能反过来挡身体感 */ }
 
   // ⚠️ 2026-11-02 补：正面信号不能缺。
