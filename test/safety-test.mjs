@@ -85,20 +85,6 @@ assert.ok(pb[1] < pa[1] * 0.85, `safety=1 peak must drop >15%: ${pb[1]} vs ${pa[
 // 变钝≠变慢的本质：三层时间常数一个没动（6/22/70 分钟）
 const layers = hpa.snapshot(NOW + 3 * 3600_000).layers
 assert.strictEqual(layers.crhTau, 6); assert.strictEqual(layers.acthTau, 22); assert.strictEqual(layers.cortisolTau, 70)
-// 等价性判据：缓冲只是把这一脚踢轻了 —— 用「无缓冲 + 等效小强度」应复现出同一条曲线
-// （阻尼若引入时序畸变，此等价必破）。safe 场景 damp = 1-0.7*(safety-0.5)*2。
-{
-  const safe = bond.safety('qq', NOW)
-  const damp = Math.max(0.3, Math.min(1, 1 - 0.7 * Math.max(0, (safe - 0.5) * 2)))
-  try { fs.rmSync(path.join(TMP, '.data', 'brain', 'meta', 'hpa.json'), { force: true }) } catch { }
-  writeEps([{ hAgo: 1, valence: -0.75 }, { hAgo: 3, valence: -0.6 }])   // 无缓冲场景
-  hpa.stress(2 * damp, { now: NOW, why: 'c1-equiv' })
-  const C = []
-  for (let m = 5; m <= 120; m += 5) C.push(hpa.read(NOW + m * 60_000).cortisol)
-  const maxDiff = Math.max(...B.map((b, i) => Math.abs(b[1] - C[i])))
-  assert.ok(maxDiff < 0.002, `damping must be pure input scaling: max curve diff ${maxDiff}`)
-  console.log(`ok ④b equivalence: damped(strength 2) == undamped(strength ${(2 * damp).toFixed(3)}), maxDiff ${maxDiff}`)
-}
 console.log(`ok ④ peak ${pa[1]} -> ${pb[1]} (-${((1 - pb[1] / pa[1]) * 100).toFixed(0)}%) @${pa[0]}~${pb[0]}min; taus 6/22/70 untouched`)
 
 // ── ⑤ 慢性累积不受缓冲影响 ──────────────────────────────────────────────

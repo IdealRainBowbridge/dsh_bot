@@ -1,0 +1,621 @@
+{
+  "scenario": {
+    "strength": 2,
+    "roughSafety": 0.198,
+    "safeSafety": 0.825
+  },
+  "peak": {
+    "rough": {
+      "min": 35,
+      "cortisol": 1.281
+    },
+    "safe": {
+      "min": 0,
+      "cortisol": 0.249
+    }
+  },
+  "peakDropPct": 80.6,
+  "halfDecayMin": {
+    "rough": 70,
+    "safe": null
+  },
+  "tausMin": {
+    "crhTau": 6,
+    "acthTau": 22,
+    "cortisolTau": 70
+  },
+  "series": {
+    "rough": [
+      {
+        "min": 0,
+        "crh": 1.38,
+        "acth": 0.2,
+        "cortisol": 0.16
+      },
+      {
+        "min": 5,
+        "crh": 0.702,
+        "acth": 0.97,
+        "cortisol": 0.435
+      },
+      {
+        "min": 10,
+        "crh": 0.385,
+        "acth": 1.099,
+        "cortisol": 0.737
+      },
+      {
+        "min": 15,
+        "crh": 0.225,
+        "acth": 0.961,
+        "cortisol": 0.967
+      },
+      {
+        "min": 20,
+        "crh": 0.137,
+        "acth": 0.788,
+        "cortisol": 1.119
+      },
+      {
+        "min": 25,
+        "crh": 0.088,
+        "acth": 0.654,
+        "cortisol": 1.213
+      },
+      {
+        "min": 30,
+        "crh": 0.059,
+        "acth": 0.551,
+        "cortisol": 1.263
+      },
+      {
+        "min": 35,
+        "crh": 0.042,
+        "acth": 0.471,
+        "cortisol": 1.281
+      },
+      {
+        "min": 40,
+        "crh": 0.034,
+        "acth": 0.41,
+        "cortisol": 1.276
+      },
+      {
+        "min": 45,
+        "crh": 0.031,
+        "acth": 0.362,
+        "cortisol": 1.254
+      },
+      {
+        "min": 50,
+        "crh": 0.031,
+        "acth": 0.325,
+        "cortisol": 1.221
+      },
+      {
+        "min": 55,
+        "crh": 0.033,
+        "acth": 0.297,
+        "cortisol": 1.18
+      },
+      {
+        "min": 60,
+        "crh": 0.038,
+        "acth": 0.275,
+        "cortisol": 1.133
+      },
+      {
+        "min": 65,
+        "crh": 0.043,
+        "acth": 0.258,
+        "cortisol": 1.085
+      },
+      {
+        "min": 70,
+        "crh": 0.049,
+        "acth": 0.245,
+        "cortisol": 1.034
+      },
+      {
+        "min": 75,
+        "crh": 0.056,
+        "acth": 0.234,
+        "cortisol": 0.984
+      },
+      {
+        "min": 80,
+        "crh": 0.063,
+        "acth": 0.227,
+        "cortisol": 0.935
+      },
+      {
+        "min": 85,
+        "crh": 0.069,
+        "acth": 0.221,
+        "cortisol": 0.887
+      },
+      {
+        "min": 90,
+        "crh": 0.076,
+        "acth": 0.216,
+        "cortisol": 0.841
+      },
+      {
+        "min": 95,
+        "crh": 0.082,
+        "acth": 0.212,
+        "cortisol": 0.796
+      },
+      {
+        "min": 100,
+        "crh": 0.089,
+        "acth": 0.21,
+        "cortisol": 0.754
+      },
+      {
+        "min": 105,
+        "crh": 0.094,
+        "acth": 0.208,
+        "cortisol": 0.715
+      },
+      {
+        "min": 110,
+        "crh": 0.1,
+        "acth": 0.207,
+        "cortisol": 0.677
+      },
+      {
+        "min": 115,
+        "crh": 0.105,
+        "acth": 0.206,
+        "cortisol": 0.642
+      },
+      {
+        "min": 120,
+        "crh": 0.111,
+        "acth": 0.205,
+        "cortisol": 0.609
+      },
+      {
+        "min": 125,
+        "crh": 0.115,
+        "acth": 0.205,
+        "cortisol": 0.578
+      },
+      {
+        "min": 130,
+        "crh": 0.12,
+        "acth": 0.205,
+        "cortisol": 0.55
+      },
+      {
+        "min": 135,
+        "crh": 0.124,
+        "acth": 0.204,
+        "cortisol": 0.523
+      },
+      {
+        "min": 140,
+        "crh": 0.128,
+        "acth": 0.204,
+        "cortisol": 0.499
+      },
+      {
+        "min": 145,
+        "crh": 0.131,
+        "acth": 0.204,
+        "cortisol": 0.476
+      },
+      {
+        "min": 150,
+        "crh": 0.134,
+        "acth": 0.204,
+        "cortisol": 0.454
+      },
+      {
+        "min": 155,
+        "crh": 0.138,
+        "acth": 0.204,
+        "cortisol": 0.434
+      },
+      {
+        "min": 160,
+        "crh": 0.14,
+        "acth": 0.204,
+        "cortisol": 0.416
+      },
+      {
+        "min": 165,
+        "crh": 0.143,
+        "acth": 0.204,
+        "cortisol": 0.399
+      },
+      {
+        "min": 170,
+        "crh": 0.146,
+        "acth": 0.204,
+        "cortisol": 0.383
+      },
+      {
+        "min": 175,
+        "crh": 0.148,
+        "acth": 0.204,
+        "cortisol": 0.368
+      },
+      {
+        "min": 180,
+        "crh": 0.15,
+        "acth": 0.204,
+        "cortisol": 0.355
+      },
+      {
+        "min": 185,
+        "crh": 0.152,
+        "acth": 0.204,
+        "cortisol": 0.342
+      },
+      {
+        "min": 190,
+        "crh": 0.154,
+        "acth": 0.204,
+        "cortisol": 0.33
+      },
+      {
+        "min": 195,
+        "crh": 0.156,
+        "acth": 0.204,
+        "cortisol": 0.319
+      },
+      {
+        "min": 200,
+        "crh": 0.157,
+        "acth": 0.204,
+        "cortisol": 0.309
+      },
+      {
+        "min": 205,
+        "crh": 0.159,
+        "acth": 0.204,
+        "cortisol": 0.299
+      },
+      {
+        "min": 210,
+        "crh": 0.16,
+        "acth": 0.204,
+        "cortisol": 0.29
+      },
+      {
+        "min": 215,
+        "crh": 0.161,
+        "acth": 0.204,
+        "cortisol": 0.282
+      },
+      {
+        "min": 220,
+        "crh": 0.162,
+        "acth": 0.204,
+        "cortisol": 0.275
+      },
+      {
+        "min": 225,
+        "crh": 0.164,
+        "acth": 0.204,
+        "cortisol": 0.268
+      },
+      {
+        "min": 230,
+        "crh": 0.165,
+        "acth": 0.204,
+        "cortisol": 0.261
+      },
+      {
+        "min": 235,
+        "crh": 0.166,
+        "acth": 0.204,
+        "cortisol": 0.255
+      },
+      {
+        "min": 240,
+        "crh": 0.166,
+        "acth": 0.204,
+        "cortisol": 0.249
+      }
+    ],
+    "safe": [
+      {
+        "min": 0,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 5,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 10,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 15,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 20,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 25,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 30,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 35,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 40,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 45,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 50,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 55,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 60,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 65,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 70,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 75,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 80,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 85,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 90,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 95,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 100,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 105,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 110,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 115,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 120,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 125,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 130,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 135,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 140,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 145,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 150,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 155,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 160,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 165,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 170,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 175,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 180,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 185,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 190,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 195,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 200,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 205,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 210,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 215,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 220,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 225,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 230,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 235,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      },
+      {
+        "min": 240,
+        "crh": 0.82,
+        "acth": 0.204,
+        "cortisol": 0.249
+      }
+    ]
+  }
+}

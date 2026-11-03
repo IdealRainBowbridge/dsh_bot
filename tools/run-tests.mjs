@@ -21,6 +21,7 @@ const TESTS = [
   'wound-test.mjs',          // A2 伤口愈合：登记/化脓/愈合/瘢痕/旧伤复发（2026-11-03）
   'breath-test.mjs',         // B2 呼吸：周期随唤醒收缩/吸气短呼气长/静息不变行为（2026-11-03）
   'pain-test.mjs',           // B4 痛觉：快痛缩手反射/复发敏化/基线不喊疼/慢痛愈合即停（2026-11-03）
+  'safety-test.mjs',         // C1 社交安抚缓冲：safety 纯读/中性缺省/峰降/tau不动/慢性不受扰（2026-11-03）
   'metabolism-test.mjs',     // B3
   'vitals-test.mjs',         // B8 内感受 vitals：容器本身的饱胀与闷（2026-11-03 补注册——提交时漏了 run-tests，单跑过但全套不跑） 能量消化：思考消耗/进食积压/REM消化/N3修复/24h血糖曲线（2026-11-03）
   'memory-test.mjs',

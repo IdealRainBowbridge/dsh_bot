@@ -37,12 +37,14 @@
 // ── 呈现（哲学层）──────────────────────────────────────────────
 //   注入对话的永远是第一人称感受语（feel()）。数值只存在于盘上和 bio() 体检口。
 import fs from 'node:fs'
+import path from 'node:path'
 import { dataPath } from './paths.mjs'
 import { updateJson } from './atomic.mjs'
 import { swallow } from './swallow.mjs'
 import { config } from './config.mjs'
 import * as mood from './mood.mjs'
-import { allEpisodes } from '../brain/episode.mjs'
+import { readJsonl } from '../brain/json.mjs'
+import { epDir } from '../brain/paths.mjs'
 
 const OXY_MAX = 1.0
 const BASELINE = { oxy: 0.10, cort: 0.02 }
@@ -442,11 +444,27 @@ export function bio(platform, userId, now = Date.now()) {
 // 消费方：hpa.stress() 读它做增益衰减项（organ->lib 方向合法，bond 不回头 import hpa）。
 const SAFETY_WIN_MS = 72 * 3600_000
 const SAFETY_HALFLIFE_MS = 24 * 3600_000
+// 注意：这里**故意不 import brain/episode.mjs** —— episode/event/metabolism/hpa
+// 已经是一个静态环，再拉 bond 进去 Tarjan 就红（2026-11-03 实测 6 元 SCC）。
+// 改走无环的 json+paths 直读 ep 分片：格式字段（at/who.others/feel.valence）是
+// 全仓共用契约，此处的只读用法漂移风险可控。
+let _epCache = { stamp: '', rows: [] }
+function readEpisodesCached() {
+  const dir = epDir()
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort()
+  const stamp = files.map((f) => { const s = fs.statSync(path.join(dir, f)); return f + ':' + s.mtimeMs + ':' + s.size }).join('|')
+  if (stamp === _epCache.stamp) return _epCache.rows
+  const rows = []
+  for (const f of files) for (const r of readJsonl(path.join(dir, f))) rows.push(r)
+  rows.sort((a, b) => Number(a.at) - Number(b.at))
+  _epCache = { stamp, rows }
+  return rows
+}
 export function safety(platform = 'qq', now = Date.now()) {
   try {
     const owner = String((config().owner ?? {})[platform] ?? '')
     if (!owner) return 0.5
-    const ep = allEpisodes()
+    const ep = readEpisodesCached()
     let num = 0, den = 0
     for (let i = ep.length - 1; i >= 0; i--) {
       const r = ep[i]
