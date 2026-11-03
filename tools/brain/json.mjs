@@ -105,7 +105,24 @@ function acquireSameDirLock(file) {
         const pid = Number(fs.readFileSync(lock, 'utf8'))
         if (pid && pid !== process.pid) { process.kill(pid, 0); alive = true }
       } catch { /* 读不到 = 残锁，当死的 */ }
-      if (!alive) { try { fs.rmSync(lock, { force: true }) } catch { /* ignore */ } continue }
+      if (!alive) {
+        // Steal only what we verified dead. 2026-11-03: our liveness verdict
+        // can be stale by the time we rm - another waiter may have legally
+        // acquired the lock in between, and blindly rm-ing here deletes a
+        // LIVE lock -> two writers in the critical section -> lost updates
+        // (observed once in 81-suite run: tension 2.7 != 3.0). Re-read the
+        // lock right before rm; shrink the window from ms to us.
+        try {
+          const pid2 = Number(fs.readFileSync(lock, 'utf8'))
+          if (pid2 && pid2 !== process.pid) {
+            let alive2 = false
+            try { process.kill(pid2, 0); alive2 = true } catch { alive2 = false }
+            if (alive2) continue   // someone fresh holds it now; go wait
+          }
+          try { fs.rmSync(lock, { force: true }) } catch { /* ignore */ }
+        } catch { /* lock vanished; nothing to steal, just retry link */ }
+        continue
+      }
       if (Date.now() > deadline) return { ok: false, why: 'timeout', lock }
       // 忙等 20~50ms 再抢（临界区是毫秒级的小 JSON 读写，够用且不引入异步）
       const until = Date.now() + 20 + Math.floor(Math.random() * 30)

@@ -91,6 +91,13 @@ export function acquireLock(lockPath, { staleMs = 30_000, waitMs = 5_000 } = {})
       // 只有"确定已死"或"超时很久"才拆；读不到 pid 时只按 staleMs 判（不再 2 秒就拆）
       const definitelyDead = pid > 0 && !alive
       if (definitelyDead || age > staleMs) {
+        // 2026-11-03 TOCTOU narrowing: re-read the lock right before rm.
+        // A waiter that raced us may hold it now; deleting its live lock
+        // would put two writers in the critical section (lost update).
+        try {
+          const pid2 = Number(String(fs.readFileSync(lockPath, 'utf8')).trim().split(/\s+/)[0]) || 0
+          if (pid2 && pid2 !== pid) continue   // new holder took over; do not steal
+        } catch { continue }                    // lock vanished; retry link
         try { fs.rmSync(lockPath, { force: true }) } catch { /* ignore */ }
         continue
       }
