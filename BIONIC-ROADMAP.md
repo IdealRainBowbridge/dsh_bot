@@ -51,6 +51,17 @@
 - **selfmod 核心件红线**：PROTECTED 名单（门禁/selfmod/锁/鉴权/伤口账本 10 个文件）她改不了 —— 门禁不再自指
 - **门禁去静默**：checkCommandRegistry 结构不匹配从 note 升级为红；Tarjan 环检测、field 感官红线、核心件写入 tripwire 三条新规则
 - **表达代谢 B7**（llm-physio.mjs）：直连 token 日预算超了会"省着点说"（llm.dailyBudgetTokens 配置，默认静默）
+
+## B8 内感受（2026-11-03 深夜，外部评审后仿生扩展）
+- **内感受** ✅（organ/vitals.mjs + vitals-test）：先有现象再有器官——她的容器在变满
+  （实测盘 75%），但全仓没有任何器官读基底体征（loadavg/statfs 零引用），磁盘真满
+  那天 appendJsonl 静默失败=无预兆失忆。形状：read() 纯读容器体征（statfs/load/mem/
+  cgroup）→ assess() 纯函数阈值×滞回（warn 85%/high 92%/crit 97%，带内不抖）→
+  tick() 快感（跨线那一拍 hpa 小脉冲，缩手反射同款）+ sense() 慢感（「家里塞得
+  满满当当」）+ llmState()（家里快满收着说）。四接线：heartbeat 巡视 / field 感官板
+  / qq-server 动态温度 / diagnose 体检项。**只感受不决策**——清理行为留给 self。
+  B9 候选（不实现）：metabolism 的饿感驱动 binge 觅食行为——涉及 self.decide 自主核心，
+  等 selfcon 影子期（3 天）结束后再议。
   → **2026-11-03 晚已配 600k/天**：按实账定（两日实测 33.6万/49.5万，大日子傍晚开始收缩，
   平常日器官安静不过敏）。实测：40万假预算 → 温度 -0.12 + 短句体感；55万/90万 → 安静。
   她的"话费"第一次进了身体：超支不是被掐断，是自己收着说。

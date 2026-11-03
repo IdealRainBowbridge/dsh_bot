@@ -53,6 +53,7 @@ import * as collateral from '../../lib/collateral.mjs'
 import * as immune from '../../lib/immune.mjs'
 import * as wound from '../../lib/wound.mjs'
 import * as pain from './pain.mjs'
+import * as vitals from './vitals.mjs'   // B8 内感受：容器本身的饱胀/闷
 import * as metabolism from './metabolism.mjs'
 
 const MIN = 60_000
@@ -185,6 +186,11 @@ export async function beat(now = Date.now()) {
     // 痛觉（2026-11-03 · B4）：新伤口 → 快痛（缩手反射：stress 通路 + hpa 脉冲）。
     // 首次调用只建基线——历史伤不在她醒来时集体喊疼。
     try { pain.tick(now) } catch (e) { swallow(e, 'beat:pain') }
+    // B8 内感受（2026-11-03）：容器体征巡视——磁盘/负载跨越阈值那一拍给一次快感。
+    try {
+      const vs = vitals.tick(now)
+      if (vs && vs.subject) _log('[vitals] 快感：' + vs.subject + '（severity ' + vs.severity + '）')
+    } catch (e) { swallow(e, 'beat:vitals') }
     // 能量与消化（2026-11-03 · B3）：按睡眠分期驱动——REM 消化积压、N3 修复、清醒基础代谢。
     try { metabolism.tick(now) } catch (e) { swallow(e, 'beat:metabolism') }
 

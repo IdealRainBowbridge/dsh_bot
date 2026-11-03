@@ -628,13 +628,13 @@ export async function run(argv = []) {
           : /(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut) ? 1.05
           : 0.92
         try {
-          const [IM, MB, PN, PH] = await Promise.all([
+          const [IM, MB, PN, PH, VT] = await Promise.all([
             import('../lib/immune.mjs'), import('../brain/organ/metabolism.mjs'), import('../brain/organ/pain.mjs'),
-            import('../lib/llm-physio.mjs'),
+            import('../lib/llm-physio.mjs'), import('../brain/organ/vitals.mjs'),
           ])
           // B7（2026-11-03）：表达代谢 —— 今天的直连 token 超预算会"省着点说话"
           // （收温度 + 短句体感）。没配 llm.dailyBudgetTokens 时该器官静默，行为不变。
-          for (const s of [IM.llmState && IM.llmState(), MB.llmState && MB.llmState(), PN.llmState && PN.llmState(), PH.note && PH.note(config().llm)]) {
+          for (const s of [IM.llmState && IM.llmState(), MB.llmState && MB.llmState(), PN.llmState && PN.llmState(), PH.note && PH.note(config().llm), VT.llmState && VT.llmState()]) {
             if (!s) continue
             if (typeof s.temperature === 'number') t = Math.max(0.35, Math.min(1.05, t + s.temperature))
             if (s.note) physioNote = s.note   // 后到的覆盖先到的（痛觉最后 = 最贴近当下）

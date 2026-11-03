@@ -26,8 +26,8 @@ import { swallow } from '../../lib/swallow.mjs'
 const _organs = {}
 // 预取（模块加载即发车）：pain → hpa → field 的链路在微任务里才求值，
 // 此时 field 已经完成初始化 —— 不与 field 的加载构成环，也没有半初始化风险。
-Promise.all([import('../organ/pain.mjs'), import('../organ/metabolism.mjs')])
-  .then(([pn, mb]) => { _organs.pain = pn; _organs.metabolism = mb })
+Promise.all([import('../organ/pain.mjs'), import('../organ/metabolism.mjs'), import('../organ/vitals.mjs')])
+  .then(([pn, mb, vt]) => { _organs.pain = pn; _organs.metabolism = mb; _organs.vitals = vt })
   .catch((e) => swallow(e, 'senses:preload'))
 
 export function senses() {
@@ -38,5 +38,7 @@ export function senses() {
   try { const ache = _organs.pain && _organs.pain.acheSense && _organs.pain.acheSense(); if (ache) bits.push(ache) } catch (e) { swallow(e, 'senses:ache') }
   // 饿感（B3）：认知能量低 = 「脑子转不动/想吃点轻松的」；积压 = 「脑子里堆着没消化的」。
   try { const hunger = _organs.metabolism && _organs.metabolism.sense && _organs.metabolism.sense(); if (hunger) bits.push(hunger) } catch (e) { swallow(e, 'senses:hunger') }
+  // 内感受（B8）：容器本身的饱胀/闷——家里塞满、屋里挤。放最后：最基底的身体感。
+  try { const vt = _organs.vitals && _organs.vitals.sense && _organs.vitals.sense(); if (vt && vt.length) bits.push(...vt) } catch (e) { swallow(e, 'senses:vitals') }
   return bits
 }

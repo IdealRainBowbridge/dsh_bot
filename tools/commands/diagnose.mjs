@@ -162,6 +162,17 @@ export async function run(argv = []) {
         items.push(ok('伤口', '无开放损伤（瘢痕 ' + w.scars + ' 条 · 旧伤复发 ' + w.recurrent + ' 次）'))
       }
     } catch (e) { swallow(e, 'diagnose:wound') }
+    // B8 内感受（2026-11-03）：容器体征进体检——她的"住处"也是身体的一部分。
+    try {
+      const vt = (await import('../brain/organ/vitals.mjs')).snapshot()
+      if (vt) {
+        const cr = vt.crossed || []
+        const desc = '盘 ' + vt.diskUsedPct + '%（峰 ' + vt.peakDiskPct + '%）· 负载 ' + vt.loadRatio + (vt.selfMemMB ? ' · 自身 ' + vt.selfMemMB + 'MB' : '')
+        if (cr.includes('diskCrit')) items.push(warn('内感受', desc + ' —— 濒满'))
+        else if (cr.includes('diskHigh') || cr.includes('diskWarn')) items.push(warn('内感受', desc + ' —— 有点胀'))
+        else items.push(ok('内感受', desc))
+      }
+    } catch (e) { swallow(e, 'diagnose:vitals') }
     try {
       const snap = llmMod.breakerSnapshot()
       const open = snap.filter((x) => x.openUntil)
