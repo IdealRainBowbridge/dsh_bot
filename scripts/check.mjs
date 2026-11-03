@@ -887,6 +887,11 @@ function checkZeroCallers(files) {
       } else {
         push('导出零调用', info.file, n + '() 全仓 0 处引用（含自身） —— 入库未接线?')
       }
+    } else if (info.testsOnly) {
+      // 2026-11-03 晚新增（假活家族第 6 例教训）：metabolism.spend 只有测试在调，
+      // 引用语料把 test/ 也算数 → "测试活着"骗过了"活着"。生产零引用是器官假活的高危信号。
+      // 先做成提示不判红：存量里有一批「导出纯为可测」的合法情况，直接红会把门禁变成噪音源。
+      notes.push('仅测试调用（生产 0 引用，假活高危）：' + info.file + ' ' + n + '()')
     }
   }
 }

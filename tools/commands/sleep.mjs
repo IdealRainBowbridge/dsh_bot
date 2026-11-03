@@ -397,6 +397,26 @@ export async function sleepNow(opts = {}) {
     } catch (e) { selfOut = { ok: false, why: String(e && e.message || e).slice(0, 80) }; console.log("[sleep] 🐚 自我结算失败: " + selfOut.why) }
     mark("自我结算", selfOut)
   }
+
+  // ── 通道四: 关系慢相结算（bond REM 对账 · 2026-11-03 晚接活）─────────────
+  // remTick（快慢两相的 REM 慢相入口）以前只有测试在调（假活第 6 例同伴）。
+  // 挂在自我结算同一个 REM 窗：白天攒的 pend（没定型的情绪判断）夜里一次对账定型。
+  // 结算用 LLM 判情绪（fast/100tok）——失败或没到期的键静默跳过，不挡睡眠归档。
+  if (!phases.some(p => p.name === "关系结算")) {
+    let bondOut = { ok: false, why: "跳过" }
+    try {
+      const cfg = config()
+      if (cfg.brain?.bond?.enabled === false) bondOut.why = "配置关着"
+      else {
+        const B = await import("../lib/bond.mjs")
+        const L = await import("../lib/llm.mjs")
+        const n = await B.remTick({ chat: L.chat, now: started, sleepGate: false })
+        bondOut = { ok: true, settled: n }
+        console.log("[sleep] 💞 关系结算: " + n + " 段情绪对账定型")
+      }
+    } catch (e) { bondOut = { ok: false, why: String(e && e.message || e).slice(0, 80) }; console.log("[sleep] 💞 关系结算失败: " + bondOut.why) }
+    mark("关系结算", bondOut)
+  }
   /**
    * 归档代码：git 可用就提交；不可用就 tar.gz 快照（v5）。
    * 返回 { ok, via, file?, files?, bytes?, why?, error? } —— 调用方必须能看见失败。

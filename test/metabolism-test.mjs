@@ -111,4 +111,15 @@ function setSleep(inSleep, beganAt, plannedMin = 480, interruptions = 0) {
   assert.ok(field.sense().includes('饿'), '饿感进入第一人称身体感')
 }
 
-console.log('metabolism-test: 6 组断言全过（思考消耗/进食积压/REM消化/N3修复/24h曲线/饿感）')
+// ── ⑦ llmState 契约（说话链路的身体接口 · 2026-11-03 晚）：永不抛错，没意见给 null ──
+{
+  const a = m.llmState()
+  assert.ok(a === null || typeof a === 'object', 'llmState 返回 null 或对象')
+  const t7 = Date.now() + 27 * 3600_000
+  m.spend(0.5, t7)                       // 接在 ⑥ 之后继续消耗（能量打到 0 附近）
+  const s7 = m.llmState()
+  assert.ok(s7 && typeof s7.temperature === 'number' && s7.temperature < 0 && typeof s7.note === 'string' && s7.note.length > 0,
+    '低电量 → 降温 + 体感备注: ' + JSON.stringify(s7))
+}
+
+console.log('metabolism-test: 7 组断言全过（思考消耗/进食积压/REM消化/N3修复/24h曲线/饿感/llmState契约）')

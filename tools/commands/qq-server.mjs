@@ -331,6 +331,9 @@ export async function run(argv = []) {
       }
       if (!text && !images.length && !extra) return
       if (isGroup && QQ.at_only !== false && !atMe) return   // 群里只被 @ 才回
+      // B3 代谢接线（2026-11-03 晚，假活第 6 例修复）：消息真要进脑子 = 处理 = 烧糖。
+      // spend() 以前只有测试在调——门禁引用语料把 test/ 也算数，"测试活着"骗过了"活着"。
+      try { (await import('../brain/organ/metabolism.mjs')).spend() } catch (e) { swallow(e, 'qq:metab') }
       const chatId = isGroup ? `${EVT_PLATFORM}:${groupId}` : `${EVT_PLATFORM}:${userId}`
       // 10-31 统一通道：一次合并了多条连发 → 告诉她"这是他连着说的话"，别当几件事分开答
       const mergedN = Number(evt.__merged || 0)
@@ -563,6 +566,9 @@ export async function run(argv = []) {
       const messages = brained?.messages
         ?? buildMessages({ platform: 'qq', userText, chatId, userId, turnsToday: turns, isGroup, quote: quoteLine, openThread })
       messages[0].content += thinkingInstruction()
+      if (physioNote) {
+        messages[0].content += '\n\n【身体现在的状态】' + physioNote + '\n（这是你自己的体感，照着它说话就行，别向对方解释身体、别提"状态"两个字。）'
+      }
       // 时间锚点已经搬进 persona 的「【现在】」常驻层（10-25 重构，照 dsh-world 的 timeContext）：
       // 贴在最后一条消息上的临时提示一重写就丢，现在每轮都在 system 里。
       // 这里只保留事后兜底要用的真实间隔（sanitizeDayClaims 的口径）。
@@ -599,20 +605,36 @@ export async function run(argv = []) {
         log(`[qq] 🖼 图片已并入聊天请求（${imageUris.length}张）`)
       }
       // 动态温度（10-31 智能化）：按内容特征调——严肃/长文沉稳，日常/短句轻快
-      const dynTemp = (() => {
+      let physioNote = ''
+      // 动态温度 v2（2026-11-03 晚）：内容定基调（原逻辑），身体定幅度。
+      // 免疫/代谢/痛觉各出 llmState()（纯读缓存，永不抛错）——发烧/低血糖/带伤时收着说话。
+      // 这是「器官长进说话」的第一次接线：以前身体感只进 system 的自述层，不进表达参数。
+      const dynTemp = await (async () => {
         const ut = String(userText || '')
-        if (ut.length > 100 || /[？?]\s*[？?]/.test(ut) || /(怎么办|求助| serious |难过|烦|焦虑|压力|工作)/i.test(ut)) return 0.55
-        if (/(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut)) return 1.05
-        return 0.92
+        let t = ut.length > 100 || /[？?]\s*[？?]/.test(ut) || /(怎么办|求助| serious |难过|烦|焦虑|压力|工作)/i.test(ut) ? 0.55
+          : /(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut) ? 1.05
+          : 0.92
+        try {
+          const [IM, MB, PN] = await Promise.all([
+            import('../lib/immune.mjs'), import('../brain/organ/metabolism.mjs'), import('../brain/organ/pain.mjs'),
+          ])
+          for (const s of [IM.llmState && IM.llmState(), MB.llmState && MB.llmState(), PN.llmState && PN.llmState()]) {
+            if (!s) continue
+            if (typeof s.temperature === 'number') t = Math.max(0.35, Math.min(1.05, t + s.temperature))
+            if (s.note) physioNote = s.note   // 后到的覆盖先到的（痛觉最后 = 最贴近当下）
+          }
+        } catch (e) { swallow(e, 'qq:physiotemp') }
+        return t
       })()
       // 10-31：带工具的一轮（记承诺/查记忆/写日记/上网/看视频），失败自动退回纯文本。
       const toolsOn = config().qq?.tools?.enabled !== false
       let answer = ''
       let toolTrace = []
+      const purpose = dynTemp <= 0.6 ? 'deep' : 'chat'   // 严肃问题走深答档（1200tok）：需要想清楚再答的题给足字数
       if (toolsOn) {
         try {
           const { chatWithTools } = await import('../lib/agent.mjs')
-          const r = await chatWithTools(messages, { temperature: dynTemp, purpose: 'chat' })
+          const r = await chatWithTools(messages, { temperature: dynTemp, purpose })
           answer = r.text
           toolTrace = r.tools || []
           if (toolTrace.length) log('[qq] 🔧 用了工具：' + toolTrace.map((t) => t.name + (t.ok ? '✓' : '✗')).join(' '))
@@ -620,7 +642,7 @@ export async function run(argv = []) {
           logErr('[qq] 工具链失败，退回纯文本：' + (e?.message ?? e))
         }
       }
-      if (!answer) answer = await llm.chat(messages, { temperature: dynTemp, purpose: 'chat' })
+      if (!answer) answer = await llm.chat(messages, { temperature: dynTemp, purpose })
 
       // ── 2026-11-02 ·「先想后说」────────────────────────────────────
       // 实现挪到 tools/lib/think.mjs：输入是（他说的话 + 她心里的念头 + 身体状态），
