@@ -282,7 +282,7 @@ QQ / 微信需要实时响应，走直连 API。
 ## 六、安装
 
 > **部署实况（2026-11-03）**：现役跑在 Arch 宿主的 docker 容器 `dsh_bot` 里——仓库挂载
-> `/srv/feiyu-sandbox/app → /home/feiyu/plugins/dsh_bot`，数据挂载 `/srv/feiyu-sandbox/data-home → ~/.data`。
+> `/home/dsh_bot/app → /home/feiyu/plugins/dsh_bot`，数据挂载 `/home/dsh_bot/data-home → ~/.data`。
 > 本节往下是当年 Windows 装机的原始配方，留作兼容参考；当前口径见 `DEPLOY.md` 末尾「当前部署实况」。
 
 ```powershell

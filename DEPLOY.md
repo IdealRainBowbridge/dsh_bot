@@ -289,9 +289,9 @@ npm test                                      # 8 套测试全过
 |---|---|
 | 宿主 | Arch Linux（内核 7.2.11-arch1-1），用户 baka（wheel）/ feiyu（容器内用户，uid 951） |
 | 容器 | `dsh_bot`（镜像 `feiyu-sandbox:1.0`，`Priv=false Caps=[]`） |
-| 仓库挂载 | `/srv/feiyu-sandbox/app → /home/feiyu/plugins/dsh_bot`（归 feiyu 所有，她的 selfmod 直接提交到 git） |
-| 数据挂载 | `/srv/feiyu-sandbox/data-home → /home/feiyu/.data`（宿主路径 `/srv/feiyu-sandbox/data-home`） |
-| 其它挂载 | `/srv/feiyu-sandbox/dsh → /opt/dsh`（会被镜像重置，持久件放 `~/.dsh/`）、`/mnt/data/feiyu-stickers → /mnt/stickers`、`entry.sh` / `im-gateway.sh` 单文件注入 |
+| 仓库挂载 | `/home/dsh_bot/app → /home/feiyu/plugins/dsh_bot`（归 feiyu 所有，她的 selfmod 直接提交到 git） |
+| 数据挂载 | `/home/dsh_bot/data-home → /home/feiyu/.data`（宿主路径 `/home/dsh_bot/data-home`） |
+| 其它挂载 | `/home/dsh_bot/dsh → /opt/dsh`（会被镜像重置，持久件放 `~/.dsh/`）、`/mnt/data/feiyu-stickers → /mnt/stickers`、`entry.sh` / `im-gateway.sh` 单文件注入 |
 | LLM 链路 | 容器内 `http://172.17.0.1:3066` → 宿主 `llm-proxy.service`（`/usr/local/bin/llm-proxy.py`，多监听 172.17.0.1 + tailscale0 的 100.91.165.107）→ `127.0.0.1:3065`（agent2api）。**单点**：动它之前先备份、改完立即验容器链路 |
 | QQ 通路 | 容器内 NapCat + qq-server `0.0.0.0:8081`（docker 只映射宿主 127.0.0.1:8081；绑 0.0.0.0 是修「docker-proxy 从网卡地址进」的必须项） |
 | DSH web | `:3080` |
