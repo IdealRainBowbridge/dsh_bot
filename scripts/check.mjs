@@ -199,17 +199,18 @@ function checkLegacyDataDir(files) {
 function checkCommandRegistry() {
   const entry = path.join(ROOT, 'tools/bot.mjs')
   const cmdDir = path.join(ROOT, 'tools/commands')
-  if (!fs.existsSync(entry) || !fs.existsSync(cmdDir)) { notes.push('跳过命令注册检查'); return }
+  // 2026-11-03 去静默（评审③第 3 条）：检查跑不了=门禁瞎了，瞎了还报绿是最危险的状态。
+  if (!fs.existsSync(entry) || !fs.existsSync(cmdDir)) { problems.push({ kind: '门禁检查失效', file: 'scripts/check.mjs', detail: '命令注册检查无法执行：tools/bot.mjs 或 tools/commands 不在 —— 检查对象丢了本身就是事故' }); return }
   const src = fs.readFileSync(entry, 'utf8')
   const start = src.indexOf('const COMMANDS')
-  if (start < 0) { notes.push('跳过命令注册检查（找不到 COMMANDS）'); return }
+  if (start < 0) { problems.push({ kind: '门禁检查失效', file: 'tools/bot.mjs', detail: '找不到 const COMMANDS —— 注册表结构变了，命令注册检查整条失效（旧版此处静默跳过还报绿）' }); return }
   // 从 { 开始做括号配平，取出对象字面量
   let i = src.indexOf('{', start), depth = 0, end = -1
   for (let k = i; k < src.length; k++) {
     if (src[k] === '{') depth++
     else if (src[k] === '}') { depth--; if (depth === 0) { end = k; break } }
   }
-  if (end < 0) { notes.push('跳过命令注册检查（COMMANDS 括号不配平）'); return }
+  if (end < 0) { problems.push({ kind: '门禁检查失效', file: 'tools/bot.mjs', detail: 'COMMANDS 括号不配平 —— 文件本身语法坏了，注册检查失效（旧版此处静默跳过还报绿）' }); return }
   const body = src.slice(i, end)
   const declared = new Set([...body.matchAll(/^\s{2}(['"]?)([a-z][a-z0-9-]{1,30})\1\s*:/gm)].map((m) => m[2]))
   const files = fs.readdirSync(cmdDir).filter((n) => n.endsWith('.mjs')).map((n) => n.replace(/\.mjs$/, ''))
@@ -949,6 +950,9 @@ if (!FAST) {
   checkImportDirections(files)
   checkEvolvePersist(files)
   checkMutualPairs(files)
+  checkRealCycles(files)
+  checkFieldSenses(files)
+  checkSelfmodProtected(files)
   checkZeroCallers(files)
   checkSize(files)
 }
@@ -979,3 +983,104 @@ for (const [kind, list] of Object.entries(grouped)) {
 }
 for (const n of notes) console.log(`   · ${n}`)
 process.exit(1)
+
+// ── 模块级环检测（Tarjan SCC，2026-11-03 评审③第 4 条）──────────────────
+// A3b 只抓文件对（a↔b），三元环（a→b→c→a）漏网（注释里自己承认 Tarjan 没实现）。
+// 这里对全部静态 import 边跑 Tarjan：任何 size>1 的强连通分量都是环。
+// 函数体内动态 import 不产生静态边 —— 仓库口径本来就是"用动态 import 断边"。
+// 豁免仍走 MUTUAL_PAIRS（两元键保持 'a <-> b'；多元环键用空格拼接，需要时登记）。
+function checkRealCycles(files) {
+  const norm = (f) => { const r = String(f).replaceAll('\\', '/'); return r.startsWith(ROOT + '/') ? r.slice(ROOT.length + 1) : r }
+  const edges = new Map()
+  for (const f of files) {
+    const rel = norm(f)
+    if (!/\.mjs$|\.js$/.test(rel)) continue
+    let src2 = ''
+    try { src2 = stripComments(fs.readFileSync(f, 'utf8')) } catch { continue }
+    const re = /import\s+(?:[\w$*{},\s]+\s+from\s+)?['"]([^'"]+)['"]/g
+    let m2
+    while ((m2 = re.exec(src2))) {
+      const spec = m2[1]
+      if (!spec.startsWith('.') && !spec.startsWith('/')) continue
+      const base = path.resolve(path.dirname(f), spec)
+      for (const ext of ['.mjs', '.js', '', '/index.mjs', '/index.js']) {
+        try { if (fs.statSync(base + ext).isFile()) { edges.set(rel, (edges.get(rel) || new Set()).add(norm(base + ext))); break } } catch { }
+      }
+    }
+  }
+  const index = new Map(), low = new Map(), onStack = new Set(), stack = []
+  let counter = 0
+  const sccs = []
+  const strongconnect = (v) => {
+    index.set(v, counter); low.set(v, counter); counter++
+    stack.push(v); onStack.add(v)
+    for (const w of (edges.get(v) || [])) {
+      if (!index.has(w)) { strongconnect(w); low.set(v, Math.min(low.get(v), low.get(w))) }
+      else if (onStack.has(w)) low.set(v, Math.min(low.get(v), index.get(w)))
+    }
+    if (low.get(v) === index.get(v)) {
+      const comp = []
+      for (;;) { const w = stack.pop(); onStack.delete(w); comp.push(w); if (w === v) break }
+      if (comp.length > 1) sccs.push(comp)
+    }
+  }
+  for (const v of edges.keys()) if (!index.has(v)) strongconnect(v)
+  for (const comp of sccs) {
+    const sorted = [...comp].sort()
+    const key = sorted.length === 2 ? sorted.join(' <-> ') : ' ' + sorted.join(' ')
+    if (MUTUAL_PAIRS[key]) { notes.push('模块环（豁免）：' + key + ' —— ' + MUTUAL_PAIRS[key]); continue }
+    problems.push({ kind: '模块循环依赖', file: sorted[0], detail: '强连通分量(' + sorted.length + '): ' + key + '\n      三元及以上环 —— 文件对检查抓不到的那类。把环上某一边改成函数体内动态 import 断开。' })
+  }
+  if (sccs.length) notes.push('Tarjan 环检测：发现 ' + sccs.length + ' 个模块级环')
+  else notes.push('Tarjan 环检测：无模块级环')
+}
+
+// ── 仿生层红线一（2026-11-03 批）：field.sense 的器官感官必须走接线板 ──
+// field 直接 import organ/* 或 lib/immune 会重开 field→pain→hpa→field 环。
+// 动态 import 的边 Tarjan 不看（仓库口径允许函数体内动态断边），感官接错位
+// 不会立刻红，所以这里按"field 头部静态 import 指向 organ/immune"直接拦。
+function checkFieldSenses(files) {
+  const rel = 'tools/brain/field.mjs'
+  const f = path.join(ROOT, rel)
+  if (!fs.existsSync(f)) return
+  const src2 = stripComments(fs.readFileSync(f, 'utf8'))
+  for (const line of src2.split('\n')) {
+    const m = /^\s*import\s.*from\s+['"]([^'"]+)['"]/.exec(line)
+    if (!m) continue
+    const spec = m[1]
+    if (/^\.\/organ\//.test(spec) || /(^|\/)lib\/immune/.test(spec)) {
+      problems.push({ kind: 'field 感官接线违规', file: rel, detail: 'field 直接 import ' + spec + ' —— 会重开 field→organ→hpa→field 环。感官一律走 ./organs/senses.mjs 接线板（organ 侧用动态 import，见 senses.mjs 头注）。' })
+    }
+  }
+}
+
+// ── 仿生层红线二（2026-11-03 批）：自我核心件保护清单 tripwire ────────
+// 与 selfmod.mjs 的 PROTECTED 名单一致。selfmod 的 safeResolve 是运行时第一道闸；
+// 这里是第二道：任何代码若以字面路径直接写这些文件，门禁红。
+// （局限：只抓字面路径拼接；动态拼路径的写入靠 code review —— 注释在这里说清楚。）
+function selfCoreFiles() {
+  return [
+    'tools/lib/selfmod.mjs', 'tools/lib/selfmod-cmd.mjs', 'tools/lib/guard.mjs',
+    'tools/lib/inbound-auth.mjs', 'tools/lib/lock.mjs', 'scripts/check.mjs',
+    'tools/run-tests.mjs', 'tools/lib/wound.mjs', 'tools/commands/diagnose.mjs',
+    'tools/lib/brain-health.mjs',
+  ]
+}
+function checkSelfmodProtected(files) {
+  for (const f of files) {
+    const r = rel(f)
+    if (r === 'tools/lib/selfmod.mjs') continue
+    let src2 = ''
+    try { src2 = stripComments(fs.readFileSync(f, 'utf8')) } catch { continue }
+    if (!/(writeFileSync|writeFile|appendFileSync)\s*\(/.test(src2)) continue
+    const lines = src2.split('\n')
+    lines.forEach((line, i) => {
+      if (!/(writeFileSync|writeFile|appendFileSync)\s*\(/.test(line)) return
+      for (const cf of selfCoreFiles()) {
+        if (line.includes("'" + cf + "'") || line.includes('"' + cf + '"') || line.includes('`' + cf + '`')) {
+          problems.push({ kind: '自我核心件写入', file: r + ':' + (i + 1), detail: '疑似直接写保护文件 ' + cf + ' —— 自改必须走 selfmod 通道（备份/语法/门禁/回滚），核心件对她只读。' })
+        }
+      }
+    })
+  }
+}

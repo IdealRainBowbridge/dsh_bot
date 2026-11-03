@@ -2,14 +2,22 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { swallow } from '../tools/lib/swallow.mjs'
 
+// 2026-11-03 修复（评审③第 1 条）：env 沙箱必须先于一切项目模块 import。
+// 旧版把 swallow.mjs 写成静态 import —— 它引 paths.mjs，HOME/dataDir 在模块求值时
+// 就缓存成真实家目录，后面再设 BOT_DATA_DIR 也只是改了别人的缓存。
+// 这正是 video-test 头注写明"写穿过真实 ~/.data"的同族病灶：隔离测试自己带病。
+// 现在所有项目模块一律动态 import（env 设好之后），js 内置模块仍可静态。
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-brain-iso-'))
 process.env.BOT_DATA_DIR = tmp
 process.env.USERPROFILE = tmp
 process.env.HOME = tmp
 process.env.DSH_HOME = path.join(tmp, '.dsh')
 process.env.BOT_BRAIN_MIRROR = '0'
+
+// swallow 也动态取（env 已就位）；event/episode/clock/recall/paths 由下方原有
+// 代码动态 import —— 它们现在天然落在 env 沙箱之后，顺序正确。
+const { swallow } = await import('../tools/lib/swallow.mjs')
 
 let bad = 0
 const ok = (name, pass, detail = '') => {

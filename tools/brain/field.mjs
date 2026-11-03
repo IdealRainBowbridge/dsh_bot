@@ -301,9 +301,9 @@ export function evolve(now = Date.now(), pre = null) {
   //     （同一个坑在 hpa.mjs 踩过并修好了，field.mjs 漏了。全仓再扫过一遍，只剩这一处。）
   if (!st.at) {
     st.at = now       // 首次：把 at 落盘，本轮不演化（没有"上一次"可比）
-    persist(st)
-    return st
-  }
+    if (!pre) persist(st)   // 2026-11-03 并发修复：带 pre（锁内）时绝不在这里 persist ——
+    return st               // poke/setDim 的临界区里再进锁会自等 5s 降级，10 进程并发时
+  }                         // 嵌套落盘的"空 dims 快照"还会覆盖别人的累计值（实测 tension 归零）
   const last = st.at
   let dt = now - last
   if (dt <= 0) return st            // 时间没往前走 → 什么都不做（幂等）

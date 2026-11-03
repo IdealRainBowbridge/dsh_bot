@@ -144,7 +144,11 @@ export async function run(argv = []) {
   // 谁先起谁拿锁，后来的安静退出 —— 否则 startQQ 的 killPortListeners 会杀掉守护进程，
   // 守护再拉起，形成无限拉锯（已在审计中确认这条路径存在）。
   const { acquire } = await import('../lib/lock.mjs')
-  const releaseLock = acquire('qq-server')
+  // 2026-11-03 健壮化：锁系统本身故障时不再静默下线。旧逻辑 null=让位，
+  // 磁盘抖动会把 null 误判成"已有实例"→ exit(0)，服务下线且守护无感。
+  // failClosed：锁坏了就继续跑 —— 双开会被下面的端口绑定挡住（listen EADDRINUSE），
+  // 而静默下线没有任何防线。锁文件被别人正常持有（held）时仍然让位，行为不变。
+  const releaseLock = acquire('qq-server', { failClosed: true })
   if (!releaseLock) {
     logErr('[qq] 已有另一个 qq-server 实例在跑（端口 ' + port + '）—— 本实例让位退出。' +
       '如果你想接管，请先停掉 im-gateway.sh 里的那个进程。')
@@ -615,10 +619,13 @@ export async function run(argv = []) {
           : /(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut) ? 1.05
           : 0.92
         try {
-          const [IM, MB, PN] = await Promise.all([
+          const [IM, MB, PN, PH] = await Promise.all([
             import('../lib/immune.mjs'), import('../brain/organ/metabolism.mjs'), import('../brain/organ/pain.mjs'),
+            import('../lib/llm-physio.mjs'),
           ])
-          for (const s of [IM.llmState && IM.llmState(), MB.llmState && MB.llmState(), PN.llmState && PN.llmState()]) {
+          // B7（2026-11-03）：表达代谢 —— 今天的直连 token 超预算会"省着点说话"
+          // （收温度 + 短句体感）。没配 llm.dailyBudgetTokens 时该器官静默，行为不变。
+          for (const s of [IM.llmState && IM.llmState(), MB.llmState && MB.llmState(), PN.llmState && PN.llmState(), PH.note && PH.note(config().llm)]) {
             if (!s) continue
             if (typeof s.temperature === 'number') t = Math.max(0.35, Math.min(1.05, t + s.temperature))
             if (s.note) physioNote = s.note   // 后到的覆盖先到的（痛觉最后 = 最贴近当下）

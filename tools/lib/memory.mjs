@@ -17,7 +17,7 @@ import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
 import { config } from './config.mjs'
 import { normalizeMemoryText } from './normalize.mjs'
-import { updateJson } from './atomic.mjs'
+import { updateJson, acquireLock } from './atomic.mjs'
 
 const EP_FILE = dataPath('episodes.jsonl')
 const FACT_FILE = dataPath('facts.json')
@@ -704,6 +704,12 @@ export function sweepEpisodes(days = 90) {
   const cutoff = Date.now() - days * 86400_000
   let archived = 0
   for (const file of [EP_FILE, QQ_EP_FILE, WECHAT_EP_FILE]) {
+    // 2026-11-03 并发修复（评审①第 6 条）：归档是"读全量→分拣→重写主文件"，
+    // 必须与 appendEpisode 用同一把跨进程锁（rotateIfBig 丢记忆事故的同族——
+    // 那次修了轮转没修归档，同一把刀还插在另一个地方）。拿不到锁就跳过这一轮：
+    // sweep 是例行清理，下次心跳还会来，绝不和写入者抢。
+    const rel = acquireLock(file, { waitMs: 0 })
+    if (!rel) continue
     try {
       const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean)
       if (lines.length <= 1) continue
@@ -716,6 +722,7 @@ export function sweepEpisodes(days = 90) {
       fs.writeFileSync(file, keep.length ? keep.join('\n') + '\n' : '')
       archived += old.length
     } catch (e) { swallow(e, 'tools/lib/memory.mjs:561') }
+    finally { try { rel() } catch { /* ignore */ } }
   }
   return archived
 }

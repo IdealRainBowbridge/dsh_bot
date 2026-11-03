@@ -41,10 +41,30 @@ function writeState(s) {
   fs.renameSync(tmp, f)          // 原子替换，别留半个状态文件
 }
 
-/** 路径必须落在项目内（防 ../ 穿越、防写系统文件）。 */
+/**
+ * 路径必须落在项目内（防 ../ 穿越、防写系统文件）。
+ * 2026-11-03 红线（评审①第 4 条）：保护名单内的文件她自己不能改 ——
+ * 审批闸已拆，安全网只剩"改不坏"；而门禁/selfmod/锁这几个文件若可被她自己改掉，
+ * "改不坏"就成了她可以拆的保险丝（门禁自指）。核心安全件只有宿主侧能动
+ * （宿主 git 快照 + 老爸 CLI），容器内的自改通道对它们一律拒绝。
+ */
+const PROTECTED = new Set([
+  'tools/lib/selfmod.mjs',        // 自改机制本身
+  'tools/lib/selfmod-cmd.mjs',
+  'tools/lib/guard.mjs',          // 干跑/出站闸
+  'tools/lib/inbound-auth.mjs',   // HTTP 鉴权
+  'tools/lib/lock.mjs',           // 单实例锁
+  'scripts/check.mjs',            // 门禁
+  'tools/run-tests.mjs',          // 测试编排
+  'tools/lib/wound.mjs',          // 伤口账本（愈合判定的依据）
+  'tools/commands/diagnose.mjs',  // 自体检（免疫/伤口的读数口）
+  'tools/lib/brain-health.mjs',
+])
 export function safeResolve(rel) {
   const p = path.resolve(ROOT, String(rel || ''))
   if (!p.startsWith(ROOT + path.sep)) return null
+  const relNorm = path.relative(ROOT, p).replaceAll('\\', '/')
+  if (PROTECTED.has(relNorm)) return null
   return p
 }
 

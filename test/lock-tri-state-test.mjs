@@ -58,14 +58,16 @@ try {
   const CHILD = `
 const fs = require('node:fs')
 const path = require('node:path')
+const os = require('node:os')
 // 把 dataPath 的根换成 locks 位置是一个文件的世界
 const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-lock-broken-'))
 fs.writeFileSync(path.join(tmp2, 'locks'), 'file where dir should be')
 process.env.BOT_DATA_DIR = tmp2; process.env.USERPROFILE = tmp2; process.env.HOME = tmp2
-const { acquire } = await import(${JSON.stringify(pathToFileURL(path.join(APP, 'tools/lib/lock.mjs')).href)})
-const a = acquire('x')                 // 默认 failOpen
-const b = acquire('y', { failClosed: true })
-console.log(JSON.stringify({ aNull: a === null, bFn: typeof b === 'function' }))
+import(${JSON.stringify(pathToFileURL(path.join(APP, 'tools/lib/lock.mjs')).href)}).then(({ acquire }) => {
+  const a = acquire('x')                 // 默认 failOpen
+  const b = acquire('y', { failClosed: true })
+  console.log(JSON.stringify({ aNull: a === null, bFn: typeof b === 'function' }))
+}).catch((e) => console.log(JSON.stringify({ aNull: false, bFn: false, err: String(e) })))
 `
   const os = await import('node:os')
   const child = await new Promise((res) => {
@@ -80,7 +82,9 @@ console.log(JSON.stringify({ aNull: a === null, bFn: typeof b === 'function' }))
   ok('锁系统故障：默认 failOpen 让位（null）', broken.aNull === true)
   ok('锁系统故障：failClosed 继续跑（拿到空释放函数）', broken.bFn === true)
 
-  // ② O_EXCL 并发：8 个子进程同时抢同一把锁，恰好一个赢
+  // ② O_EXCL 并发：8 个子进程同时抢同一把锁，恰好一个赢。
+  // 赢家要**握住锁一小会儿**再退：旧版赢家 print 完立刻退出，输家探活发现
+  // "持锁者已死"按设计抢占 —— 那测不出互斥，只测得出谁跑得快。
   const RACE_CHILD = `
 process.env.BOT_DATA_DIR = ${JSON.stringify(tmp)}
 process.env.USERPROFILE = ${JSON.stringify(tmp)}
@@ -88,7 +92,8 @@ process.env.HOME = ${JSON.stringify(tmp)}
 process.env.DSH_HOME = ${JSON.stringify(path.join(tmp, '.dsh'))}
 const { tryAcquire } = await import(${JSON.stringify(pathToFileURL(path.join(APP, 'tools/lib/lock.mjs')).href)})
 const r = tryAcquire('race')
-console.log(r.acquired ? 'WON' : 'LOST')
+if (r.acquired) { await new Promise((res) => setTimeout(res, 500)); console.log('WON') }
+else console.log('LOST')
 `
   const rs = await Promise.all(Array.from({ length: 8 }, () => new Promise((res) => {
     const c = spawn(process.execPath, ['-e', RACE_CHILD], { stdio: ['ignore', 'pipe', 'pipe'] })

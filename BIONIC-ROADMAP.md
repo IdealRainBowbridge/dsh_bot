@@ -41,8 +41,19 @@
 
 ## 已知风险位（评审遗留）
 1. ~~4 级 fallback 全同源 = 单点~~ → 用户口径：聚合站就是统一入口，**侧支保持休眠（器官在血管空），此风险由用户口径接受**
-2. persona↔recall 双向 import 无门禁规则拦
-3. qq-server 1664 行贴着纪律线，加功能先拆
+2. ~~persona↔recall 双向 import 无门禁规则拦~~ → A3b 已拦（f78d551），且 2026-11-03 补了 Tarjan 全量环检测（checkRealCycles，三元环也能抓）+ field 感官接线红线（checkFieldSenses）
+3. ~~qq-server 1664 行贴着纪律线，加功能先拆~~ → 2026-11-03 评审批后 1732 行（B7 表达代谢接线 +4、锁 failClosed 注释 +5、去重指纹修复重构 +10），仍在 1750 护栏内；下次加功能先拆
+
+## 评审修复批（2026-11-03 下午，外部评审 10 问题全修）
+- **锁健壮化**（tools/lib/lock.mjs 重写）：三态语义 tryAcquire/acquire(failClosed)，O_EXCL 消 TOCTOU，死锁抢占，锁故障不再=静默下线（qq-server failClosed，幂等任务 failOpen）
+- **脑文件锁**（brain/json.mjs mutateJson 内建同目录锁 5s 超时降级）：field 的 poke/setDim/driftSet/repaySleep 全部改唯一命名空间读改写 —— "丢更新"类风险（v5 丢 28.8% 的后代）正式闭环
+- **field↔organ 解环**：感官统一走 brain/organs/senses.mjs 接线板（organ 侧动态 import），field↔pain↔hpa↔field 三元环消失；顺手修掉 sense() 里 B3/B4 补丁叠出来的 try 嵌套事故
+- **selfmod 核心件红线**：PROTECTED 名单（门禁/selfmod/锁/鉴权/伤口账本 10 个文件）她改不了 —— 门禁不再自指
+- **门禁去静默**：checkCommandRegistry 结构不匹配从 note 升级为红；Tarjan 环检测、field 感官红线、核心件写入 tripwire 三条新规则
+- **表达代谢 B7**（llm-physio.mjs）：直连 token 日预算超了会"省着点说"（llm.dailyBudgetTokens 配置，默认静默）
+- **produce 缺幕不再无声**：成片幕数不足时通知老爸
+- **run-tests /tmp 清扫收敛**：'bot-'/'dsh-' 超宽前缀撤掉
+- **brain-isolation-test 隔离先行**：env 沙箱先于一切项目模块 import（写穿 ~/.data 同族病灶根治）
 
 ## B6 生理→说话接线（2026-11-03 晚，commit 59364ff）
 器官第一次长进表达链路（以前身体感只进 system 自述层，不进表达参数）：

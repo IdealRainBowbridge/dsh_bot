@@ -558,7 +558,17 @@ export async function run(argv = []) {
     if (!voice?.dur) { console.log('    ✗ 配音时长读不到，这幕跳过'); continue }
     scenes.push({ img, img2, voice: voice.file, voiceDur: voice.dur, line, acting: sc.acting || '', rate: +voice.rate.toFixed(2), ttsTries: voice.tries })
   }
-  if (scenes.length < 3) { console.error(`✗ 成片的幕数不够（只有 ${scenes.length} 幕），这次不做`); process.exit(1) }
+  if (scenes.length < 3) {
+    // 2026-11-03（评审③第 6 条）：失败不再只对屏幕喊 —— 通知老爸，她自己的活动
+    // 哪里断了得有人知道。exit(1) 保留：不带病成片。
+    const detail = `成片只凑齐 ${scenes.length}/${plan.scenes.length} 幕 —— 配图/配音失败被逐幕跳过累积所致。投稿包目录：${dir}`
+    try {
+      const { sendOwnerQQ } = await import('../lib/notify.mjs')
+      await sendOwnerQQ('做片子没做成：' + detail)
+    } catch (e) { swallow(e, 'produce:missing-scenes') }
+    console.error('✗ ' + detail)
+    process.exit(1)
+  }
 
   // ①½ 音区对齐：一条片子必须是"同一个人"——逐句量她的音区（相对 220Hz 的半音），
   //     和这条片子自己的中位音区差 > 1.2 半音的那几句**重念**，在几条里挑最靠中间的。

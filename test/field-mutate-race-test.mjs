@@ -62,7 +62,8 @@ try {
   ok('演化时间戳在走（at > 0）', !!st && Number(st.at) > 0)
 
   // ② evolve(now, pre)：带 pre 不落盘（落盘交给调用方的临界区写）
-  const { evolve, fieldPath: fp2 } = await import(pathToFileURL(path.join(APP, 'tools/brain/field.mjs')).href)
+  const { evolve } = await import(pathToFileURL(path.join(APP, 'tools/brain/field.mjs')).href)
+  const { fieldPath: fp2 } = await import(pathToFileURL(path.join(APP, 'tools/brain/paths.mjs')).href)
   const before = JSON.parse(JSON.stringify(readJson(fp2(), null)))
   const now = Date.now()
   const stPre = evolve(now + 60_000, JSON.parse(JSON.stringify(before)))   // 深拷贝当 pre

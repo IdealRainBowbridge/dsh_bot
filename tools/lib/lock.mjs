@@ -39,11 +39,12 @@ export function tryAcquire(name) {
       fd = fs.openSync(f, 'wx', 0o644)        // O_EXCL：存在即抛 EEXIST，绝无 TOCTOU
     } catch (e) {
       if (e && e.code !== 'EEXIST') throw e
-      // 锁文件已存在：看持锁者还活着吗
+      // 锁文件已存在：看持锁者还活着吗（同 pid 重复获取也算 held —— 同进程双重加锁
+      // 是调用方 bug，但把第二次当成"抢占成功"会把 bug 放大成数据竞争）
       let old = null
-      try { old = JSON.parse(fs.readFileSync(f, 'utf8')) } catch { /* 坏文件当死锁 */ }
+      try { old = JSON.parse(fs.readFileSync(f, 'utf8')) } catch (e) { old = null; swallow(e, 'lock:read-stale') }
       const pid = Number(old && old.pid)
-      if (pid && pid !== process.pid) {
+      if (pid) {
         try { process.kill(pid, 0); return { acquired: false, held: true, holder: pid } }
         catch { /* 旧进程已死，锁是残留 → 抢占 */ }
       }

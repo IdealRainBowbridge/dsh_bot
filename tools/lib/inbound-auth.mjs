@@ -15,6 +15,7 @@
 //   ③ 用 constant-time 比较，别用 === 泄漏前缀。
 //   ④ 失败只回 401，不回细节（不告诉对方"是 token 错了还是没配"）。
 import crypto from 'node:crypto'
+import { config } from './config.mjs'
 
 /** 取配置里的 token（支持环境变量覆盖，方便容器编排）。 */
 export function inboundToken(cfg) {
@@ -37,13 +38,22 @@ export function inboundToken(cfg) {
  * 安全边界没有放宽 —— 172.17.0.1 只有宿主自己能路由到，局域网/公网进不来；
  * 且只在本文件被 allowLoopback=true 的入口（即 /onebot）上生效。
  */
-const DOCKER_GW_RE = /^172\.(1[6-9]|2\d|3[01])\.0\.1$/
+// 2026-11-03 收敛（评审①第 5 条）：旧正则把 172.16-31.0.1 全网段都当本机网关，
+// 比注释声称的宽 —— 自定义网桥（172.18.0.1 等）的网关也会被豁免，而那些网桥上的
+// 容器不是"宿主自己的映射"。现在默认只认 172.17.0.x（docker 默认网桥，网关+容器侧）；
+// 多网桥/自定义编排用 qq.dockerGateways 数组显式追加（宽由主人说了算）。
+const DEFAULT_GW_RE = /^172\.17\.0\.\d{1,3}$/
+const EXTRA_GWS = () => {
+  try { return (config()?.qq?.dockerGateways || []).map((x) => String(x)) } catch { return [] }
+}
 
 export function isDockerGateway(req) {
   const a = String(req?.socket?.remoteAddress || '')
   if (!a) return false
   const v4 = a.startsWith('::ffff:') ? a.slice(7) : a
-  return DOCKER_GW_RE.test(v4)
+  if (DEFAULT_GW_RE.test(v4)) return true
+  const extras = EXTRA_GWS()
+  return extras.length > 0 && extras.includes(v4)
 }
 
 /** 请求来源是不是本机回环。 */

@@ -92,6 +92,8 @@ const TESTS = [
   // ── v5 深度排查新增 ──────────────────────────────────────────────────────
   'atomic-test.mjs',           // 跨进程读改写：20 进程并发零丢失（旧版丢 28.8%）
   'share-queue-race-test.mjs', // 分享队列多生产者：并发入队不丢事件、不写坏 JSON
+  'field-mutate-race-test.mjs',  // 2026-11-03：field 并发 poke 零丢失（mutateJson 上锁后的行为锚）
+  'lock-tri-state-test.mjs',     // 2026-11-03：锁三态语义（O_EXCL/死锁抢占/故障降级）
 ]
 
 // ── 测试临时产物统一收尾（2026-11-02）─────────────────────────────────────
@@ -100,8 +102,11 @@ const TESTS = [
 // 这里在每个测试前后各拍一次 /tmp，把**这期间新出现**的、且命中测试前缀的删掉。
 // 只删命中前缀的：不碰别人的东西，也不碰她运行时的临时文件。
 const TEST_TMP_PREFIXES = [
-  'bot-brain-cons-', 'bot-brain-', 'bot-group-', 'bot-', 'dsh-',
-  'epdedup-', 'watchlog-', 'watchslot-', 'dupfp-', 'dupfp2-',
+  // 2026-11-03 收敛（评审③第 5 条）：'bot-' / 'dsh-' 两个超宽前缀撤掉 ——
+  // 它们按前缀删全机 /tmp 里"恰好同名"的任何目录。逐个列出实际测试用到的前缀；
+  // 以后新增测试用自己的 mkdtemp 前缀就登记在这里。
+  'bot-brain-cons-', 'bot-brain-', 'bot-brain-iso-', 'bot-field-race-', 'bot-lock-tri-',
+  'bot-lock-broken-', 'bot-group-', 'epdedup-', 'watchlog-', 'watchslot-', 'dupfp-', 'dupfp2-',
   'botcfg-', 'botmem-', 'bot-quota-', 'bot-focus-', 'bot-life-',
   // 2026-11-03 清扫时实测泄漏的家族：测试目录清理钩子此前漏了这些前缀
   'presence-', 'webpush-test-', 'roster-test-', 'org.chromium.Chromium.', 'ev-', 'dd-', 'fc-', 'frec-',

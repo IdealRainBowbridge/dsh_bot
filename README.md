@@ -268,7 +268,7 @@ dsh_bot/
 │                               act replies voice sing sticker web selfup produce vision debrief
 │                               binge promises（10-27：真看番 + 承诺账本）
 ├── wechat/wechat_bot.py        微信机器人（副本；运行的是 D:/wechat-bot/ 那份）
-├── test/                       44 套测试（client-smoke / client-render / stickers / imggen /
+├── test/                       79 套测试（client-smoke / client-render / stickers / imggen /
 │                               memory / memory-recall / qq-human / vision / focus-one-thing /
 │                               reply-style / memory-hygiene（10-27 记忆卫生）/ …）
 └── package.json
