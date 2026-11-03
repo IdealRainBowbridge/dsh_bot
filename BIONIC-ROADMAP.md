@@ -51,6 +51,9 @@
 - **selfmod 核心件红线**：PROTECTED 名单（门禁/selfmod/锁/鉴权/伤口账本 10 个文件）她改不了 —— 门禁不再自指
 - **门禁去静默**：checkCommandRegistry 结构不匹配从 note 升级为红；Tarjan 环检测、field 感官红线、核心件写入 tripwire 三条新规则
 - **表达代谢 B7**（llm-physio.mjs）：直连 token 日预算超了会"省着点说"（llm.dailyBudgetTokens 配置，默认静默）
+  → **2026-11-03 晚已配 600k/天**：按实账定（两日实测 33.6万/49.5万，大日子傍晚开始收缩，
+  平常日器官安静不过敏）。实测：40万假预算 → 温度 -0.12 + 短句体感；55万/90万 → 安静。
+  她的"话费"第一次进了身体：超支不是被掐断，是自己收着说。
 - **produce 缺幕不再无声**：成片幕数不足时通知老爸
 - **run-tests /tmp 清扫收敛**：'bot-'/'dsh-' 超宽前缀撤掉
 - **brain-isolation-test 隔离先行**：env 沙箱先于一切项目模块 import（写穿 ~/.data 同族病灶根治）
