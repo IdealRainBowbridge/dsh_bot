@@ -40,9 +40,10 @@ export function inboundToken(cfg) {
  */
 // 2026-11-03 收敛（评审①第 5 条）：旧正则把 172.16-31.0.1 全网段都当本机网关，
 // 比注释声称的宽 —— 自定义网桥（172.18.0.1 等）的网关也会被豁免，而那些网桥上的
-// 容器不是"宿主自己的映射"。现在默认只认 172.17.0.x（docker 默认网桥，网关+容器侧）；
+// 容器不是"宿主自己的映射"。现在默认只认 172.17.0.1（docker 默认网桥网关）——
+// 同网桥的其他容器（172.17.0.2+）不在豁免内，它们必须带 token（测试 :74 的契约）；
 // 多网桥/自定义编排用 qq.dockerGateways 数组显式追加（宽由主人说了算）。
-const DEFAULT_GW_RE = /^172\.17\.0\.\d{1,3}$/
+const DEFAULT_GW_RE = /^172\.17\.0\.1$/
 const EXTRA_GWS = () => {
   try { return (config()?.qq?.dockerGateways || []).map((x) => String(x)) } catch { return [] }
 }

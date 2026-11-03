@@ -27,18 +27,19 @@ const ok = (name, pass, detail = '') => {
   console.log(`${pass ? '  ✓' : '  ✗'} ${name}${detail ? ' —— ' + detail : ''}`)
 }
 
-// 子进程脚本：往 tension 上加 ARGV_DELTA（tension 没有入向耦合，扰动不会被演化吃掉）
-const CHILD = `
-const delta = Number(process.argv[2] || '0')
+// 子进程脚本：往 tension 上加 DELTA（tension 没有入向耦合，扰动不会被演化吃掉）。
+// 注意：node -e 模式下 process.argv 索引与脚本模式不同，所以 delta 直接插值进代码，
+// 不走 argv（否则 delta=0，测试会假阴）。
+const CHILD = (delta) => `
 const { poke } = await import(${JSON.stringify(pathToFileURL(path.join(APP, 'tools/brain/field.mjs')).href)})
-const r = poke('tension', delta)
+const r = poke('tension', ${delta})
 if (!r) { console.error('poke returned null'); process.exit(1) }
 console.log('ok')
 `
 
 function spawnPoker(delta) {
   return new Promise((res) => {
-    const c = spawn(process.execPath, ['-e', CHILD, String(delta)], {
+    const c = spawn(process.execPath, ['-e', CHILD(delta)], {
       env: { ...process.env, BOT_DATA_DIR: tmp, USERPROFILE: tmp, HOME: tmp, DSH_HOME: path.join(tmp, '.dsh') },
       stdio: ['ignore', 'pipe', 'pipe'],
     })

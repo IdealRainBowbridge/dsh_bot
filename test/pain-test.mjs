@@ -47,6 +47,10 @@ const field = await import('../tools/brain/field.mjs')
   wound.register('门禁', 'test-file 超行', 'FILE_LIMIT')
   const a = pain.acheSense()
   assert.ok(a.includes('痛'), '开放伤口 → 钝痛感: ' + a)
+  // 2026-11-03：感官走 organs/senses.mjs 接线板，器官模块是启动时异步预取的
+  // （动态 import 断 field→pain→hpa→field 环）。生产里 sense() 从不在启动瞬间被调；
+  // 测试里等一拍让预取落地，再验证第一人称身体感。
+  await new Promise((r) => setTimeout(r, 50))
   assert.ok(field.sense().includes('痛'), '钝痛进入第一人称身体感')
   wound.closeIfHealed('门禁全绿')
   const b = pain.acheSense()

@@ -185,8 +185,11 @@ export async function run(argv = []) {
     } catch (e) { swallow(e, 'qq-server:stopTyping') }
   }
 
-  // 跨窗口去重（10-31）：同文本 5 秒内已在其他 chatId 发过 → 跳过
-  let lastSentFp = { fp: '', at: 0, from: '' }
+  // 跨窗口去重（10-31 建立；2026-11-03 评审①第 3 条修复）：
+  // 旧版单一全局指纹，两个会话 5 秒内发出相同文本时，后到者被静默吞掉
+  // （跨群正常复读、群友同问同答都会丢单）。改成**按会话各记各的**：
+  // 只拦"同一会话 5 秒内同文本重发"（真正的重试风暴/双写），不同会话互不干扰。
+  const lastSentFpByChat = new Map()
   const isDup = (payload, currentChat) => {
     try {
       const txt = Array.isArray(payload?.message)
@@ -194,11 +197,17 @@ export async function run(argv = []) {
         : String(payload?.message || '')
       const fp = txt.slice(0, 30)
       if (!fp) return false
-      if (lastSentFp.fp === fp && Date.now() - lastSentFp.at < 5000 && lastSentFp.from !== currentChat) {
-        log('[qq] 跨窗口去重：跳过（与 ' + lastSentFp.from + ' 的回复重复）')
+      const prev = lastSentFpByChat.get(currentChat)
+      if (prev && prev.fp === fp && Date.now() - prev.at < 5000) {
+        log('[qq] 会话内去重：跳过（5 秒内已发过同文本）')
         return true
       }
-      lastSentFp = { fp, at: Date.now(), from: currentChat }
+      lastSentFpByChat.set(currentChat, { fp, at: Date.now() })
+      // 有界：最多记 200 个会话，超了删最早插入的（Map 迭代序=插入序）
+      if (lastSentFpByChat.size > 200) {
+        const first = lastSentFpByChat.keys().next().value
+        lastSentFpByChat.delete(first)
+      }
       return false
     } catch { return false }
   }
