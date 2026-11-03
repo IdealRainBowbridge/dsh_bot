@@ -55,6 +55,7 @@ import * as wound from '../../lib/wound.mjs'
 import * as pain from './pain.mjs'
 import * as vitals from './vitals.mjs'   // B8 内感受：容器本身的饱胀/闷
 import * as metabolism from './metabolism.mjs'
+import * as rhythm from '../rhythm.mjs'
 
 const MIN = 60_000
 
@@ -193,6 +194,8 @@ export async function beat(now = Date.now()) {
     } catch (e) { swallow(e, 'beat:vitals') }
     // 能量与消化（2026-11-03 · B3）：按睡眠分期驱动——REM 消化积压、N3 修复、清醒基础代谢。
     try { metabolism.tick(now) } catch (e) { swallow(e, 'beat:metabolism') }
+    // C4 社交节律牵引（2026-11-03）：主人的作息是她的光 —— 每拍按 dt 拖拽相位。
+    try { rhythm.zeitgeberTick(now) } catch (e) { swallow(e, 'beat:zeitgeber') }
 
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────
     // 这些是"身体自己在跑的部分"，不是她决定做的事。

@@ -1,0 +1,33 @@
+{
+  "scenario": "owner active 02:00-04:00 daily x3 days, then 14 days silence",
+  "dailyPhaseMin": [
+    41.30594037697695,
+    77.86695560039922,
+    110.22810806340843
+  ],
+  "perDayDragMin": [
+    41.3,
+    36.6,
+    32.4
+  ],
+  "peakPhaseMin": 110.22810806340843,
+  "after14dReleaseMin": 14.917752225397834,
+  "series": [
+    {
+      "day": 1.08,
+      "phaseMin": 41.30594037697695
+    },
+    {
+      "day": 2.08,
+      "phaseMin": 77.86695560039922
+    },
+    {
+      "day": 3.08,
+      "phaseMin": 110.22810806340843
+    },
+    {
+      "day": 17.08,
+      "phaseMin": 14.917752225397834
+    }
+  ]
+}

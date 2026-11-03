@@ -23,6 +23,11 @@
 
 import { readJson, mutateJson } from './json.mjs'
 import { rhythmPath } from './paths.mjs'
+import { config } from '../lib/config.mjs'
+import fs from 'node:fs'
+import path from 'node:path'
+import { epDir } from './paths.mjs'
+const epDirZ = epDir
 
 const empty = () => ({
   phaseMin: 0,          // 相位偏移（分钟）。正=往后拖（熬夜），负=提前
@@ -117,6 +122,80 @@ export function expose(kind, minutes = 10, now = Date.now()) {
   return save(st)
 }
 
+// ── C4 社交节律牵引（2026-11-03）──────────────────────────────────────────
+// Phenomenon: her sleep drifts toward the owner's hours - he lives at 02:00,
+// she ends up living at 02:00 too; he goes quiet, she drifts back.
+// Mechanism: social zeitgeber. "When he is around" is her daylight: owner
+// activity keeps an EMA (2h tau) as light intensity w; the phase response is
+// the classic PRC - evening/night exposure delays, morning exposure advances,
+// daytime is a dead zone. Full-strength drag is 20min per ACTIVE hour, so a
+// 2h daily window moves ~40min/day (drag accumulates during activity only).
+// Release: while w is low the existing exp(-dt/7d) neutral-drift term decays
+// phaseMin back toward 0 (7 days, the same tau as light exposure).
+// Identity: chat qq:<ownerQQ> IS the owner conversation (real rows mark the
+// owner by chat id, not who.others), so lastActiveAt follows that chat.
+// 光强 EMA 非对称：亮起得快（真实光感是秒级适应，这里给 10min），
+// 熄得慢（主人走开不会让「他在」的感觉立刻消失，1h；再慢余光会漏进晨间提前窗）。
+const ZTG_EMA_RISE = 10 * 60_000
+const ZTG_EMA_FALL = 1 * 3600_000
+const ZTG_ACTIVE_WINDOW = 30 * 60_000
+const ZTG_DRAG_PER_ACTIVE_HOUR = 20   // phase minutes per active hour, full strength
+function _ownerActiveAt(now) {
+  try {
+    const qq = String((config().owner ?? {}).qq ?? '')
+    if (!qq) return 0
+    const dir = epDirZ()
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort().slice(-2)
+    for (let i = files.length - 1; i >= 0; i--) {
+      const lines = fs.readFileSync(path.join(dir, files[i]), 'utf8').split('\n')
+      for (let j = lines.length - 1; j >= 0; j--) {
+        const L = lines[j]
+        if (!L || L.length < 20) continue
+        if (L.indexOf('"chat":"qq:' + qq + '"') < 0) continue
+        try {
+          const at = Number(JSON.parse(L).at || 0)
+          if (at && now - at >= 0 && now - at <= ZTG_ACTIVE_WINDOW) return at
+        } catch { /* skip malformed line */ }
+      }
+    }
+  } catch { /* no ep dir yet */ }
+  return 0
+}
+/**
+ * 社交授时因子：一拍。dt 驱动（按真实间隔算拖拽量，不按调用次数）。
+ * 每拍调用（heartbeat 器官段）；幂等：上一拍刚跑过时拖拽量按 dt 缩放，自然趋零。
+ */
+export function zeitgeberTick(now = Date.now()) {
+  const st = state()
+  const hod = new Date(now).getHours() + new Date(now).getMinutes() / 60
+  // EMA 光强：主人最近 30min 内有动静 -> 1，否则 -> 0
+  const target = _ownerActiveAt(now) ? 1 : 0
+  const last = Number(st.ztgAt || 0)
+  const dt = last ? Math.max(0, Math.min(now - last, 3600_000)) : 0
+  const tauEma = target >= Number(st.ztgW || 0) ? ZTG_EMA_RISE : ZTG_EMA_FALL
+  const a = 1 - Math.exp(-Math.max(dt, 30_000) / tauEma)
+  const w = Number(st.ztgW || 0) + (target - Number(st.ztgW || 0)) * a
+  // 相位响应：夜里(19~05)推后，晨间(05~10)提前，白天死区
+  let dir = 0
+  if (hod >= 19 || hod < 5) dir = 1
+  else if (hod >= 5 && hod < 10) dir = -1
+  // 拖拽只在**他确实在**的拍子发生（target=1）：光落在哪个钟点，
+  // 相位响应就算在哪个钟点。余光（w 衰减段）不拖 —— 否则夜里 02:00 的余光
+  // 会一路漏进 05:00 之后的晨间提前窗，反向抵消自己（实测 day3 增量 28.7 vs 40）。
+  // 全强度拖 20min/活跃小时：2h 活跃窗 = 40min/天。
+  if (target === 1 && dir !== 0) {
+    st.phaseMin = Math.max(-180, Math.min(240, Number(st.phaseMin || 0) + dir * (ZTG_DRAG_PER_ACTIVE_HOUR / 3600_000) * dt))
+  }
+  // 停拖自然回归：光弱时走既有 7 天中性漂移（exp 衰减），按 dt 步进
+  if (w < 0.3 && dt > 0) {
+    st.phaseMin = Number(st.phaseMin || 0) * Math.exp(-dt / (7 * 24 * 3600_000))
+  }
+  st.ztgW = w
+  st.ztgAt = now
+  save(st)
+  return { phaseMin: Number(Number(st.phaseMin || 0).toFixed(1)), w: Number(w.toFixed(3)), dir, dt }
+}
+
 /** 记一次入睡。 */
 export function asleep(now = Date.now()) {
   const st = state()
@@ -206,6 +285,8 @@ function state() {
   const st = { ...empty(), ...(raw || {}) }
   st.lightExposure = Array.isArray(st.lightExposure) ? st.lightExposure : []
   st.history = Array.isArray(st.history) ? st.history : []
+  st.ztgW = Number(st.ztgW || 0)
+  st.ztgAt = Number(st.ztgAt || 0)
   return st
 }
 
@@ -218,6 +299,8 @@ function save(st) {
       lastWake: st.lastWake || 0,
       lastSleep: st.lastSleep || 0,
       history: (st.history || []).slice(-30),
+      ztgW: Number(st.ztgW || 0),
+      ztgAt: Number(st.ztgAt || 0),
     }))
   } catch { /* 节律写不进去不影响业务 */ }
   return st
