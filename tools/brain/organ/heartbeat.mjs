@@ -50,6 +50,7 @@ import * as hpa from './hpa.mjs'
 import * as neuron from '../cell/neuron.mjs'
 import * as sleepstage from './sleepstage.mjs'
 import * as collateral from '../../lib/collateral.mjs'
+import * as immune from '../../lib/immune.mjs'
 
 const MIN = 60_000
 
@@ -167,6 +168,12 @@ export async function beat(now = Date.now()) {
     // 现在每拍按真实 dt 补突触池、回膜受体，她安静下来会自己恢复。
     try { neuron.tick(now) } catch (e) { swallow(e, 'beat:neuron') }
     try { hpa.perfuse(now) } catch (e) { swallow(e, 'beat:perfuse') }   // 器官产物入血
+    // 免疫系统心跳（2026-11-03）：退烧 + 发热代谢脉冲。
+    // 发热不新造轴：全身性炎症经 hpa.stress 表达（CRH 通道现成的），行为收敛由身体自己长出来。
+    try {
+      const im = immune.tick(now)
+      if (im && im.feverPulse && im.level >= 0.45) hpa.stress(0.05 + 0.05 * im.level, { now, source: 'fever' })
+    } catch (e) { swallow(e, 'beat:immune') }
 
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────
     // 这些是"身体自己在跑的部分"，不是她决定做的事。

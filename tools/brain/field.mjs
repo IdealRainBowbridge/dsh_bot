@@ -32,6 +32,7 @@
 //   ② **拉一个带动一片。** 睡眠债高会拉低血清素（没睡够就没耐心），
 //      皮质醇高会拉低效价。没有这一层，各维度就只是几个独立的仪表盘。
 import { readJson, mutateJson } from './json.mjs'
+import { feverSense as immuneFeverSense } from '../lib/immune.mjs'
 import { fieldPath } from './paths.mjs'
 import * as receptor from './micro/receptor.mjs'
 
@@ -589,6 +590,12 @@ export function sense(s = null) {
   if (d.valence > 0.3) bits.push('心情是往上的')
   else if (d.valence < -0.3) bits.push('心情低')
   if (d.ne > 0.72) bits.push('人在亢奋，话会冲一点')
+  // 免疫病感（2026-11-03）：发热是全身性事件，和日常状态一起被她感觉到。
+  // 放在"正面信号"兜底之前——发烧时她不该被描述成"身上是轻的"。
+  try {
+    const fever = immuneFeverSense()
+    if (fever) bits.push(fever)
+  } catch { /* 病感失败就当没病，不能反过来挡身体感 */ }
 
   // ⚠️ 2026-11-02 补：正面信号不能缺。
   //

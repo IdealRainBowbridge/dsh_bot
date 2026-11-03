@@ -548,6 +548,7 @@ const MULTI_WRITER = [
   'focus.json', 'replies-state.json', 'status.json', 'mind-plan.json',
   'skipped-messages.json', 'qq/episodes.jsonl', 'episodes.jsonl',
   'llm-collateral.json',
+  'immune.json',
 ]
 
 /** 把 arguments 里出现的标识符名抠出来（去掉字符串字面量与数字）。 */

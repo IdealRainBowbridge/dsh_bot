@@ -41,6 +41,7 @@ import * as brain from '../brain/index.mjs'
 import { execFile, spawnSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { sanitizeOutbound, sanitizeText } from '../lib/sanitize.mjs'
+import { gate as immuneGate } from '../lib/immune.mjs'
 
 /** 项目根（起子进程时用来定位 tools/bot.mjs，不能依赖 cwd）。 */
 const BOT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -294,6 +295,21 @@ export async function run(argv = []) {
       const parsed = parseMessage(evt.message, selfId)
       let extra = parsed.marks.filter((m) => m !== '【发了一张图片】').join(' ')   // 图片单独走 VL
       const { text, atMe, images } = { text: parsed.text, atMe: parsed.atMe, images: parsed.images }
+
+      // B1 免疫系统（2026-11-03）：入站第一道关卡。主人耐受（自身抗原不打）；
+      // 命中即静默丢弃——不进脑、不引用、不回复（沉默也是应答，她不回刷屏者）。
+      // 与出站 sanitize 相对：那边"出去的话不漏"，这边"进来的东西不侵"。
+      {
+        const ig = immuneGate({
+          text,
+          chatId: isGroup ? EVT_PLATFORM + ':' + groupId : EVT_PLATFORM + ':' + userId,
+          userId, isGroup,
+        })
+        if (ig.drop) {
+          log('[immune] 丢弃（' + ig.level + ' · ' + (ig.why || '?') + '）：' + String(text || '').slice(0, 30))
+          return
+        }
+      }
 
       // ── 引用消息（10-27）：把他引用的那条原文取回来 ────────────────────────
       // 主人常常引用她上面那句再问"这个呢/你去了吗"，以前她只看到"【引用回复了一条消息】"，

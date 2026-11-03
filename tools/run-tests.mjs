@@ -17,6 +17,7 @@ const TESTS = [
   'client-render.mjs',
   'stickers-test.mjs',
   'collateral-test.mjs',     // A1 侧支循环：门控/血债/试跳恢复/describe（2026-11-03）
+  'immune-test.mjs',         // B1 免疫系统：耐受/先天模式/抗体记忆/发热/退烧（2026-11-03）
   'memory-test.mjs',
   'episode-dedup-test.mjs',   // 跨写者双写去重（2026-11-02）
   'watchlog-test.mjs',
