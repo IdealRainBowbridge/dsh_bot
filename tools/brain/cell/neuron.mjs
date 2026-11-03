@@ -383,24 +383,26 @@ export function rpe(strength = 1, o = {}) {
   const actual = Math.max(0, Math.min(2, Number(strength) || 0))
   // EMA 用真实间隔推进；首见（lastAt=0）没有间隔可依，只登记不学习
   const gap = r.lastAt ? Math.max(0, now - Number(r.lastAt)) : 0
-  // 沉默衰减 + 固定点补偿学习（都在算 err **之前**做衰减）：
-  //   ef 先按沉默时长淡下去；随后「先减掉这段会发生的衰减，再按原 tau 吸收 actual」。
-  //   固定点 = actual 本身（rpe-test ①：稳态流 err->0），长沉默仍把预期拉下来
-  //   （rpe-test ③：他隔了两天回来，依然有惊喜）。
-  //   快成分几小时淡完，慢成分几天 —— 想念会淡，但人还在。
-  if (gap > 0) {
-    const decF = Number(r.ef || 0) * (1 - Math.exp(-gap / RPE_DECAY_FAST))
-    const decS = Number(r.es || 0) * (1 - Math.exp(-gap / RPE_DECAY_SLOW))
-    const efD = Number(r.ef || 0) - decF
-    const esD = Number(r.es || 0) - decS
-    const kf = 1 - Math.exp(-gap / RPE_TAU_FAST)
-    const ks = 1 - Math.exp(-gap / RPE_TAU_SLOW)
-    r.ef = efD + (actual - efD) * kf
-    r.es = esD + (actual - esD) * ks
-    r.ivl = Number(r.ivl || 0) + (gap - Number(r.ivl || 0)) * (1 - Math.exp(-gap / RPE_IVL_TAU))
+  // 预期语义：err 用「他到达那一刻」的预期（衰减后、学习前）——
+  // 多巴胺在刺激 onset 处发放，学习的更新发生在发报之后。
+  // 衰减有**宽限窗**：间隔还在常规节奏内（<= 2.5 倍常规间隔，下限 45min）
+  // 预期不淡（他按往常的节奏来，她不怀疑）；超过节奏（迟到/消失）才开始淡
+  // （快成分几小时、慢成分几天 —— 想念会淡，但人还在）。
+  // 宽限窗内是普通 EMA：固定点 = actual 本身，稳态流 err -> 0（rpe-test ①）。
+  const graceMs = Math.max(2.5 * Math.max(10 * 60_000, Number(r.ivl || 0)), 45 * 60_000)
+  if (gap > graceMs) {
+    r.ef = Number(r.ef || 0) * Math.exp(-gap / RPE_DECAY_FAST)
+    r.es = Number(r.es || 0) * Math.exp(-gap / RPE_DECAY_SLOW)
   }
   const expected = 0.5 * Number(r.ef || 0) + 0.5 * Number(r.es || 0)
   const err = actual - expected
+  if (r.lastAt && gap > 0) {
+    const kf = 1 - Math.exp(-gap / RPE_TAU_FAST)
+    const ks = 1 - Math.exp(-gap / RPE_TAU_SLOW)
+    r.ef = Number(r.ef || 0) + (actual - r.ef) * kf
+    r.es = Number(r.es || 0) + (actual - r.es) * ks
+    r.ivl = Number(r.ivl || 0) + (gap - Number(r.ivl || 0)) * (1 - Math.exp(-gap / RPE_IVL_TAU))
+  }
   r.lastAt = now
   r.care = care
   r.pendingNeg = false                             // 他回来了，空落翻篇
