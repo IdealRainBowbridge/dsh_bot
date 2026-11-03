@@ -157,6 +157,7 @@ const NODE = process.env.BOT_NODE || process.execPath
 const RUN_TMP = path.join(HERE, '..', 'test', '.tmp', 'run-' + process.pid + '-' + Date.now())
 try { fs.mkdirSync(RUN_TMP, { recursive: true }) } catch (e) { /* fall back to system tmp */ }
 let bad = 0
+const times = []   // 2026-11-03: per-suite timing, so slow suites are visible without stopwatches
 for (const t of picked) {
   const file = path.join(HERE, '..', 'test', t)
   if (!fs.existsSync(file)) {
@@ -167,18 +168,25 @@ for (const t of picked) {
   // v5：单个测试套原来没有超时 —— 任何一个测试挂住（比如等网络/等文件锁），
   // 整个 run-tests 就永远不结束，看着像"卡住了"。给 5 分钟上限。
   const tmpBefore = snapshotTmp()
+  const t0 = Date.now()
   const r = spawnSync(NODE, [file], {
     stdio: 'inherit', windowsHide: true, cwd: path.join(HERE, '..'),
     timeout: 300_000, killSignal: 'SIGKILL',
     env: { ...process.env, TMPDIR: RUN_TMP },
   })
+  const took = Date.now() - t0
+  times.push({ t, took })
   const cleaned = cleanupNewTmp(tmpBefore)
   if (cleaned) console.log(`  （清掉 ${cleaned} 个测试临时产物）`)
-  if (r.status === 0) console.log(`✓ ${t}`)
+  if (r.status === 0) console.log(`✓ ${t}（${(took / 1000).toFixed(1)}s）`)
   else {
-    console.log(`✗ ${t}（exit ${r.status ?? r.signal}）`)
+    console.log(`✗ ${t}（exit ${r.status ?? r.signal}，${(took / 1000).toFixed(1)}s）`)
     bad++
   }
+}
+const slowest = times.slice().sort((a, b) => b.took - a.took).slice(0, 3).filter((x) => x.took > 5000)
+if (slowest.length) {
+  console.log('\n慢速前三：' + slowest.map((x) => `${x.t} ${(x.took / 1000).toFixed(1)}s`).join(' · ') + '（要提速先看这里）')
 }
 try { fs.rmSync(RUN_TMP, { recursive: true, force: true }) } catch (e) { /* best effort */ }
 console.log(bad ? `\n✗ ${bad}/${picked.length} 套没过` : `\n✓ 全部 ${picked.length} 套通过`)
