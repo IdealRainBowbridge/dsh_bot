@@ -18,6 +18,11 @@ import * as tasks from './taskqueue.mjs'
 import { measure as measurePromptChars } from './assemble.mjs'
 import { backlog as inboxBacklog } from './event.mjs'
 import { config } from '../lib/config.mjs'
+import * as bond from '../lib/bond.mjs'
+import * as fieldMod from './field.mjs'
+import * as reflexMod from './reflex.mjs'
+import * as rhythmMod from './rhythm.mjs'
+import { neuronPath } from './paths.mjs'
 
 function ok(name, pass, detail = '') {
   return { name, ok: Boolean(pass), detail }
@@ -86,6 +91,30 @@ export function run({ measurePrompt = true, now = Date.now() } = {}) {
     const ts = tasks.stats()
     items.push(ok('§6 任务队列没堵死', ts.leased < 20, `排队 ${ts.queued} / 在跑 ${ts.leased}`))
   } catch (e) { items.push(ok('§6 任务队列没堵死', false, String(e?.message || e))) }
+
+  // ── C 系体检（2026-11-03 R1）：五个新器官的读数摊开。纯读；它们是
+  //    「她此刻的体感参数」不是不变量，数值没有对错，所以全部恒过、只报读数。
+  try {
+    const sf = bond.safety('qq')
+    items.push(ok('C1 安抚缓冲读数', sf >= 0 && sf <= 1, `safety=${sf.toFixed(2)}（>0.5=相处在缓冲他的重话）`))
+  } catch (e) { items.push(ok('C1 安抚缓冲读数', false, String(e?.message || e))) }
+  try {
+    const nr = JSON.parse(fs.readFileSync(neuronPath(), 'utf8'))
+    const rpeKeys = Object.keys((nr && nr.rpe) || {})
+    items.push(ok('C3 预期端有账', true, `${rpeKeys.length} 个社交来源的预期在学（${rpeKeys.slice(0, 3).join(',') || '还没有'}）`))
+  } catch (e) { items.push(ok('C3 预期端有账', true, '预期账本还没建（正常：尚无带来源的到货）')) }
+  try {
+    const pv = fieldMod.peekValence()
+    items.push(ok('C2 心情一致性偏置读数', true, `mood=${pv.toFixed(2)}（负 mood 时糟心事先浮上来）`))
+  } catch (e) { items.push(ok('C2 心情一致性偏置读数', false, String(e?.message || e))) }
+  try {
+    const z = rhythmMod.snapshot()
+    items.push(ok('C4 节律牵引读数', true, `phase=${z.phaseMin}min（他在的钟点在拖她的相位；停拖 7 天回归）`))
+  } catch (e) { items.push(ok('C4 节律牵引读数', false, String(e?.message || e))) }
+  try {
+    const rs = reflexMod.snapshot()
+    items.push(ok('C5 反射弧就位', rs.threshold === 0.75, `阈值 ${rs.threshold}，弧上 ${rs.tone}，不应期余 ${rs.refractoryIn}ms`))
+  } catch (e) { items.push(ok('C5 反射弧就位', false, String(e?.message || e))) }
 
   if (measurePrompt) {
     try {
