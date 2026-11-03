@@ -57,7 +57,7 @@
 
 | 空间 | 路径 | 内容 | 谁读写 |
 |---|---|---|---|
-| **主记忆** | `~/.data/episodes.jsonl`（+ `episodes-YYYY-MM.jsonl` 分片）、`facts.json`、`lore.json` | 情节事件流 / 关系事实 / 世界设定与兴趣 | B站、上网、工具链 |
+| **主记忆** | `~/.data/episodes.jsonl`（+ `episodes-YYYY-MM.jsonl` 分片；episodes **按平台分文件**——QQ 落 `qq/`、微信落 `wechat/`，其余平台才落根目录这份，没写过的平台不出文件）、`facts.json`、`lore.json`（冷历史已迁 `brain/`） | 情节事件流 / 关系事实 / 世界设定与兴趣 | B站、上网、工具链 |
 | **QQ 记忆** | `~/.data/qq/` | `episodes.jsonl`、`summary-<会话>.json`（每 6 轮压一次摘要）、`owner-profile.md`（主人画像） | qq-server + qq-memory |
 | **微信记忆** | `~/.data/wechat/<wxid>/` | `episodes.jsonl` + `profile.md` + `meta.json` | 微信机器人 |
 | **情绪** | `~/.data/mood.json` | 情绪值 / 饥饿度，会自己漂移 | mood |
@@ -280,6 +280,10 @@ QQ / 微信需要实时响应，走直连 API。
 ---
 
 ## 六、安装
+
+> **部署实况（2026-11-03）**：现役跑在 Arch 宿主的 docker 容器 `dsh_bot` 里——仓库挂载
+> `/srv/feiyu-sandbox/app → /home/feiyu/plugins/dsh_bot`，数据挂载 `/srv/feiyu-sandbox/data-home → ~/.data`。
+> 本节往下是当年 Windows 装机的原始配方，留作兼容参考；当前口径见 `DEPLOY.md` 末尾「当前部署实况」。
 
 ```powershell
 # 1) 把本目录放到固定位置，例如 C:\Users\<你>\.dsh\plugins\dsh_bot

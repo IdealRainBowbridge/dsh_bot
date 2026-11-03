@@ -3,6 +3,10 @@
 > 这份文档回答一个问题：**要复现这只大肥鱼，需要装什么、什么版本、放在哪、怎么验证**。
 > 版本号取自 2026-10-25 实际跑通的那台机器（Windows 11 / x64 / RTX 显卡）。
 
+> **⚠ 存档说明（2026-11-03）**：本文是 Windows 时代的装机清单，与当前生产环境已不一致——
+> 现役部署是 **Arch 宿主 + docker 容器 `dsh_bot`**。逐组件版本仍可作选型参考，
+> 当前实况见文末「当前部署实况」。
+
 ---
 
 ## 一、最小可用集（只聊天，不做语音/生图/视频）
@@ -274,3 +278,24 @@ npm test                                      # 8 套测试全过
 | `D:\social-auto-upload` | 数百 MB | patchright + venv |
 | `~/.data` | 数十 MB | 记忆 / 表情 / 日记 / 凭据 |
 | `~/.dsh/sessions` | 随聊天增长 | 她的会话（完全自由痕迹） |
+
+---
+
+## 十五、当前部署实况（2026-11-03 实测，Arch + docker）
+
+> 本节由残留清零任务实测写就，取代上文 Windows 口径成为当前真相；上文保留作历史参考。
+
+| 项 | 实况 |
+|---|---|
+| 宿主 | Arch Linux（内核 7.2.11-arch1-1），用户 baka（wheel）/ feiyu（容器内用户，uid 951） |
+| 容器 | `dsh_bot`（镜像 `feiyu-sandbox:1.0`，`Priv=false Caps=[]`） |
+| 仓库挂载 | `/srv/feiyu-sandbox/app → /home/feiyu/plugins/dsh_bot`（归 feiyu 所有，她的 selfmod 直接提交到 git） |
+| 数据挂载 | `/srv/feiyu-sandbox/data-home → /home/feiyu/.data`（宿主路径 `/srv/feiyu-sandbox/data-home`） |
+| 其它挂载 | `/srv/feiyu-sandbox/dsh → /opt/dsh`（会被镜像重置，持久件放 `~/.dsh/`）、`/mnt/data/feiyu-stickers → /mnt/stickers`、`entry.sh` / `im-gateway.sh` 单文件注入 |
+| LLM 链路 | 容器内 `http://172.17.0.1:3066` → 宿主 `llm-proxy.service`（`/usr/local/bin/llm-proxy.py`，多监听 172.17.0.1 + tailscale0 的 100.91.165.107）→ `127.0.0.1:3065`（agent2api）。**单点**：动它之前先备份、改完立即验容器链路 |
+| QQ 通路 | 容器内 NapCat + qq-server `0.0.0.0:8081`（docker 只映射宿主 127.0.0.1:8081；绑 0.0.0.0 是修「docker-proxy 从网卡地址进」的必须项） |
+| DSH web | `:3080` |
+| 进程守护 | `im-gateway.sh`（node 挂了 ~52s 拉起）；她的自重启走 `selfmod-restart.flag`，**禁止 docker restart 整容器** |
+| git | 仓库分支 `refactor/v5`，身份 `bot <bot@local>`；她整点 :00/:10 前后跑 auto 快照（会卷走工作区未提交改动——动手前先 git log/status 核对） |
+| 门禁 | `node scripts/check.mjs`（295 文件，含 2026-11-03 新增「裸 catch{} 必须带注释」规则） |
+| 测试 | `node tools/run-tests.mjs`（83 套，全套 10+ 分钟，容器内跑用 nohup 后台 + 轮询日志） |
