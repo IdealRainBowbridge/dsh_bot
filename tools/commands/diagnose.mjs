@@ -419,6 +419,40 @@ export async function run(argv = []) {
     else items.push(ok('通道多样性', 'fallback ' + fb.length + ' 级跨 ' + origins.size + ' 个来源'))
   } catch (e) { items.push(warn('通道多样性', '检查失败：' + e.message)) }
 
+  // 5.10) 外部监听面（2026-11-03）：容器里谁在对「所有人」说话
+  //   为什么加：M83 的教训是「监听面变化 = 静默的攻击面/断链变化」。这里把
+  //   /proc/net/tcp 的 LISTEN 全摊开：0.0.0.0 是对外、容器 IP 是半公开、
+  //   回环是内部。8081 绑 0.0.0.0 不是事故，是 M43 的必修项（docker-proxy
+  //   从网卡地址进，绑回环=QQ 通路必挂）。
+  try {
+    const sockets = []
+    for (const f of ['/proc/net/tcp', '/proc/net/tcp6']) {
+      if (!fs.existsSync(f)) continue
+      for (const line of fs.readFileSync(f, 'utf8').split('\n').slice(1)) {
+        const cols = line.trim().split(/\s+/)
+        if (cols.length < 4 || cols[3] !== '0A') continue   // 0A = LISTEN
+        const [hexIp, hexPort] = cols[1].split(':')
+        let addr = 'tcp6'
+        if (hexIp && hexIp.length === 8) {
+          addr = hexIp.match(/../g).reverse().map((h) => parseInt(h, 16)).join('.')
+        }
+        sockets.push({ addr, port: parseInt(hexPort, 16) })
+      }
+    }
+    if (sockets.length) {
+      const KNOWN_WILDCARD = { 8081: 'qq-server（必须 0.0.0.0：docker-proxy 从网卡地址进）' }
+      const wild = sockets.filter((x) => x.addr === '0.0.0.0')
+      const unknown = wild.filter((x) => !KNOWN_WILDCARD[x.port])
+      const rest = sockets.filter((x) => x.addr !== '0.0.0.0').map((x) => x.addr + ':' + x.port)
+      const wildDesc = wild.map((x) => x.port + (KNOWN_WILDCARD[x.port] ? ' ' + KNOWN_WILDCARD[x.port] : '')).join(' · ')
+      if (unknown.length) {
+        items.push(warn('外部监听面', '未知的 0.0.0.0 监听：' + unknown.map((x) => x.port).join(', ') + ' —— 新增对外监听要过一眼，当前已知：' + wildDesc))
+      } else {
+        items.push(ok('外部监听面', (wild.length ? '0.0.0.0 ×' + wild.length + '（' + wildDesc + '）' : '无 0.0.0.0 监听') + '；其余 ' + sockets.length + ' 个监听绑容器 IP/回环（' + rest.slice(0, 6).join(' · ') + '）'))
+      }
+    }
+  } catch (e) { items.push(warn('外部监听面', '检查失败：' + e.message)) }
+
   if (json) { console.log(JSON.stringify({ items }, null, 2)); return }
   console.log('\n🔎 体检（静默失效专项）\n')
   for (const it of items) {
