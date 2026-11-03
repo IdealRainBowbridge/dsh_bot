@@ -130,3 +130,21 @@ export function snapshot() {
     }
   } catch { return null }
 }
+
+/** LLM 的代谢状态接口（2026-11-03）：血糖和消化状况怎么影响说话。
+ *  energy 低 = 想问题费劲（回答变短变直）；pendingDigest 高 = 脑子里胀（不想接收新信息）。
+ *  纯读（缓存内），永不抛错。 */
+export function llmState() {
+  try {
+    const s = readState()
+    const e = Number(s.energy), p = Number(s.pendingDigest) || 0
+    const out = {}
+    if (e < 0.2) out.temperature = -0.2
+    else if (e < 0.35) out.temperature = -0.1
+    if (e < 0.2) out.note = "脑子转不动了，硬要想的话会打结，别强迫自己说漂亮话"
+    else if (e < 0.35) out.note = "有点饿了，不太想动脑子，说话想省力气"
+    if (p >= 10) out.note = (out.note ? out.note + "；" : "") + "脑子里堆了好多没消化的东西，胀，别再往里塞新东西了"
+    else if (p >= 5) out.note = (out.note ? out.note + "；" : "") + "白天看的东西还没消化完，有点撑"
+    return Object.keys(out).length ? out : null
+  } catch { return null }
+}

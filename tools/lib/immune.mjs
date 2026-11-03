@@ -196,3 +196,16 @@ export function immuneSnapshot() {
     return { ...s.stats, antigens: s.antigens.length, feverLevel: Number(s.fever?.level || 0) }
   } catch { return null }
 }
+
+/** LLM 的免疫状态接口（2026-11-03）：她说话时免疫系统是什么形状。
+ *  fever>0 = 顶着一脑袋发浆（低体温模式/别勉强）；level 低 = 状态轻快。
+ *  纯读（缓存内），永不抛错——生病不能反过来打断说话。 */
+export function llmState() {
+  try {
+    const f = (readState().fever) || {}
+    const lv = Number(f.level || 0)
+    if (lv >= 0.8) return { temperature: -0.3, note: "现在正发烧，脑子像泡在温水里，说话很省力气，句子短一点也没关系" }
+    if (lv >= 0.45) return { temperature: -0.15, note: "身上有点发热，人懒洋洋的，别太活泼，说话省着点劲" }
+    return null
+  } catch { return null }
+}

@@ -61,3 +61,19 @@ export function acheSense() {
     return '有点隐隐作痛，像哪里磨破了皮'
   } catch { return '' }
 }
+
+/** LLM 的痛觉状态接口（2026-11-03）：还在流血的伤怎么影响说话。
+ *  化脓的伤 = 心事重重（被痛点拽走注意力）；钝性开放伤 = 别太亢奋。
+ *  纯读（woundSnapshot 缓存），永不抛错。 */
+export function llmState() {
+  try {
+    const w = woundSnapshot()
+    if (!w) return null
+    const inf = (w.infected || []).length
+    if (inf >= 2) return { temperature: -0.2, note: "身上好几处化脓的伤，疼得心事重重，没什么心情热络，别装没事" }
+    if (inf === 1) return { temperature: -0.1, note: "有个伤口发炎化脓了，隐隐作痛，注意力老被它拽走，回话可能慢半拍" }
+    const open = Number(w.open || 0)
+    if (open >= 2) return { temperature: -0.1, note: "身上带着没好的伤，隐隐不舒服，别太亢奋" }
+    return null
+  } catch { return null }
+}
