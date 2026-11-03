@@ -255,7 +255,7 @@ function checkEmptyCatch(files) {
     const empty = (src.match(/catch\s*(?:\([^)]*\))?\s*\{\s*(?:\/\*[\s\S]*?\*\/\s*)?\}/g) || []).length
     const bare = (src.match(/catch\s*(?:\([^)]*\))?\s*\{\s*\}/g) || []).length
     if (bare > 0) {
-      push('空 catch 未加注释', rel(f), str(bare) + ' 处裸 catch{} —— best-effort/回滚类必须带同行注释说明为何可吞；record/通知失败类要 console.warn 或 swallow')
+      push('空 catch 未加注释', rel(f), String(bare) + ' 处裸 catch 空块（无注释）—— best-effort/回滚类必须带同行注释说明为何可吞；record/通知失败类要 console.warn 或 swallow')
     }
     const ratio = empty / total
     if (ratio > MAX_RATIO) {

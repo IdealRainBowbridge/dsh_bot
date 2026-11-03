@@ -291,7 +291,7 @@ async function runFullTests(item, file, before, afterText, appliedMtimeMs = 0) {
       execFileSync(process.execPath, [path.join(ROOT, 'tools', 'bot.mjs'), 'selfup', 'log',
         `【${item.id}】全量测试跳过一轮（上一轮还在跑，下次自改会连它一起测）`],
         { timeout: 20000, stdio: 'pipe', cwd: ROOT })
-    } catch { }
+    } catch { /* skip log; next selfmod re-runs full tests anyway */ }
     return
   }
   testInFlight = true
