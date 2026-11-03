@@ -61,6 +61,7 @@
 | **QQ 记忆** | `~/.data/qq/` | `episodes.jsonl`、`summary-<会话>.json`（每 6 轮压一次摘要）、`owner-profile.md`（主人画像） | qq-server + qq-memory |
 | **微信记忆** | `~/.data/wechat/<wxid>/` | `episodes.jsonl` + `profile.md` + `meta.json` | 微信机器人 |
 | **情绪** | `~/.data/mood.json` | 情绪值 / 饥饿度，会自己漂移 | mood |
+| **身体器官**（2026-11-03 B 系） | `~/.data/metabolism.json`、`bond.json`、immune/wound/pain 状态 | 认知能量与消化积压 / 关系好慢账本 / 免疫发热 / 伤口 / 痛觉 | heartbeat 30s 心跳统一推进；说话链路经各器官 `llmState()` 读 |
 
 ### 3.2 统一时序回忆 —— 「一份记忆，多个窗口」
 
