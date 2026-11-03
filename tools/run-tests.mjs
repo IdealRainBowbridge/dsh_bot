@@ -94,6 +94,7 @@ const TESTS = [
   'share-queue-race-test.mjs', // 分享队列多生产者：并发入队不丢事件、不写坏 JSON
   'field-mutate-race-test.mjs',  // 2026-11-03：field 并发 poke 零丢失（mutateJson 上锁后的行为锚）
   'lock-tri-state-test.mjs',     // 2026-11-03：锁三态语义（O_EXCL/死锁抢占/故障降级）
+  'llm-physio-test.mjs',         // 2026-11-03：B7 表达代谢（brief/直连双源、超支分支、永不抛）
 ]
 
 // ── 测试临时产物统一收尾（2026-11-02）─────────────────────────────────────
