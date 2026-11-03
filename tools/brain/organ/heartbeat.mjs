@@ -49,6 +49,7 @@ import * as thalamus from './thalamus.mjs'
 import * as hpa from './hpa.mjs'
 import * as neuron from '../cell/neuron.mjs'
 import * as sleepstage from './sleepstage.mjs'
+import * as collateral from '../../lib/collateral.mjs'
 
 const MIN = 60_000
 
@@ -64,6 +65,7 @@ export const BEAT = {
   brainEveryBeats: 1,       // 30s  ← 脑编排：消费 inbox → episode / 意图补做 / 巩固判断
   noveltyEveryBeats: 10,    // 5 分钟 ← 探索感受器：扫最近的经历 → arousal（高了刺激 explore）
   presenceEveryBeats: 10,  // 5 分钟 <- 存在感器官：身体状态翻译成 QQ 在线状态（organ/presence）
+  collateralEveryBeats: 2,  // 60s ← 侧支循环试跳（lib/collateral，主链全灭后保持侧支活性，2026-11-03）
     // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但 heartbeat 从来没调过它。
     //
     // 故障是真的，两条路径要分开看：
@@ -192,6 +194,10 @@ export async function beat(now = Date.now()) {
     }
     // 探索感受器（2026-11-02 晚）：她坐在那里，也一直在"感受"最近发生的事。
     // arousal 高时由 body.mjs 的 vitals.novelty 去刺激 explore 通路 —— 这里只管节律。
+    // 侧支循环试跳（2026-11-03）：无血债/无侧支/不在试跳窗时是纯本地判定，连请求都不发
+    if (_beatCount % BEAT.collateralEveryBeats === 0) {
+      try { await collateral.sweep(now); out.vital.push('collateral') } catch (e) { swallow(e, 'beat:vital:collateral') }
+    }
     if (_beatCount % BEAT.noveltyEveryBeats === 0 && ex.vitals?.novelty) {
       try { await ex.vitals.novelty(now); out.vital.push('novelty') } catch (e) { swallow(e, 'beat:vital:novelty') }
     }

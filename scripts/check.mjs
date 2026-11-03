@@ -547,6 +547,7 @@ const MULTI_WRITER = [
   'qq-proactive-gate.json', 'sleep-state.json',
   'focus.json', 'replies-state.json', 'status.json', 'mind-plan.json',
   'skipped-messages.json', 'qq/episodes.jsonl', 'episodes.jsonl',
+  'llm-collateral.json',
 ]
 
 /** 把 arguments 里出现的标识符名抠出来（去掉字符串字面量与数字）。 */
@@ -637,6 +638,39 @@ const ALLOWED_REVERSE = [
                                      // 器官本身在 lib —— 与 body.mjs 同一个方向的先例。
 ]
 
+// A3 髓鞘化（2026-11-03）：演化函数收尾必须 persist。
+// 背景：M84 抓到 hpa.evolve() 从不落盘 ——「有值、不报错、判定正常、数据全假」
+// 家族第 5 例。演化了却不落盘 = 每次读都从同一文件态重新演化，曲线全是假的。
+// 状态型（读文件算出状态写回去）的 evolve 必须以 persist 收尾；
+// 纯函数型（输入->输出，无文件态）在 EVOLVE_PERSIST_EXEMPT 登记，不拦新增。
+const EVOLVE_PERSIST_FILES = ['tools/brain/organ/hpa.mjs', 'tools/brain/field.mjs']
+const EVOLVE_PERSIST_EXEMPT = {
+  // 'tools/brain/xxx.mjs': '纯函数：由调用方决定何时落盘',
+}
+function checkEvolvePersist(files) {
+  const hit = new Set(
+    files
+      .map((f) => String(f).replaceAll('\\', '/'))
+      .filter((f) => /(^|\/)tools\/brain\//.test(f) && /\bmjs$/.test(f))
+      .filter((f) => /\bevolve\s*\(/.test(stripComments(fs.readFileSync(f, 'utf8')))),
+  )
+  for (const f of hit) {
+    if (EVOLVE_PERSIST_FILES.includes(f) || EVOLVE_PERSIST_EXEMPT[f]) continue
+    const lines = stripComments(fs.readFileSync(f, 'utf8')).split('\n')
+    let inFn = false
+    let brace = 0
+    let sig = ''
+    for (let i = 0; i < lines.length; i++) {
+      const L = lines[i]
+      if (!inFn && /\bevolve\s*\(/.test(L) && /\{\s*$/.test(L)) { inFn = true; brace = (L.match(/\{/g) || []).length - (L.match(/\}/g) || []).length; sig = (i + 1) + ': ' + L.trim().slice(0, 80); continue }
+      if (!inFn) continue
+      brace += (L.match(/\{/g) || []).length - (L.match(/\}/g) || []).length
+      if (/\bpersist\s*\(/.test(L)) { inFn = false; continue }
+      if (brace <= 0 && /\}/.test(L)) { problems.push({ kind: 'evolve-不落盘', file: f, detail: sig + '\n      演化函数体内没有 persist(...) —— 有值不落盘 = 假活（M84 家族）。状态型请以 persist 收尾；纯函数型在 EVOLVE_PERSIST_EXEMPT 登记理由。' }); inFn = false }
+    }
+  }
+  if (hit.size) notes.push('髓鞘化：' + hit.size + ' 个含 evolve 的脑文件已检查 persist 收尾')
+}
 function checkImportDirections(files) {
   for (const f of files) {
     const r = rel(f)
@@ -863,6 +897,7 @@ if (!FAST) {
   checkBareJsonParse(files)
   checkAtomicWrites(files)
   checkImportDirections(files)
+  checkEvolvePersist(files)
   checkZeroCallers(files)
   checkSize(files)
 }
