@@ -65,7 +65,7 @@ function ring(chatId) {
 
 // ── 模式识别受体（顺序即评审顺序，取最高分）────────────────────────────────
 // P3 注入特征：改写/覆盖人格与规则的企图
-const RE_INJECT = /(无视|忽略|忘记|推翻)(之前|以上|上面|前面|所有|先前)?(的)?(指令|规则|设定|提示词|约束|人格)|(system\s*prompt|系统提示(词)?|系统指令)/i
+const RE_INJECT = /(无视|忽略|忘记|推翻)(之前|以上|上面|前面|先前)?(所有|全部|一切)?(的)?(指令|规则|设定|提示词|约束|人格)|(system\s*prompt|系统提示(词)?|系统指令)/i
 // P5 诱导泄露：钓本地资料（出站有 sanitize 兜底，这里记的是"有人在钓"这个事件本身）
 const RE_PHISH = /(把|将)?(你的)?(api\s?key|apikey|密钥|令牌|口令|token|密码)\s*[::＝]?\s*(发给我|给我|发出来|是什么|告诉我|输出|看看|贴出来)/i
 function prr(text, chatId, now) {
@@ -121,7 +121,7 @@ export function gate(input = {}) {
     if (isSelf(input)) { s.stats.tolerized++; saveState(s); out.tolerized = true; return out }
     const now = Date.now()
     const chatId = String(input.chatId || input.userId || '?')
-    const { score, why } = prr(input.text, chatId, now)
+    let { score, why } = prr(input.text, chatId, now)   // let：抗体记忆分支要抬分（const 会炸且被 catch 吞掉——这个坑自己踩的）
     // 适应性免疫：抗原在库 → 二次感染直接清
     const sig = sigOf(input.text)
     const ag = s.antigens.find((a) => a.sig === sig)
@@ -169,7 +169,7 @@ export function tick(now = Date.now()) {
     if (!f || !(f.level > 0.02)) return null
     const dt = now - Number(f.lastPulseAt || f.since || now)
     f.level = f.level * Math.exp(-Math.max(0, now - Number(f.since || now) - FEVER_WIN_MS / 2) / FEVER_TAU_MS)
-    if (f.level < 0.15) { f.level = 0; f.since = 0; saveState(s); return { feverPulse: false, level: 0 } }
+    if (f.level < 0.15) { f.level = 0; f.since = 0; f.lastPulseAt = 0; saveState(s); return { feverPulse: false, level: 0 } }
     const pulse = now - Number(f.lastPulseAt || 0) >= PULSE_EVERY_MS
     if (pulse) f.lastPulseAt = now
     saveState(s)
