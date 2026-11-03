@@ -32,11 +32,16 @@
 //   ② **拉一个带动一片。** 睡眠债高会拉低血清素（没睡够就没耐心），
 //      皮质醇高会拉低效价。没有这一层，各维度就只是几个独立的仪表盘。
 import { readJson, mutateJson } from './json.mjs'
-import { feverSense as immuneFeverSense } from '../lib/immune.mjs'
-import { acheSense as painAcheSense } from './organ/pain.mjs'
-import { sense as metabolismSense } from './organ/metabolism.mjs'
 import { fieldPath } from './paths.mjs'
+import { swallow } from '../lib/swallow.mjs'
 import * as receptor from './micro/receptor.mjs'
+// ── 器官感官接线（2026-11-03 架构修复：解 field↔organ 环）──────────────
+// 历史教训：field 曾直接 import organ/pain、organ/metabolism 来给 sense() 拼病感。
+// 那是两个环的根：field→pain→hpa→field（三元环）、field→metabolism→field（文件对环）。
+// 也把"场的演化"和"器官的状态"焊死在一个文件里。现在：感官走 organs/senses.mjs
+// 命名空间模块（器官侧走动态 import 断边），field 只在 sense() 尾部挂一次钩；
+// 器官永不 import field（单向：field→senses⇢organ）。
+import { senses } from './organs/senses.mjs'
 
 /* ── 维度的定义：每一维都写清"为什么是这个形状" ───────────────────── */
 
@@ -274,8 +279,11 @@ function relax(v, target, dtMs, tauMs) {
  * 演化到 now。**幂等**：同样的 now 调用两次，第二次是空操作。
  * 这是硬要求 —— 多个进程都在调 tick，不能谁多调一次就多演化一次。
  */
-export function evolve(now = Date.now()) {
-  const st = hydrate(readJson(fieldPath(), null))
+export function evolve(now = Date.now(), pre = null) {
+  // pre（2026-11-03 并发修复）：调用方已经拿到的最新状态（如在 mutateJson 锁内
+  // 拿到的磁盘现值）。给了 pre 就不再自己读盘，也**不落盘**——落盘交给调用方的
+  // 唯一命名空间写（poke/setDim）。没给 pre 就是旧的独立演化语义，照旧落盘。
+  const st = pre || hydrate(readJson(fieldPath(), null))
   // ⚠️ 这里原来写 `const last = st.at || now` —— 那是本文件最严重的一个 bug。
   //
   //     empty().at = 0，而 0 是假值 → last 被当成 now → dt = 0 → 下面 `dt <= 0` 直接 return。
@@ -411,11 +419,15 @@ export function evolve(now = Date.now()) {
   //
   //   这跟本文件开头那条铁律（"一切演化按真实经过的时间 dt 算"）直接冲突：
   //   dt 算得再对，不落盘就等于没算。形状对了，管道漏了。
-  persist(st)
+  //
+  //   ⚠️ 2026-11-03 并发修复：带 pre（锁内演化）调用时**不在这里落盘**——落盘交给
+  //   调用方 poke/setDim 的 mutateJson 临界区统一写（锁内再 persist 会重复进锁死等）。
+  //   独立调用（没给 pre）保持本行为：算完即存，安静时生理不冻结。
+  if (!pre) persist(st)
   return st
 }
 
-/** 把演化结果落盘。多进程共用，必须走 atomic（updateJson 内部加锁）。 */
+/** 把演化结果落盘（独立演化路径用）。多进程共用；2026-11-03 起 mutateJson 自带文件锁。 */
 export function persist(st) {
   try {
     mutateJson(fieldPath(), empty(), () => ({
@@ -444,10 +456,17 @@ export function persist(st) {
 export function poke(dim, delta, o = {}) {
   const d = DIMS[dim]
   if (!d) return null
-  const st = evolve(o.now ?? Date.now())
-  st.dims[dim] = clamp(Number(st.dims[dim] || 0) + Number(delta || 0), d.lo, d.hi)
-  st.log = [...(st.log || []), { at: o.now ?? Date.now(), dim, delta: Number(delta || 0), why: String(o.why || '').slice(0, 60) }].slice(-60)
-  return persist(st)
+  const now = o.now ?? Date.now()
+  // 唯一命名空间读改写（2026-11-03 并发修复）：qq-server/heartbeat/sleep/cron 多进程并发
+  // 调 poke/setDim 时，旧实现"evolve(读)→改→persist(整份覆写)"会丢更新——两个进程
+  // 都基于同一份快照演化，后写者把前写者的扰动整个抹掉。mutateJson 内部有文件锁：
+  // 读改写在一个临界区里完成，锁内再跑 evolve 就是「演化也并发安全」。
+  return mutateJson(fieldPath(), empty(), (cur) => {
+    const st = evolve(now, hydrate(cur))
+    st.dims[dim] = clamp(Number(st.dims[dim] || 0) + Number(delta || 0), d.lo, d.hi)
+    st.log = [...(st.log || []), { at: now, dim, delta: Number(delta || 0), why: String(o.why || '').slice(0, 60) }].slice(-60)
+    return { at: st.at, pool: st.pool || null, dims: st.dims, drift: st.drift, log: (st.log || []).slice(-60) }
+  }) || null
 }
 
 /**
@@ -471,15 +490,20 @@ export function setDim(dim, value, o = {}) {
   const d = DIMS[dim]
   if (!d) return null
   const now = o.now ?? Date.now()
-  const st = evolve(now)
-  const v = clamp(Number(value), d.lo, d.hi)
-  const prev = Number(st.dims[dim])
-  st.dims[dim] = v
-  // 只有在明显变化时才留痕，避免每 tick 一条把日志刷满
-  if (Math.abs(v - prev) > 0.02) {
-    st.log = [...(st.log || []), { at: now, dim, delta: Number((v - prev).toFixed(3)), why: String(o.why || 'set').slice(0, 60) }].slice(-60)
-  }
-  return persist(st)
+  // 唯一命名空间读改写（2026-11-03 并发修复）：与 poke 同理。setDim 的调用方
+  // （sleepstage 的 REM、hpa 的皮质醇入血）都可能在另一进程同时写场。
+  // mutateJson 现在内部有文件锁（json.mjs），读改写落盘一个临界区完成。
+  return mutateJson(fieldPath(), empty(), (cur) => {
+    const st = evolve(now, hydrate(cur))
+    const v = clamp(Number(value), d.lo, d.hi)
+    const prev = Number(st.dims[dim])
+    st.dims[dim] = v
+    // 只有在明显变化时才留痕，避免每 tick 一条把日志刷满
+    if (Math.abs(v - prev) > 0.02) {
+      st.log = [...(st.log || []), { at: now, dim, delta: Number((v - prev).toFixed(3)), why: String(o.why || 'set').slice(0, 60) }].slice(-60)
+    }
+    return { at: st.at, pool: st.pool || null, dims: st.dims, drift: st.drift, log: (st.log || []).slice(-60) }
+  }) || null
 }
 
 /**
@@ -496,25 +520,32 @@ export function setDim(dim, value, o = {}) {
 export function driftSet(dim, delta, cap = 0.25) {
   const d = DIMS[dim]
   if (!d) return null
-  const st = evolve()
-  const cur = Number(st.drift[dim] ?? d.set)
-  const next = clamp(cur + Number(delta || 0), d.set - cap * (d.hi - d.lo), d.set + cap * (d.hi - d.lo))
-  st.drift[dim] = Number(next.toFixed(4))
-  return persist(st)
+  // 唯一命名空间读改写（2026-11-03 并发修复）：静息点漂移也会和 poke 并发。
+  return mutateJson(fieldPath(), empty(), (cur) => {
+    const st = evolve(Date.now(), hydrate(cur))
+    const cur2 = Number(st.drift[dim] ?? d.set)
+    const next = clamp(cur2 + Number(delta || 0), d.set - cap * (d.hi - d.lo), d.set + cap * (d.hi - d.lo))
+    st.drift[dim] = Number(next.toFixed(4))
+    return { at: st.at, pool: st.pool || null, dims: st.dims, drift: st.drift, log: (st.log || []).slice(-60) }
+  }) || null
 }
 
 /** 还债：只有真睡才调。还按「睡多久」算，不是「睡了一次」。 */
 export function repaySleep(hours = 0, now = Date.now()) {
   const h = Math.max(0, Number(hours) || 0)
   if (!h) return null
-  const st = evolve(now)
-  // 一晚上按 8 小时能清掉约 0.85 的债（不是清空：睡眠本来就不是万能的）
-  st.dims.sleepDebt = clamp(st.dims.sleepDebt * Math.exp(-h / 9.4), DIMS.sleepDebt.lo, DIMS.sleepDebt.hi)
-  // 疲劳的清除比睡眠债快得多，但它同样按小时算
-  st.dims.fatigue = clamp(st.dims.fatigue * Math.exp(-h / 5.5), DIMS.fatigue.lo, DIMS.fatigue.hi)
-  st.at = now
-  st.log = [...(st.log || []), { at: now, dim: 'sleep', delta: -h, why: '睡了 ' + h.toFixed(1) + ' 小时' }].slice(-60)
-  return persist(st)
+  // 唯一命名空间读改写（2026-11-03 并发修复）：睡眠结算进程和聊天进程并发时，
+  // 旧实现会把对方刚 poke 的扰动整个抹掉。
+  return mutateJson(fieldPath(), empty(), (cur) => {
+    const st = evolve(now, hydrate(cur))
+    // 一晚上按 8 小时能清掉约 0.85 的债（不是清空：睡眠本来就不是万能的）
+    st.dims.sleepDebt = clamp(st.dims.sleepDebt * Math.exp(-h / 9.4), DIMS.sleepDebt.lo, DIMS.sleepDebt.hi)
+    // 疲劳的清除比睡眠债快得多，但它同样按小时算
+    st.dims.fatigue = clamp(st.dims.fatigue * Math.exp(-h / 5.5), DIMS.fatigue.lo, DIMS.fatigue.hi)
+    st.at = now
+    st.log = [...(st.log || []), { at: now, dim: 'sleep', delta: -h, why: '睡了 ' + h.toFixed(1) + ' 小时' }].slice(-60)
+    return { at: st.at, pool: st.pool || null, dims: st.dims, drift: st.drift, log: (st.log || []).slice(-60) }
+  }) || null
 }
 
 /* ── 派生：这才是"决策读场"的地方 ─────────────────────────────────── */
@@ -580,6 +611,10 @@ export function irritability(s = null) {
 
 /** 给提示词用的一行。不是"情绪 63"，是**能读出方向**的一段。 */
 export function sense(s = null) {
+  try { return senseInner(s) } catch (e) { swallow(e, 'field:sense'); return ['（身体感这会儿读不出来）'] }
+}
+
+function senseInner(s = null) {
   const st = s || evolve()
   const d = st.dims
   const bits = []
@@ -592,22 +627,11 @@ export function sense(s = null) {
   if (d.valence > 0.3) bits.push('心情是往上的')
   else if (d.valence < -0.3) bits.push('心情低')
   if (d.ne > 0.72) bits.push('人在亢奋，话会冲一点')
-  // 免疫病感（2026-11-03）：发热是全身性事件，和日常状态一起被她感觉到。
-  // 放在"正面信号"兜底之前——发烧时她不该被描述成"身上是轻的"。
-  try {
-    const fever = immuneFeverSense()
-    if (fever) bits.push(fever)
-  // 慢痛（2026-11-03 · B4）：还在流血的伤口 → 钝痛；愈合即停，不背着旧伤喊疼。
-  try {
-    const ache = painAcheSense()
-    if (ache) bits.push(ache)
-  } catch { /* 痛感失败不挡身体感 */ }
-  // 饿感（2026-11-03 · B3）：认知能量低 = 「脑子转不动/想吃点轻松的」；积压 = 「脑子里堆着没消化的」。
-  try {
-    const hunger = metabolismSense()
-    if (hunger) bits.push(hunger)
-  } catch { /* 饿感失败不挡身体感 */ }
-  } catch { /* 病感失败就当没病，不能反过来挡身体感 */ }
+  // ── 器官感官（2026-11-03 架构修复）：病感/慢痛/饿感统一经 organs/senses.mjs 接线。
+  //    以前这三段直接内联在这里（fever 的 try 块还嵌进了 pain/metabolism 的新 try ——
+  //    2026-11-03 凌晨两次补丁叠出来的嵌套事故），谁失败都该"当没这回事"，但不应
+  //    连累别人，也不该让 field 直接认识每个器官。senses() 永不抛错。
+  try { for (const bit of senses()) if (bit) bits.push(bit) } catch { /* 感官失败不挡身体感 */ }
 
   // ⚠️ 2026-11-02 补：正面信号不能缺。
   //

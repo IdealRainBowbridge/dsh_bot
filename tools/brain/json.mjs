@@ -4,6 +4,18 @@
 //   · 所有"整份 JSON"的写入都是 temp + rename：中途崩了要么旧要么新，绝不半份。
 //   · 所有 JSONL 都是 append-only：只追加，不改行（记忆不硬删）。
 //   · 坏行不抛异常：一行坏了跳过，别让一条脏数据把整轮回复带崩。
+//
+// ── 2026-11-03 并发修复：mutateJson 有了真锁 ────────────────────────────
+// 旧注释说"锁只在 facts/intents 这类多入口的地方显式加"——但 facts/intents 全文
+// 没有 withLock（评审②实锤：注释里的锁不存在）。而 field 的 poke/setDim、hpa、
+// neuron save、qq-server/heartbeat/sleep/cron 全都在多进程并发地 mutateJson。
+// v5 发现的"并发写状态文件丢 28.8%"修的是"写半份文件"（原子 rename），
+// 没修"丢更新"（两个进程基于同一份快照各写各的，后写覆盖前写）。
+// 现在锁内建在本文件：O_EXCL 同目录锁文件 + 死锁抢占 + 5s 超时无锁降级。
+//   · 拿不到锁等（20~50ms 抖动重试）；持锁者死了就抢占（kill(pid,0) 探活）；
+//   · 等 5s 还拿不到 → 无锁降级继续跑（行为=旧版，绝不卡死业务——
+//     脑是旁路，宁可偶发丢一次更新，不许聊天链路挂起）；
+//   · 锁文件系统坏了 → 同样无锁降级 + swallow 留痕。
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -71,16 +83,63 @@ export function readJsonl(file, { limit = 0 } = {}) {
   return limit > 0 ? out.slice(-limit) : out
 }
 
+// ── 同目录文件锁（mutateJson 专用，自包含不引 lock.mjs）──────────────────
+// 为什么不放 tools/lib/lock.mjs：那边锁名挂在 dataPath('locks')，而这里要锁的文件
+// 可能是测试沙箱里的任意路径。同目录锁与文件同生共死，测试隔离天然生效。
+const LOCK_WAIT_MS = 5000
+
+function acquireSameDirLock(file) {
+  const lock = `${file}.lock`
+  const mine = `${file}.${process.pid}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}.lock`
+  let fd = null
+  try { fd = fs.openSync(mine, 'wx') } catch (e) { return { ok: false, why: 'create:' + (e && e.code) } }
+  try { fs.writeSync(fd, String(process.pid)) } finally { try { fs.closeSync(fd) } catch { /* ignore */ } }
+  const deadline = Date.now() + LOCK_WAIT_MS
+  for (;;) {
+    try { fs.linkSync(mine, lock); try { fs.rmSync(mine, { force: true }) } catch { /* ignore */ } return { ok: true, lock } }
+    catch (e) {
+      if (!e || e.code !== 'EEXIST') { try { fs.rmSync(mine, { force: true }) } catch { /* ignore */ } return { ok: false, why: 'link:' + (e && e.code) } }
+      // 已被占：持锁者还活着吗？死了就清掉重抢。
+      let alive = false
+      try {
+        const pid = Number(fs.readFileSync(lock, 'utf8'))
+        if (pid && pid !== process.pid) { process.kill(pid, 0); alive = true }
+      } catch { /* 读不到 = 残锁，当死的 */ }
+      if (!alive) { try { fs.rmSync(lock, { force: true }) } catch { /* ignore */ } continue }
+      if (Date.now() > deadline) return { ok: false, why: 'timeout', lock }
+      // 忙等 20~50ms 再抢（临界区是毫秒级的小 JSON 读写，够用且不引入异步）
+      const until = Date.now() + 20 + Math.floor(Math.random() * 30)
+      while (Date.now() < until) { /* spin */ }
+    }
+  }
+}
+
+function releaseSameDirLock(lock) {
+  try { fs.rmSync(lock, { force: true }) } catch { /* 残锁会被下一个获取者按死进程清走 */ }
+}
+
 /**
- * 改一份 JSON：read → fn(当前值) → 原子写。fn 返回 undefined 表示"不写"。
- * 不带跨进程锁（要锁用 store.mjs 的 withLock / mutateJson）—— 这一版进程结构里
- * 大部分文件只有一个写者，锁只在 facts/intents 这类多入口的地方显式加。
+ * 改一份 JSON：read → fn(当前值) → 原子写，**整段在文件锁内**（2026-11-03 起）。
+ * fn 返回 undefined 表示"不写"。
+ *
+ * 锁语义（脑是旁路，别让锁把业务卡死）：
+ *   · 正常：临界区内读改写，跨进程不丢更新。
+ *   · 5s 等不到 / 锁系统坏：无锁降级跑（= 旧版行为，偶发丢更新好过聊天链路挂起），
+ *     swallow 留痕。
  */
 export function mutateJson(file, fallback, fn) {
-  const cur = readJson(file, fallback)
-  const next = fn(cur)
-  if (next === undefined) return cur
-  return writeJsonAtomic(file, next)
+  const body = () => {
+    const cur = readJson(file, fallback)
+    const next = fn(cur)
+    if (next === undefined) return cur
+    return writeJsonAtomic(file, next)
+  }
+  const g = acquireSameDirLock(file)
+  if (g.ok) {
+    try { return body() } finally { releaseSameDirLock(g.lock) }
+  }
+  try { swallow(new Error('mutateJson 无锁降级：' + file + ' —— ' + g.why), 'json:mutateLock') } catch { /* ignore */ }
+  return body()
 }
 
 /** 文件大小 / 行数（doctor 用）。 */
