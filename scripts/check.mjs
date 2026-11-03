@@ -642,6 +642,46 @@ const ALLOWED_REVERSE = [
                                      // 器官本身在 lib —— 与 body.mjs 同一个方向的先例。
 ]
 
+// A3b 文件对双向依赖（2026-11-03）：a→b 与 b→a 同时静态 import = 环对。
+// 背景：M55 挂账 persona.mjs ↔ brain/assemble.mjs —— persona 静态 import recall，
+// assemble 静态 import persona。ESM 靠"函数体内才调用"活着，但依赖图已经成环，
+// 任何一边改成模块级求值（如顶层缓存）就是启动炸雷。规则：静态成环 = 红；
+// 确需互相引用时把一边改成函数体内动态 import（见 ALLOWED_REVERSE 的既有先例口径）。
+const MUTUAL_PAIRS = [
+  // '相对路径对1|相对路径对2': '豁免理由',
+]
+function checkMutualPairs(files) {
+  const norm = (f) => { const r = String(f).replaceAll('\\', '/'); return r.startsWith(ROOT + '/') ? r.slice(ROOT.length + 1) : r }
+  const edges = new Map()   // from -> Set(to)（只算 .mjs/.js 源文件间的静态 import）
+  for (const f of files) {
+    const rel = norm(f)
+    if (!/\.mjs$|\.js$/.test(rel)) continue
+    const src2 = stripComments(fs.readFileSync(f, 'utf8'))
+    const re = /import\s+(?:[\w$*{},\s]+\s+from\s+)?['"]([^'"]+)['"]/g
+    let m2
+    while ((m2 = re.exec(src2))) {
+      const spec = m2[1]
+      if (!spec.startsWith('.') && !spec.startsWith('/')) continue
+      const base = path.resolve(path.dirname(f), spec)
+      for (const ext of ['.mjs', '.js', '', '/index.mjs', '/index.js']) {
+        try { if (fs.statSync(base + ext).isFile()) { edges.set(rel, (edges.get(rel) || new Set()).add(norm(base + ext))); break } } catch { }
+      }
+    }
+  }
+  const seenPair = new Set()
+  for (const [a, tos] of edges) {
+    for (const b of tos) {
+      if (!(edges.get(b) || new Set()).has(a)) continue
+      const k = [a, b].sort().join(' <-> ')
+      if (seenPair.has(k)) continue
+      seenPair.add(k)
+      if (MUTUAL_PAIRS[k]) { notes.push('双向依赖（豁免）：' + k + ' —— ' + MUTUAL_PAIRS[k]); continue }
+      problems.push({ kind: '双向依赖', file: a, detail: k + '\n      静态 import 成环对。把其中一边改成函数体内动态 import，或在 MUTUAL_PAIRS 登记豁免理由。' })
+    }
+  }
+  if (seenPair.size) notes.push('文件对双向检查：' + seenPair.size + ' 对静态成环（豁免 ' + [...seenPair].filter((k) => MUTUAL_PAIRS[k]).length + ' 对）')
+}
+
 // A3 髓鞘化（2026-11-03）：演化函数收尾必须 persist。
 // 背景：M84 抓到 hpa.evolve() 从不落盘 ——「有值、不报错、判定正常、数据全假」
 // 家族第 5 例。演化了却不落盘 = 每次读都从同一文件态重新演化，曲线全是假的。
@@ -903,6 +943,7 @@ if (!FAST) {
   checkAtomicWrites(files)
   checkImportDirections(files)
   checkEvolvePersist(files)
+  checkMutualPairs(files)
   checkZeroCallers(files)
   checkSize(files)
 }
