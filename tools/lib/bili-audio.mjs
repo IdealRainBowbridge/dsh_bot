@@ -17,13 +17,14 @@
 //
 // 依赖（容器内实测 2026-11-02）：
 //   · ffmpeg 5.1.9 已有
-//   · Python 3.11.2 + /home/feiyu/.data/asr-venv（faster-whisper，CPU int8）
-//   · 模型落在 /home/feiyu/.data/asr-models（容器重建不丢）
+//   - Python 3.11.2 + ~/.data/asr-venv (faster-whisper, CPU int8)
+//   - models under ~/.data/asr-models (survives container rebuild)
 //   · HF_ENDPOINT=hf-mirror.com + **HF_HUB_DISABLE_XET=1**
 //     （xet 后端走 cas-server.xethub.hf.co，hf-mirror 不代理 → 401，踩过）
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import os from 'node:os'
 import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { apiGet, makeHeaders } from './bili-api.mjs'
@@ -51,8 +52,23 @@ export function whyNoHear() { return lastHearWhy }
  *   · int8 在 GPU 上可用，且比 float32 快 25%
  *   · 结论：GPU 优先 int8，退 float32，再退 CPU int8
  */
+// ASR data dir (venv + models). 2026-11-03: no more hardcoded /home/feiyu.
+// Precedence: BOT_ASR_DATA_DIR > parent of BOT_ASR_VENV > <homedir>/.data.
+// In-container equivalent of the old absolute path (feiyu home = /home/feiyu).
+function asrDataDir() {
+  if (process.env.BOT_ASR_DATA_DIR) return process.env.BOT_ASR_DATA_DIR
+  const venv = process.env.BOT_ASR_VENV
+  if (venv) return path.dirname(venv)
+  return path.join(os.homedir(), '.data')
+}
+
+/** ASR venv python, derived from the data dir (env BOT_ASR_PYTHON still wins). */
+function asrVenvPython() {
+  return path.join(asrDataDir(), 'asr-venv', 'bin', 'python')
+}
+
 function cudaLibPath() {
-  const base = '/home/feiyu/.data/asr-venv/lib/python3.11/site-packages/nvidia'
+  const base = path.join(asrDataDir(), 'asr-venv', 'lib', 'python3.11', 'site-packages', 'nvidia')
   return [
     path.join(base, 'cublas', 'lib'),
     path.join(base, 'cudnn', 'lib'),
@@ -64,7 +80,7 @@ function cudaLibPath() {
 export function asrPython() {
   const cands = [
     process.env.BOT_ASR_PYTHON,
-    '/home/feiyu/.data/asr-venv/bin/python',
+    asrVenvPython(),
     '/usr/bin/python3',
   ].filter(Boolean)
   for (const p of cands) {
@@ -249,7 +265,7 @@ async function transcribe(wav, opts = {}) {
   const py = asrPython()
   if (!py) return null
   const c = CFG()
-  const modelDir = process.env.BOT_ASR_MODEL_DIR || '/home/feiyu/.data/asr-models'
+  const modelDir = process.env.BOT_ASR_MODEL_DIR || path.join(asrDataDir(), 'asr-models')
   const dev = String(opts.device || c.device || 'auto').toLowerCase()
   // LD_LIBRARY_PATH 必须带上 pip 装的 CUDA 库，否则 ct2 找不到 libcublas.so.12
   const env = {
