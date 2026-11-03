@@ -42,7 +42,10 @@ export function startle(stim = {}, now = Date.now()) {
   // 静默期恢复（配体 0），再给一响的占据窗：内化量 = 占用 x 时间，
   // 所以 30s 内第二响的膜受体少、信号弱；几分钟静默后基本复原。
   const arc = { kInternalize: K_INT_STARTLE, kRecycle: K_REC_STARTLE }
-  const gap = Math.min(Math.max(0, now - Number(pool.at || 0)), MAX_GAP_MS)
+  // ⚠ receptor 的 st.at 是**内部累积时间**（at += dt），不是墙上时钟 ——
+  // 间隔必须用自己的 lastFireAt 算。用 pool.at 会得到 epoch 级 gap，
+  // 被上限截成 10min 后池子直接回满，习惯化永远不出现（实测三连 0.88）。
+  const gap = lastFireAt ? Math.min(Math.max(0, now - lastFireAt), MAX_GAP_MS) : 0
   pool = rec.evolveLong(pool, 0, gap || 1, arc).r
   const drive = Math.min(1, s)
   const sig = rec.evolve(pool, drive, STIM_WINDOW_MS, arc)

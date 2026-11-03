@@ -1,0 +1,47 @@
+{
+  "scenario": "identical max-strength bangs at 0/15/45/90/135/300s",
+  "hits": [
+    {
+      "tSec": 0,
+      "gapSec": 0,
+      "signal": 0.87,
+      "fired": true,
+      "why": "startle"
+    },
+    {
+      "tSec": 15,
+      "gapSec": 15,
+      "signal": 0.464,
+      "fired": true,
+      "why": "startle"
+    },
+    {
+      "tSec": 45,
+      "gapSec": 30,
+      "signal": 0.607,
+      "fired": true,
+      "why": "startle"
+    },
+    {
+      "tSec": 90,
+      "gapSec": 45,
+      "signal": 0.674,
+      "fired": true,
+      "why": "startle"
+    },
+    {
+      "tSec": 135,
+      "gapSec": 45,
+      "signal": 0.668,
+      "fired": true,
+      "why": "startle"
+    },
+    {
+      "tSec": 300,
+      "gapSec": 165,
+      "signal": 0.87,
+      "fired": true,
+      "why": "startle"
+    }
+  ]
+}
