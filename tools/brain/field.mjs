@@ -678,6 +678,22 @@ function senseInner(s = null) {
 }
 
 /** 面板/体检要看的全貌。 */
+/**
+ * C2（2026-11-03）：valence 的**纯读**窥视 —— 不演化、不落盘、永不抛错。
+ * 为什么不用 snapshot()：那一条会跑 evolve()+persist()，热路径上（每次召回）
+ * 推进她的状态场并落盘，等于「读一眼日记，顺手把她的今天改了」。
+ * 读不到/没文件 -> 0（无情绪偏置）。llmState() 家族同款契约：没意见给中性。
+ */
+export function peekValence(now = Date.now()) {
+  try {
+    const raw = readJson(fieldPath(), null)
+    if (!raw || !raw.dims) return 0
+    const st = hydrate(raw)
+    const v = Number(st.dims.valence)
+    return Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0
+  } catch (e) { return 0 }
+}
+
 export function snapshot() {
   const st = evolve()
   return {

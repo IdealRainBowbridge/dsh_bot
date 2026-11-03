@@ -11,6 +11,7 @@ import { search as indexSearch } from './index-inv.mjs'
 import * as facts from './facts.mjs'
 import * as intents from './intents.mjs'
 import * as affect from './affect.mjs'
+import * as field from './field.mjs'
 import { appendJsonl } from './json.mjs'
 import { recallsPath } from './paths.mjs'
 import { relTime } from './clock.mjs'
@@ -147,6 +148,10 @@ export function search({ cues, audience = 'private', now = Date.now(), limit = 6
     for (const ep of rows.filter((r) => r.where?.chat === chat).slice(-40)) addCandidate(ep, 0)
   }
 
+  // C2（2026-11-03）心情一致性回忆：提取被「当前情绪 x 记忆效价」的一致性放大。
+  // 一条乘法，k=0.08 —— 不新建器官文件，不改变加权结构，只是给同分候选
+  // 一个「跟现在的心情对味」的轻推：心情差时糟心事先浮上来，心情好时好事先浮上来。
+  const mood = (() => { try { return field.peekValence(now) } catch { return 0 } })()
   const scored = []
   for (const { ep, lex } of cand.values()) {
     const hit = str[ep.id]
@@ -157,7 +162,9 @@ export function search({ cues, audience = 'private', now = Date.now(), limit = 6
       + w.self * (ep.who?.others?.[0]?.kind === 'owner' ? 1 : 0.4)
       + w.hits * Math.min(1, Number(hit?.hits || 0) / 5)
       + w.entity * ((ep.entities || []).length ? 1 : 0.2)
-    scored.push({ ep, score: Number(s.toFixed(4)), lex })
+    // C2 心境一致性乘法（k=0.08）：mood 与记忆效价同向 -> 分数放大，反向 -> 压低
+    const moodBoost = 1 + 0.08 * mood * Number(ep.feel?.valence || 0)
+    scored.push({ ep, score: Number((s * moodBoost).toFixed(4)), lex })
   }
   scored.sort((a, b) => b.score - a.score)
 
