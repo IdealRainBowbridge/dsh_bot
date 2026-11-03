@@ -11,7 +11,7 @@
 //     **不造默认端点** —— 宁缺勿假）。它在 _chain() 之外，任何主链配置失误
 //     都波及不到它，这就是"侧支"和"备用"的区别。
 //   · 血债 bloodDebt：主链每全灭一次 +1，侧支成功通血一次清零。
-//     血债 >0 后 30s 窗口内的调用会"试跳"侧支（模拟侧支灌注），
+//     血债 >0 期间（=缺血期间）每 ≥30s 试跳一次侧支（模拟侧支灌注持续开放），
 //     连续 5 次试跳健康 = 主链已恢复，血债清零。
 //   · 全灭时 chat() 把侧支级追加进 levels —— 熔断/重试/记账/日志全部复用现有机制。
 //   · noFallback 的调用不烧侧支（尊重"只用主通道"的语义）。
@@ -96,7 +96,7 @@ export function collateralize(levels, opts = {}) {
 /**
  * 试跳（心跳调用，now=当前时间）。纯本地判定，不满足条件连请求都不发：
  *   · 没配侧支 / 没有血债 → 直接返回
- *   · 全灭后 30s 窗口内且距上次试跳 ≥ 窗口 → 发一次探测
+ *   · 距上次试跳 ≥30s → 发一次探测（now 可传合成时间，测试可驱动）
  *   · 探测健康 probes+1，攒满 PROBE_MAX → 血债清零（主链已恢复）
  *   · 探测失败不动血债（不惩罚，下一窗再试）
  */
@@ -105,7 +105,8 @@ export async function sweep(now = Date.now()) {
   if (!(Number(s.bloodDebt) > 0)) return null
   const lvl = level()
   if (!lvl) return null
-  if (now - Number(s.lastTotalFailure || 0) > PROBE_WINDOW_MS) return null
+  // 注：不做"全灭后只试跳 30s"的窗口 —— 那会和试跳间隔互斥（30s 窗口 + 30s 间隔
+  // = 永远只试跳一次，血债永远清不掉）。缺血多久，灌注保持多久；间隔由下一行管。
   if (now - Number(s.lastProbeAt || 0) < PROBE_WINDOW_MS) return null
   let healthy = false
   try {

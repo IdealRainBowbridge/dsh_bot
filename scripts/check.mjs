@@ -645,7 +645,7 @@ const ALLOWED_REVERSE = [
 // 纯函数型（输入->输出，无文件态）在 EVOLVE_PERSIST_EXEMPT 登记，不拦新增。
 const EVOLVE_PERSIST_FILES = ['tools/brain/organ/hpa.mjs', 'tools/brain/field.mjs']
 const EVOLVE_PERSIST_EXEMPT = {
-  // 'tools/brain/xxx.mjs': '纯函数：由调用方决定何时落盘',
+  'tools/brain/micro/receptor.mjs': '纯函数：evolve(r,...) 改传入的受体对象，何时落盘由调用方（neuron.tick/测试）决定',
 }
 function checkEvolvePersist(files) {
   const hit = new Set(
