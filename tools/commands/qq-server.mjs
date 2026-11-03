@@ -310,6 +310,9 @@ export async function run(argv = []) {
       let extra = parsed.marks.filter((m) => m !== '【发了一张图片】').join(' ')   // 图片单独走 VL
       const { text, atMe, images } = { text: parsed.text, atMe: parsed.atMe, images: parsed.images }
 
+      // C5 惊跳反射（2026-11-03）：pre-attentive 门 —— 语义处理之前，身体先一激灵。
+      // 同步纯内存：超阈值 -> 瞬时 NE 小脉冲（不进决策不进记忆不落盘）。
+      try { (await import('../brain/reflex.mjs')).startle({ text, atMe }) } catch (e) { swallow(e, 'qq:startle') }
       // B1 免疫系统（2026-11-03）：入站第一道关卡。主人耐受（自身抗原不打）；
       // 命中即静默丢弃——不进脑、不引用、不回复（沉默也是应答，她不回刷屏者）。
       // 与出站 sanitize 相对：那边"出去的话不漏"，这边"进来的东西不侵"。
