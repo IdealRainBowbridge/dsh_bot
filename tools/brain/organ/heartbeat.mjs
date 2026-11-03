@@ -52,6 +52,7 @@ import * as sleepstage from './sleepstage.mjs'
 import * as collateral from '../../lib/collateral.mjs'
 import * as immune from '../../lib/immune.mjs'
 import * as wound from '../../lib/wound.mjs'
+import * as pain from './pain.mjs'
 
 const MIN = 60_000
 
@@ -180,6 +181,9 @@ export async function beat(now = Date.now()) {
       const wd = wound.tick(now)
       if (wd && wd.infected && wd.infected.length) _log('[wound] 化脓 ' + wd.infected.length + ' 处：' + wd.infected.join('、'))
     } catch (e) { swallow(e, 'beat:wound') }
+    // 痛觉（2026-11-03 · B4）：新伤口 → 快痛（缩手反射：stress 通路 + hpa 脉冲）。
+    // 首次调用只建基线——历史伤不在她醒来时集体喊疼。
+    try { pain.tick(now) } catch (e) { swallow(e, 'beat:pain') }
 
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────
     // 这些是"身体自己在跑的部分"，不是她决定做的事。

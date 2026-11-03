@@ -42,6 +42,7 @@ import { execFile, spawnSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { sanitizeOutbound, sanitizeText } from '../lib/sanitize.mjs'
 import { gate as immuneGate } from '../lib/immune.mjs'
+import { gap as breathGap } from '../lib/breath.mjs'
 
 /** 项目根（起子进程时用来定位 tools/bot.mjs，不能依赖 cwd）。 */
 const BOT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -827,8 +828,12 @@ export async function run(argv = []) {
       if (restText) {
         // 像人一样分条发：一句一条，间隔几百毫秒到一秒多（不是机械固定）
         const bubbles = splitBubbles(restText)
+        // B2 呼吸（2026-11-03）：气泡间隔由呼吸节律出——唤醒高（ne）呼吸浅快、
+        // 气泡密；平静时长而疏。单气泡回复走不到这里，静息不改变行为只改变节奏。
+        let ne = 0.3
+        try { ne = Number(brain.field.evolve()?.dims?.ne ?? 0.3) } catch { /* 读不到就用静息值 */ }
         for (let i = 0; i < bubbles.length; i++) {
-          if (i) await new Promise(r => setTimeout(r, 420 + Math.random() * 900))
+          if (i) await new Promise(r => setTimeout(r, breathGap(Date.now(), ne)))
           await send(target.api, { [target.key]: target.id, message: [{ type: 'text', data: { text: bubbles[i] } }] })
         }
         if (bubbles.length > 1) log(`[qq] 分 ${bubbles.length} 条发`)

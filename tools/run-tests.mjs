@@ -19,6 +19,8 @@ const TESTS = [
   'collateral-test.mjs',     // A1 侧支循环：门控/血债/试跳恢复/describe（2026-11-03）
   'immune-test.mjs',         // B1 免疫系统：耐受/先天模式/抗体记忆/发热/退烧（2026-11-03）
   'wound-test.mjs',          // A2 伤口愈合：登记/化脓/愈合/瘢痕/旧伤复发（2026-11-03）
+  'breath-test.mjs',         // B2 呼吸：周期随唤醒收缩/吸气短呼气长/静息不变行为（2026-11-03）
+  'pain-test.mjs',           // B4 痛觉：快痛缩手反射/复发敏化/基线不喊疼/慢痛愈合即停（2026-11-03）
   'memory-test.mjs',
   'episode-dedup-test.mjs',   // 跨写者双写去重（2026-11-02）
   'watchlog-test.mjs',

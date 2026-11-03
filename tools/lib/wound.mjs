@@ -146,7 +146,7 @@ export function woundSnapshot() {
       infected: act.filter((x) => x.state === 'infected').map((x) => x.kind + ':' + x.subject),
       scars: s.scars.length,
       recurrent: s.stats.recurrent,
-      wounds: act.slice(-5).map((x) => ({ id: x.id, kind: x.kind, subject: x.subject, state: x.state, hits: x.hits, ageMs: Date.now() - x.openedAt })),
+      wounds: act.slice(-5).map((x) => ({ id: x.id, kind: x.kind, subject: x.subject, state: x.state, hits: x.hits, recurrent: !!x.recurrent, ageMs: Date.now() - x.openedAt })),
     }
   } catch { return null }
 }

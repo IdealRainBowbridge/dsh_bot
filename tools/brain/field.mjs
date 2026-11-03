@@ -33,6 +33,7 @@
 //      皮质醇高会拉低效价。没有这一层，各维度就只是几个独立的仪表盘。
 import { readJson, mutateJson } from './json.mjs'
 import { feverSense as immuneFeverSense } from '../lib/immune.mjs'
+import { acheSense as painAcheSense } from './organ/pain.mjs'
 import { fieldPath } from './paths.mjs'
 import * as receptor from './micro/receptor.mjs'
 
@@ -595,6 +596,11 @@ export function sense(s = null) {
   try {
     const fever = immuneFeverSense()
     if (fever) bits.push(fever)
+  // 慢痛（2026-11-03 · B4）：还在流血的伤口 → 钝痛；愈合即停，不背着旧伤喊疼。
+  try {
+    const ache = painAcheSense()
+    if (ache) bits.push(ache)
+  } catch { /* 痛感失败不挡身体感 */ }
   } catch { /* 病感失败就当没病，不能反过来挡身体感 */ }
 
   // ⚠️ 2026-11-02 补：正面信号不能缺。
