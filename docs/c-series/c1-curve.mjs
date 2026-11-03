@@ -12,7 +12,7 @@ process.env.DSH_HOME = path.join(TMP, '.dsh')
 fs.mkdirSync(path.join(TMP, '.dsh'), { recursive: true })
 fs.writeFileSync(path.join(TMP, '.dsh', 'bot.config.json'), JSON.stringify({ owner: { qq: '10000' } }))
 
-const { epFile } = await import('../../tools/brain/paths.mjs')
+const { epFile, hpaPath } = await import('../../tools/brain/paths.mjs')
 const bond = await import('../../tools/lib/bond.mjs')
 const hpa = await import('../../tools/brain/organ/hpa.mjs')
 
@@ -27,7 +27,7 @@ function writeEps(list) {
 }
 
 function runCascade(safetyScenario) {
-  try { fs.rmSync(path.join(TMP, '.data', 'brain', 'meta', 'hpa.json'), { force: true }) } catch { }
+  try { fs.rmSync(hpaPath(), { force: true }) } catch { }
   writeEps(safetyScenario === 'safe'
     ? [{ hAgo: 1, valence: 0.8 }, { hAgo: 3, valence: 0.6 }, { hAgo: 10, valence: 0.5 }]
     : [{ hAgo: 1, valence: -0.75 }, { hAgo: 3, valence: -0.6 }, { hAgo: 10, valence: -0.4 }])

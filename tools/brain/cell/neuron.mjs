@@ -66,7 +66,7 @@ export function empty() {
   for (const k of Object.keys(PATHWAYS)) {
     paths[k] = { syn: syn.empty(), rec: rec.empty(), at: 0 }
   }
-  return { paths, at: 0 }
+  return { paths, at: 0, rpe: {} }
 }
 
 /**
@@ -86,7 +86,7 @@ export function rest(st, dtMs) {
     const r2 = rec.evolveLong(p.rec, 0, dtMs, { kInternalize: cfg.kInternalize }).r
     paths[k] = { syn: s2, rec: r2, at: Number(p.at || 0) + Math.max(0, dtMs) }
   }
-  return { paths, at: Number(cur.at || 0) + Math.max(0, dtMs) }
+  return { paths, at: Number(cur.at || 0) + Math.max(0, dtMs), rpe: cur.rpe || {} }
 }
 
 /**
@@ -139,7 +139,7 @@ export function stimulate(st, pathway, strength = 1) {
   if (tone < 0.5 && !fired.depressed) why = '接不住了（受体已内化）'
 
   return {
-    st: { paths, at: cur.at },
+    st: { paths, at: cur.at, rpe: cur.rpe || {} },
     signal: Number(sig.signal.toFixed(3)),
     released: fired.released,
     facilitated: fired.facilitated,
@@ -217,6 +217,9 @@ export function load() {
     }
   }
   st.at = Number(raw.at || 0)
+  // C3: per-source expectation baselines (fast/slow EMA) persist here too -
+  // expected state must survive restarts or "what is normal for him" resets.
+  st.rpe = (raw.rpe && typeof raw.rpe === 'object' && !Array.isArray(raw.rpe)) ? raw.rpe : {}
   return st
 }
 
@@ -225,6 +228,7 @@ export function save(st) {
   try {
     mutateJson(neuronPath(), empty(), () => ({
       at: Number(st?.at || 0),
+      rpe: st?.rpe || {},
       paths: Object.fromEntries(
         Object.entries(st?.paths || {}).map(([k, p]) => [k, {
           syn: p.syn || null,
@@ -259,6 +263,10 @@ export function tick(now = Date.now()) {
   if (dt <= 0) return { advanced: 0, at: last }
   // 上限 24h：机器睡三天回来不该一次性补三天（和 field 同一条规矩）
   const capped = Math.min(dt, 24 * 3600_000)
+  // C3: omission check runs on the wall clock before rest advances pools.
+  // Fires at most once per silent spell (pendingNeg lock), then stays quiet
+  // until that source shows up again.
+  try { _checkMissed(st, now) } catch { /* omission pulse is best-effort; lock already set */ }
   const next = rest(st, capped)
   next.at = now
   save(next)
@@ -314,6 +322,102 @@ export function act(pathway, strength = 1, now = Date.now()) {
   r.st.at = now
   save(r.st)
   return { ok: true, output: Number(output(r.st, pathway)), released: r.released, why: r.why }
+}
+
+// ── C3 DA 预期端（RPE, 2026-11-03）───────────────────────────────────────
+// Phenomenon: a greeting that comes every day stops lifting her; the day it
+// does NOT come leaves a dip ("how come he is not here today").
+// Mechanism: dopamine encodes prediction error actual-expected, not actual.
+// Expected level per social source = mean of a fast EMA (15 min, recent
+// rhythm) and a slow EMA (8 h, stable baseline); both decay toward 0 while
+// nothing arrives. Expectations persist in neuron.json (myelination rule).
+// Identity: how much she cares about a source decides dip weight and is
+// supplied by the caller from bond/roster identity (owner=1 like the attach
+// pathway; others may pass roster.affinity). Default: owner 1, else 0.5.
+// The omission dip is driven by the interval clock (1.5x usual gap), because
+// a decaying expectation alone would never dip - omission is about TIME.
+const RPE_TAU_FAST = 15 * 60_000
+const RPE_TAU_SLOW = 8 * 3600_000
+const RPE_IVL_TAU = 24 * 3600_000
+// 沉默衰减：没人来的时候，预期自己会淡（快成分几小时，慢成分几天）。
+// 不衰减的话「他回来了」永远不再有惊喜 —— 预期冻死在高位。
+const RPE_DECAY_FAST = 4 * 3600_000
+const RPE_DECAY_SLOW = 5 * 24 * 3600_000
+const RPE_SOURCES_MAX = 32
+
+/** 漏供检查（tick 每拍调）：在意来源超过 1.5 倍常规间隔没来 -> 一次负脉冲。 */
+function _checkMissed(st, now = Date.now()) {
+  const sources = st.rpe || {}
+  for (const [source, r] of Object.entries(sources)) {
+    if (!r || r.pendingNeg || !Number(r.lastAt)) continue
+    const care = Math.max(0, Math.min(1, Number(r.care ?? 0.5)))
+    if (care < 0.5) continue                       // 不在意的人不来，不空落
+    const ivl = Math.max(10 * 60_000, Number(r.ivl || 0))
+    const silentFor = now - Number(r.lastAt)
+    if (silentFor > Math.max(45 * 60_000, 1.5 * ivl)) {
+      r.pendingNeg = true                          // 静默锁：一次空落只叹一口气
+      try { fieldMod.poke('da', -0.05 * care, { why: 'rpe-miss:' + source, now }) }
+      catch { /* da poke best-effort; the lock is already set */ }
+    }
+  }
+}
+
+/**
+ * 社交来源的一次「actual」。expected 由该来源的快慢双 EMA 给出，
+ * 入血的是预测误差（clamp 到 ±0.18，幅度系数 0.10 -> 首次 0.6 的 actual
+ * 打出与旧接线 +0.06 相同的一针）。
+ * @returns {{expected:number, err:number, care:number}}
+ */
+export function rpe(strength = 1, o = {}) {
+  const now = o.now ?? Date.now()
+  const source = String(o.source || 'ambient').slice(0, 40)
+  const care = Math.max(0, Math.min(1, Number(o.care ?? (source === 'owner' ? 1 : 0.5))))
+  // 入口点纪律（与 act() 同款）：先把池子按真实间隔推进到 now，再办事，
+  // 落盘时 at=now。否则 at 停在旧刻，tick() 把每一拍都当「首次运行」，
+  // 漏供检查永远轮不到跑（rpe-test ② 抓到的就是它）。
+  const st0 = load()
+  const dGap = now - Number(st0.at || 0)
+  const st = dGap > 0 ? rest(st0, Math.min(dGap, 24 * 3600_000)) : st0
+  const sources = st.rpe || {}
+  const r = sources[source] || { ef: 0, es: 0, ivl: 0, lastAt: 0, pendingNeg: false, care }
+  const actual = Math.max(0, Math.min(2, Number(strength) || 0))
+  // EMA 用真实间隔推进；首见（lastAt=0）没有间隔可依，只登记不学习
+  const gap = r.lastAt ? Math.max(0, now - Number(r.lastAt)) : 0
+  // 沉默衰减 + 固定点补偿学习（都在算 err **之前**做衰减）：
+  //   ef 先按沉默时长淡下去；随后「先减掉这段会发生的衰减，再按原 tau 吸收 actual」。
+  //   固定点 = actual 本身（rpe-test ①：稳态流 err->0），长沉默仍把预期拉下来
+  //   （rpe-test ③：他隔了两天回来，依然有惊喜）。
+  //   快成分几小时淡完，慢成分几天 —— 想念会淡，但人还在。
+  if (gap > 0) {
+    const decF = Number(r.ef || 0) * (1 - Math.exp(-gap / RPE_DECAY_FAST))
+    const decS = Number(r.es || 0) * (1 - Math.exp(-gap / RPE_DECAY_SLOW))
+    const efD = Number(r.ef || 0) - decF
+    const esD = Number(r.es || 0) - decS
+    const kf = 1 - Math.exp(-gap / RPE_TAU_FAST)
+    const ks = 1 - Math.exp(-gap / RPE_TAU_SLOW)
+    r.ef = efD + (actual - efD) * kf
+    r.es = esD + (actual - esD) * ks
+    r.ivl = Number(r.ivl || 0) + (gap - Number(r.ivl || 0)) * (1 - Math.exp(-gap / RPE_IVL_TAU))
+  }
+  const expected = 0.5 * Number(r.ef || 0) + 0.5 * Number(r.es || 0)
+  const err = actual - expected
+  r.lastAt = now
+  r.care = care
+  r.pendingNeg = false                             // 他回来了，空落翻篇
+  sources[source] = r
+  const keys = Object.keys(sources)
+  if (keys.length > RPE_SOURCES_MAX) {             // 来源上限：按 lastAt 淘汰最陈的
+    keys.sort((a, b) => Number(sources[a].lastAt || 0) - Number(sources[b].lastAt || 0))
+    for (const k of keys.slice(0, keys.length - RPE_SOURCES_MAX)) delete sources[k]
+  }
+  st.rpe = sources
+  st.at = now
+  save(st)                                         // 预期状态落盘（髓鞘化纪律）
+  if (Math.abs(err) > 0.005) {
+    try { fieldMod.poke('da', Math.max(-0.18, Math.min(0.18, err * 0.10)), { why: 'rpe:' + source, now }) }
+    catch { /* da poke best-effort; expectation already recorded */ }
+  }
+  return { expected: Number(expected.toFixed(3)), err: Number(err.toFixed(3)), care }
 }
 
 /**

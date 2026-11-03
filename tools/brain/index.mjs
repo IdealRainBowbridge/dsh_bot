@@ -24,6 +24,7 @@ import * as taskqueue from './taskqueue.mjs'
 import * as backfill from './backfill.mjs'
 // 2026-11-02：状态场 / 节律 / 内心 —— 让"她"这件事在代码里有形状
 import * as field from './field.mjs'
+import * as neuronMod from './cell/neuron.mjs'
 import * as rhythm from './rhythm.mjs'
 import * as inner from './inner.mjs'
 // 2026-11-02：器官层 —— 细胞组成器官，器官组成身体
@@ -111,9 +112,12 @@ export function onEvent(input = {}) {
       const a = Number(feel.arousal || 0.3)
       if (v) field.poke('valence', v * 0.22, { why: 'event:' + ev.act, now: ev.at })
       if (a > 0.5) field.poke('ne', (a - 0.5) * 0.25, { why: 'event:arousal', now: ev.at })
-      // 他在叫她、或问了需要回答的事 → 一点多巴胺（被需要本身是奖赏）
+      // 他在叫她、或问了需要回答的事 → 一点多巴胺（被需要本身是奖赏）。
+      // C3（2026-11-03）：入血的是预测误差 actual-expected，不是 actual 本身 ——
+      // 天天都来的问候不再额外飙升（RPE 收敛到 0），突然停供会在
+      // 1.5 倍常规间隔后由 neuron.tick 出一次负脉冲（「他今天怎么没来」）。
       if (ev.who.kind === 'owner' && /在吗|在不在|帮我|想你了|[?？]/.test(String(ev.text || ''))) {
-        field.poke('da', 0.06, { why: 'owner:at-me', now: ev.at })
+        neuronMod.rpe(0.6, { source: 'owner', care: 1, now: ev.at })
       }
       // 夜里还醒着 = 欠觉（按真实小时数累积，不按次数）
       const hod = new Date(ev.at).getHours()

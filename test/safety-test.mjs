@@ -19,7 +19,7 @@ process.env.DSH_HOME = path.join(TMP, '.dsh')
 fs.mkdirSync(path.join(TMP, '.dsh'), { recursive: true })
 fs.writeFileSync(path.join(TMP, '.dsh', 'bot.config.json'), JSON.stringify({ owner: { qq: '10000' } }))
 
-const { epFile } = await import('../tools/brain/paths.mjs')
+const { epFile, hpaPath } = await import('../tools/brain/paths.mjs')
 const bond = await import('../tools/lib/bond.mjs')
 const hpa = await import('../tools/brain/organ/hpa.mjs')
 
@@ -68,7 +68,7 @@ console.log(`ok ③ mapping hi=${hi.toFixed(2)} lo=${lo.toFixed(2)}`)
 
 // ── ④ hpa 增益衰减：峰降 + 峰时刻不变 + 级联 tau 不动 ──────────────────
 function cascade(safetyScenario, strength = 2) {
-  try { fs.rmSync(path.join(TMP, '.data', 'brain', 'meta', 'hpa.json'), { force: true }) } catch { }
+  try { fs.rmSync(hpaPath(), { force: true }) } catch { }
   writeEps(safetyScenario === 'safe' ? [{ hAgo: 1, valence: 0.8 }, { hAgo: 3, valence: 0.6 }] : [{ hAgo: 1, valence: -0.75 }, { hAgo: 3, valence: -0.6 }])
   hpa.stress(strength, { now: NOW, why: 'c1-test' })
   const series = []
