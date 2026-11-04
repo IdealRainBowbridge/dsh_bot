@@ -362,7 +362,8 @@ export function fontFile(cfg = config()) {
   const cands = [
     cfg.video?.font,
     'C:/Windows/Fonts/msyhbd.ttc', 'C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/simhei.ttf',
-    HOME ? `${HOME}/.bot-ai/fonts/NotoSansCJK.ttc` : '',
+    HOME ? `${HOME}/.data/fonts/NotoSansCJK.ttc` : '',
+    HOME ? `${HOME}/.bot-ai/fonts/NotoSansCJK.ttc` : '',  // 旧目录兜底,数据根迁移前的部署
     '/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc',
     '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',
     '/usr/share/fonts/noto-cjk/NotoSansCJK-Light.ttc',
