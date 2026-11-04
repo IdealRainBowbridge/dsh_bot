@@ -209,13 +209,18 @@ const B = await import('../lib/dsh-bridge.mjs')
 
 // ── ⑥ registerBridge：缺服务只降级，不炸 ─────────────────────────────────
 {
+  // 模拟真实 cordis Context：服务只能经 get(name, false) 取；裸属性访问要抛
+  // （实测「cannot get property \"tools\" without inject」把桥整条打死过）。
   const registered = []
+  const services = { tools: { register: (def) => { registered.push(def.name); return () => {} } } }
   const ctx = {
     effect: () => () => {},
-    tools: { register: (def) => { registered.push(def.name); return () => {} } },
     on: () => () => {},
+    get: (name, strict) => (name in services ? services[name] : undefined),
+    get tools() { throw new Error('cannot get property "tools" without inject') },
   }
   const r = B.registerBridge(ctx)
+  ok('只经 ctx.get 取服务（裸属性访问会抛，仍然接上）', r.registered === true, r.reason)
   ok('有 tools 服务 → registered=true', r.registered === true && r.reason === 'ok')
   ok('注册进去的工具数与 buildTools 一致', registered.length === B.buildTools().length, `${registered.length}`)
   ok('返回里列出工具名', r.tools.length === registered.length)
@@ -224,7 +229,7 @@ const B = await import('../lib/dsh-bridge.mjs')
 }
 
 {
-  const ctx = { effect: () => () => {}, on: () => () => {} } // 没有 tools
+  const ctx = { effect: () => () => {}, on: () => () => {}, get: () => undefined } // 没有 tools
   let threw = null
   let r
   try { r = B.registerBridge(ctx) } catch (e) { threw = e }
@@ -239,13 +244,13 @@ const B = await import('../lib/dsh-bridge.mjs')
   const ctx = {
     effect: () => () => {},
     on: () => () => {},
-    tools: {
+    get: () => ({
       register: (def) => {
         if (def.name === 'bot_state') throw new Error('名字被占了')
         okNames.push(def.name)
         return () => {}
       },
-    },
+    }),
   }
   const r = B.registerBridge(ctx)
   ok('一个工具注册失败时其余照常', r.registered === true && okNames.length === B.buildTools().length - 1, `${okNames.length}`)

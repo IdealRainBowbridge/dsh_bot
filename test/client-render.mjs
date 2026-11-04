@@ -42,6 +42,11 @@ const RESPONSES = {
     ok: true, today: '2026-10-24', scheduler: { ok: true, reason: '已启动' },
     sharesToday: 1, sharesMax: 3, commentsToday: 4, mood: { value: 62, hunger: 12 },
     dryRun: false, selftestPassed: true, ownerSet: true, configPath: 'C:/Users/x/.dsh/bot.config.json',
+    // 2026-11-04：接管实况（面板要能显示"到底成没成"，而不只是"开关开没开"）
+    takeover: { enabled: true, registered: true, chars: 1826, blocks: ['core', 'persona', 'identity'], missingPersona: false,
+      persona: { ok: true, reason: '', chars: 2894 }, verified: true, verifyReason: 'sole-complete-section' },
+    bridge: { registered: true, reason: 'ok', tools: ['bot_recall', 'bot_remember', 'bot_state', 'bot_diary', 'bot_tell_owner', 'bot_act'],
+      cli: { names: 49, source: 'parsed' }, memory: { attached: true, state: null } },
   },
   '/dsh_bot/api/services': { ok: true, services: { qq: { running: true, pid: 1234 }, wechat: { running: false, pid: null } } },
 }
@@ -183,6 +188,12 @@ const broken = allSwitches.filter((n) =>
   n.props.role !== 'switch' || n.props['aria-checked'] === undefined || typeof n.props.onClick !== 'function')
 assert.equal(broken.length, 0, '每个开关都要 role=switch / aria-checked / onClick，实际坏 ' + broken.length + ' 个')
 assert.ok(allSwitches.length >= 20, '开关数量不应骤减（现有 ' + allSwitches.length + ' 个）')
+
+// 接管实况三块（2026-11-04）：面板必须能显示"真的生效了"而不是只有开关状态。
+// 只钉标签与关键值，不钉样式 —— 钉样式等于把每次视觉调整变成红灯。
+for (const must of ['人格接管', '能力桥', '人设文件', '生效中', '6 个工具', '正常 · 2894 字符']) {
+  assert.ok(text.includes(must), '接管实况缺少：' + must + '（现有文本里没有）')
+}
 
 assert.ok(fetchCalls.includes('/dsh_bot/api/config'), '没有请求 /config')
 assert.ok(styleTags.length >= 1, '样式没注入')

@@ -164,6 +164,34 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-check span.no{color:#c9564d}
 `;
 
+		// ── 接管实况（2026-11-04）：三个探针 = 人格接管是否真生效 / 能力桥是否接上 / 人设文件是否可用。
+		// 单独立成组件是因为 FeiyuSection 有 900 行额度（门禁 FUNC_ALLOW），而它只吃 status 一个输入，
+		// 抽出来既不动主闭包状态、又能被 client-render 单独覆盖。三种失败在用户眼里长得一模一样
+		// （"她还是那个编码 agent"），所以必须摊开说。
+		function StatusProbe(props) {
+			const st = props.status || {};
+			const tk = st.takeover || {}, br = st.bridge || {}, pm = tk.persona || null;
+			const off = tk.enabled === false;
+			const tkOk = off || tk.verified === true;
+			const tkLabel = off ? "已关闭" : tk.verified === true ? "生效中" + (tk.chars ? " · " + tk.chars + " 字符" : "") : tk.verified === false ? "未生效" : "未验证";
+			const tkWhy = off ? "接管开关是关的，DSH 会话用宿主原生提示词。"
+				: tk.verified === false ? "装配校验失败：" + (tk.verifyReason || "未知原因")
+					: tk.verified === null ? "这版 DSH 不支持装配校验（段已注册：" + (tk.registered ? "是" : "否") + "）。" : "complete 段 " + (tk.blocks || []).join("/") + " · " + (tk.chars || 0) + " 字符。";
+			const brOk = !!br.registered;
+			const brWhy = brOk ? "她能用的手：" + (br.tools || []).join(" / ") + "（命令白名单 " + ((br.cli && br.cli.names) || 0) + " 项）"
+				: "能力桥没接上（" + (br.reason || "未知") + "）—— DSH 会话里她够不着自己的记忆/B站/看番，只能靠 shell 拼命令。";
+			const pmOk = !pm || pm.ok !== false;
+			return [
+				h("div", { className: "fy-stats", style: { marginTop: 8 }, key: "probe" },
+					h("div", { className: "fy-chip" + (tkOk ? "" : " bad"), title: tkWhy }, "人格接管 ", h("b", null, tkLabel)),
+					h("div", { className: "fy-chip" + (brOk ? "" : " bad"), title: brWhy },
+						"能力桥 ", h("b", null, brOk ? (br.tools || []).length + " 个工具" + (br.memory && br.memory.attached ? " · 记忆已接" : "") : (br.reason === "no-tools-service" ? "无工具服务" : "未接入"))),
+					h("div", { className: "fy-chip" + (pmOk ? "" : " warn"), title: pmOk ? "persona.md 正常参与装配。" : "人设不可用，已用核心锚点兜底（原因：" + (pm && pm.reason) + "）" },
+						"人设文件 ", h("b", null, !pm ? "未检查" : pm.ok ? "正常 · " + pm.chars + " 字符" : "不可用（已兜底）"))),
+				!tkOk ? h("span", { className: "fy-hint", style: { marginTop: 6, color: "#c0392b" }, key: "tk-warn" }, "⚠️ " + tkWhy + " —— 现在 DSH 新会话里她可能还是宿主原生人格。") : null,
+				!brOk ? h("span", { className: "fy-hint", style: { marginTop: 6 }, key: "br-warn" }, "⚠️ " + brWhy) : null];
+		}
+
 		function useStyles() {
 			useEffect(() => {
 				const id = "dsh_bot/client";
@@ -530,7 +558,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							h("span", { className: "fy-dot" + (schedulerOn ? "" : " off") }),
 							"生物钟 ", h("b", null, schedulerOn ? "运行中" : "停着")),
 						h("div", { className: "fy-chip" },
-														"QQ状态 ", h("b", null, presence ? (presence.why || "在线") : "—")),
+							"QQ状态 ", h("b", null, presence ? (presence.why || "在线") : "—")),
 						h("div", { className: "fy-chip" }, "今日评论 ", h("b", null, (status && status.commentsToday) || 0), " 条"),
 						h("div", { className: "fy-chip" }, "今日分享 ",
 							h("b", null, (status && status.sharesToday) || 0), "/", (status && status.sharesMax) || 0),
@@ -566,6 +594,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						}),
 						h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 240px" } },
 							"开 = DSH 里所有会话都是她（宿主身份/编码 agent 设定全部让位，工具照常可用）；关 = 用 DSH 原生系统提示词。")),
+					// 接管实况（2026-11-04）：开关说的是「想不想」，这里说的是「到底成没成」。
+					// 三个探针的判定与文案全在模块级的 StatusProbe() 里 —— 主面板不再为它长行数。
+					h(StatusProbe, { status }),
 					// 通道健康：进程活着 ≠ 能收发。QQ 要看 NapCat 网关，微信要看心跳
 					h("div", { className: "fy-stats", style: { marginTop: 10 } },
 						h("div", { className: "fy-chip" + (napcatOk ? "" : " bad") },
@@ -1097,10 +1128,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								short(e.text, 96)))
 							: h("div", { className: "fy-mem-item" }, "还没有记忆 —— 她醒过之后会开始记"))),
 
-				// 页脚
-				h("div", { className: "fy-hint", style: { paddingLeft: 2 } },
-					"配置文件：", cfgPath || "~/.dsh/bot.config.json",
-					"（面板改动即时写入，下次唤醒/重启生效）"));
+				h("div", { className: "fy-hint", style: { paddingLeft: 2 } }, "配置文件：", cfgPath || "~/.dsh/bot.config.json", "（面板改动即时写入，下次唤醒/重启生效）"));
 		}
 
 		// ── 客户端插件入口 ────────────────────────────────────────────────────
