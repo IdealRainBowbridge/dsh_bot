@@ -507,3 +507,15 @@ web-log.md（上网）/ bili-outbox.md（B站发言）/ selfup-log.md（自我�
 ---
 
 *本文档由 2026-10-25 全天对话（33 commits：332c5ca→ff35b19）生成。接手者请先跑一次 `selftest`，然后放她自由，去 web-log.md 看看她今天在想什么。*
+
+
+---
+
+## 附:2026-11-04/05 修缮轮新增组件(晓宇)
+
+两轮六循环(平台面 + 功能面)后新增的常驻组件,接手者必知:
+
+- **lib/watchdog.mjs**:桥/接管/进程三线巡检,5 分钟一轮,异常 QQ 告警(60min 节流),快照 ~/.data/watchdog.json。console 拦截 ValidationError/without inject 升级告警。
+- **patch-dsh-web-redact.py**(宿主 dsh/ 持久,entry.sh 每次启动自动重跑):dsh-web-app 双补丁——①URL token 脱敏 ②DSH_NO_BROWSER_HANDOFF 关无效 browser spawn。幂等;上游重构会打印 CHANGED-UPSTREAM 提示人工检查。
+- **字体**:video.mjs fontFile 兜底已指向 ~/.data/fonts/,config.video.font 同步。
+- 详见 HANDOFF-20261105-第二轮六循环.md 与本地 hardening-rounds 两份报告。
