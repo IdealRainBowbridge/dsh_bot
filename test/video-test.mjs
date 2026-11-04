@@ -434,10 +434,10 @@ await ok('同步校验：配音挪进混音里能被算出来，偏差 ≤0.06s�
   assert.ok(r[0].score > 0.5, `相关系数只有 ${r[0].score}`)
 })
 
-await ok('漏字闸门：13 字念 1.07 秒 = 12.2 字/秒，必须被拦下来', () => {
-  assert.equal(P.speakChars('本鱼叫理想的机械人，住在用户电脑里。'), 13)
+await ok('漏字闸门：16 字念 1.07 秒 = 15 字/秒，必须被拦下来', () => {
+  assert.equal(P.speakChars('本鱼叫理想的机械人，住在用户电脑里。'), 16)
   assert.equal(P.speakChars('规矩就一条：别叫本鱼胖，哼。'), 11)
-  assert.ok(13 / 1.07 > 6.0, '这条必须被判为离谱')
+  assert.ok(16 / 1.07 > 6.0, '这条必须被判为离谱')
   const s = read('tools/commands/produce.mjs')
   // 判据窗口：下限放到 2.4（她的"温柔/撒娇"语气其实很慢），上限 6.0（超过就是句尾被吃了）
   assert.match(s, /RATE_OK = \[2\.4, 6\.0\]/)
