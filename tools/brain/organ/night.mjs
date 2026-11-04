@@ -49,6 +49,7 @@ import * as field from '../field.mjs'
 import * as hpa from './hpa.mjs'
 import { readJson, writeJsonAtomic } from '../json.mjs'
 import { nightWorkPath, sleepPath } from '../paths.mjs'
+import { dataPath } from '../../lib/paths.mjs'
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const MIN = 60_000
@@ -410,4 +411,66 @@ export function snapshot(now = Date.now()) {
     duty: st.inSleep ? duty(now) : null,
     lastNight: st.lastNight,
   }
+}
+
+/**
+ * 睡眠状态机看门狗（编排层入口）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么这一层必须在 night 而不是 sleepstage
+ * ══════════════════════════════════════════════════════════════════════
+ * `sleepstage.reconcile()` 只认"是否超时"，不认"结算链是不是还活着"。
+ * 而后者需要读两个**编排层**的文件：
+ *   · `night-work.json` —— 这一觉的 plan（决定上限该按几小时算）
+ *   · `sleep-state.json` —— sleep 命令自己的进度（决定命令是否还在跑）
+ *
+ * 让器官去认识这两个文件的形状，就是把编排层的记账塞进器官的语义里 ——
+ * `beginSleep` 的注释里已经写过同样的判断（"改了会破坏器官的状态机语义"）。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 防误杀（这一条比"能不能醒"更重要）
+ * ══════════════════════════════════════════════════════════════════════
+ * 卡死与"正在跑一次很慢的维护"在时间上看不出差别。唯一能区分的是
+ * `sleep-state.json.started`：命令正常 30~90 秒跑完，进程被杀了这个文件
+ * 就永远停在 `sleeping:true` 加一个很老的 `started`。
+ *
+ * 两重保护：
+ *   ① plan 存在且距今 < 10 分钟 → 这一觉是真的在跑，不打断
+ *   ② `sleep-state.started` 距今 < 30 分钟 → 命令还在跑，不打断
+ *
+ * 反过来说：这两个都过期，她才真的卡住了。
+ */
+export async function watchSleep(now = Date.now()) {
+  let plannedMin = 0
+  try {
+    const ns = readJson(nightWorkPath(), null)
+    // plan 只在这一觉期间有效：它写在入睡那一刻，10 分钟后就是上一觉的残留
+    if (ns && ns.plan && typeof ns.plan.minutes === 'number' && now - Number(ns.at || 0) < 10 * 60_000) {
+      plannedMin = Number(ns.plan.minutes) || 0
+    }
+  } catch { /* 没有 plan 就走硬上限 */ }
+
+  let inProgress = false
+  try {
+    const ss = readJson(dataPath('sleep-state.json'), null)
+    if (ss && ss.sleeping) {
+      const age = now - Number(ss.started || 0)
+      inProgress = age >= 0 && age < 30 * 60_000
+    }
+  } catch { /* 读不到 = 没有进度文件 = 命令没在跑 */ }
+
+  const r = stage.reconcile(now, { plannedMin, inProgress })
+  if (!r.woke) return r
+
+  // 醒来要顺手做两件**编排层**的事，器官自己不知道：
+  //   ① 节律收尾（rhythm.awake 会据此调相位 —— endSleep 里也是这一步）
+  //   ② 在线状态切回（睡着时 presence 返回 null，状态永远停在 dnd）
+  try { rhythm.awake(now) } catch (e) { swallow(e, 'night:watch:rhythm') }
+  // 懒加载：status.mjs → channel-io → … 与 brain 有环，静态导入会让模块图卡死。
+  try {
+    const m = await import('../../commands/status.mjs')
+    if (typeof m.setOnline === 'function') await m.setOnline('online')
+    r.online = true
+  } catch (e) { swallow(e, 'night:watch:online') }
+  return r
 }

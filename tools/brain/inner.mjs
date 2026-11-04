@@ -46,7 +46,7 @@ const HOUR = 3_600_000
 const MAX_KEEP = 60            // 常驻的活跃想法上限
 const SEED_HOURS = 6           // 想法每 6 小时自然变淡一次
 
-const empty = () => ({ items: [], updatedAt: 0 })
+const empty = () => ({ items: [], updatedAt: 0, settledLoad: 0 })
 
 function hydrate(raw) {
   const st = { ...empty(), ...(raw || {}) }
@@ -97,11 +97,27 @@ export function think(text, o = {}) {
   const now = o.now ?? Date.now()
   const st = fade(now)
   const id = 'th-' + shortHash(t + '|' + now, 8)
-  // 同义重复：只加权重，不新增（人不会把同一件事记十遍，但会越想越重）
+  // 同义重复：加权重，不新增（人不会把同一件事记十遍，但会越想越重）
+  //
+  // ⚠️ 2026-11-04：这里原来是 `+0.8` 的线性累加，5 次就顶到 6.0 上限。
+  //    而调用方是每 30 秒一拍的心跳（`composeThought` → `think(kind:'reflect')`），
+  //    于是**同一个念头在 3 分钟内就到顶**，之后永远是最响的那条。
+  //    实测：inner 池 60 条、51 条 reflect、前 8 条 weight 全是 6.00，
+  //    内容都是"先睡/六件事/写下来"——她变成了只会念同一段咒的人。
+  //
+  //    改成**饱和式**：越接近上限增量越小（1.0 时 +0.8，3.0 时 +0.37，5.0 时 +0.08）。
+  //    真实的人反复想起同一件事，边际加重是递减的：第一次想到很重，
+  //    第十次想到只会觉得"又是这个"。线性累加把"执念"当成了默认，
+  //    而执念应该是**例外**，不是每拍都会发生的常态。
   const dup = st.items.find((x) => !x.told && similar(x.text, t))
   if (dup) {
-    dup.weight = Math.min(6, Number(dup.weight || 1) + 0.8)
+    const w = Number(dup.weight || 1)
+    const step = Math.max(0.05, 0.8 * (1 - w / 6))
+    dup.weight = Math.min(6, w + step)
     dup.at = now
+    // 重复次数单独记：weight 饱和之后，还想知道"她想起过多少次"就只能靠它。
+    // 不拿它算权重（那会让"想得多"重新变成"更重要"）。
+    dup.hits = Number(dup.hits || 1) + 1
     st.updatedAt = now
     return persist(st)
   }
@@ -174,6 +190,10 @@ export function innerBlock(n = 2, now = Date.now()) {
     const stuck = (!x.told && ageH > 20) ? '（一直没说出来）' : ''
     return '- ' + x.text + stuck + '（' + when + '）'
   })
+  // 进了提示词就算"被想起"了一次 → 轻微变淡（见 usedMany 的注释）。
+  // 这一步是回路的下半截：没有它，同一批念头会被每轮原样重复注入，
+  // 而她读到"心里正转着的"永远是那三条，于是她只会说那三件事。
+  try { usedMany(top.map((x) => x.id), now, 0.25) } catch { /* 记账失败不挡提示词 */ }
   return '【你心里正转着的】\n' + lines.join('\n') + '\n\n' +
     '上面这些是你自己的想法，**不是要发出去的内容**。别照着复述，也别一条条清空 —— ' +
     '你现在能想到什么就说什么，想不到就只说眼前这句。'
@@ -184,18 +204,99 @@ export function innerBlock(n = 2, now = Date.now()) {
 /**
  * 把积压的"想说没说"折成 field 的 tension。
  *
- * 这一条是**闭合回路**的关键：没有它，想法只是个列表；
- * 有了它，"她惦记着这件事"才会真的改变她的状态、进而改变她说话的样子。
+ * ══════════════════════════════════════════════════════════════════════
+ * 2026-11-04 修：这是一个**累加器**，而它被当成一次性的冲量在用
+ * ══════════════════════════════════════════════════════════════════════
+ * 改前：每拍（30 秒）算一次 `load`，然后 `poke('tension', min(2.5, load*0.12))`。
+ * `poke` 是冲量语义（"世界推了她一下"，之后靠 tau 弛豫回去），
+ * 但这里每 30 秒推一次同样大小的冲量 —— 等于把冲量变成恒定流。
+ *
+ * 实测（2026-11-04 15:42）：`tension = 5.99999`（上限 6.0），
+ * field.log 里 `inner:pending +2.5` 从 07:15 一直刷到 15:42，**每 30 秒一条**。
+ * 而 `tension` 的 tau 是 6 小时 —— 弛豫速度根本追不上每拍 +2.5。
+ *
+ * 上游还有第二个洞：`told()` 全仓**零调用**（grep 无命中）。
+ * 念头永远不会被标记成"说过了" → `pending` 永远是同一批 → load 恒定 →
+ * 每拍都判定"你还有一堆话没说" → 压力顶格。这是一条自激回路。
+ *
+ * 后果不是"她压力大"，而是她**变成了只会想同一件事的人**：
+ * inner 池 60 条里 51 条 reflect，前 8 条 weight 全部顶到 6.00 上限，
+ * 主题全是"先睡/六件事/写下来"。她每次开口都在念同一段咒。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 修法：增量语义（这是本轮唯一必要的改动）
+ * ══════════════════════════════════════════════════════════════════════
+ * 冲量只在**积压增加时**施加，且大小 = 增量而不是总量：
+ *
+ *   Δload = max(0, load_now - load_prev)
+ *   poke('tension', min(1.5, Δload * 0.12))
+ *
+ * `load_prev` 落盘在 inner.json。这样：
+ *   · 同一批念头压着不动 → Δload = 0 → 不再注压（压力靠 tau 自己退）
+ *   · 真的又攒了新念头 → 只按新增量推（推得动，但推不爆）
+ *
+ * 第三条：`loudest()` 被取用即视为"被想起"—— weight 轻微衰减。
+ * 人反复想起同一件事，那件事会**变淡**（已经想透了），不会被想得更重。
+ * 原实现里 `loudest` 是纯读，于是"被想起"和"被冷落"完全一样，
+ * 只有 `think()` 的重复检测会加重 —— 越被读越重的反向激励。
  */
 export function settle(now = Date.now()) {
   const st = fade(now)
   const pending = st.items.filter((x) => !x.told)
   const load = pending.reduce((n, x) => n + Math.max(0, Number(x.weight || 0) - 0.8), 0)
-  if (load > 0.4) {
+  const prev = Number(st.settledLoad || 0)
+  const delta = load - prev
+  // 积压下降时不回抽（欠下的压力不会因为"忘了一件事"就立刻消失），
+  // 只把基线跟着降下来，避免下次攒回来时被重复计一次。
+  st.settledLoad = Number(load.toFixed(3))
+  // 阈值 0.15 而不是 0.4：单条新念头（weight 1.0）贡献的 load 增量正好是 0.2，
+  // 而"一条新念头也该推动一点压力"是这个回路的本意 —— 用 0.4 会把**恰好一条**
+  // 新念头整个吞掉（实测：两条念头 load=0.4，严格大于 0.4 不成立 → 一次都没注压）。
+  // 0.15 让单条新念头推得动，同时挡住 float 抖动的空转。
+  if (delta > 0.15) {
     // 只推 tension，不直接改 valence —— 压力是"心里有事"，不是"心情差"。差别很重要。
-    try { field.poke('tension', Math.min(2.5, load * 0.12), { why: 'inner:pending', now }) } catch (e) { swallow(e, 'inner:settle') }
+    try { field.poke('tension', Math.min(1.5, delta * 0.12), { why: 'inner:pending', now }) } catch (e) { swallow(e, 'inner:settle') }
   }
-  return { pending: pending.length, load: Number(load.toFixed(2)) }
+  // 增量基线要落盘：不落盘的话每次 settle 都从 0 算起，等价于没修。
+  try { persist(st) } catch { /* 写不进去下一拍会重算，不挡业务 */ }
+  return { pending: pending.length, load: Number(load.toFixed(2)), delta: Number(delta.toFixed(2)) }
+}
+
+/**
+ * 念头"被想起"了一次 —— 用到就变淡（不是清零）。
+ *
+ * 谁该调：任何把念头取出去**真的用掉**的地方（innerBlock 进提示词、
+ * composeThought 拿它当素材、日记里写进这一段）。
+ * 不调的地方：纯查询（面板、doctor）—— 看一眼不算想过。
+ *
+ * 为什么衰减而不是置 told：她可能确实还没说出口，只是不再"堵在那儿"。
+ * 置 told 会让念头直接从池子里消失（`loudest` 过滤 told 且 weight<1.2），
+ * 那等于"想起来一次就当说过了"—— 比现在这个 bug 更离谱。
+ */
+export function used(id, now = Date.now(), amount = 0.35) {
+  const st = fade(now)
+  const it = st.items.find((x) => x.id === id)
+  if (!it) return st
+  it.weight = Math.max(0.2, Number(it.weight || 1) - Number(amount || 0))
+  it.lastUsedAt = now
+  st.updatedAt = now
+  return persist(st)
+}
+
+/** 批量版：把一组念头标记为"刚用过"（innerBlock 一次取 2 条）。 */
+export function usedMany(ids = [], now = Date.now(), amount = 0.35) {
+  const st = fade(now)
+  let touched = 0
+  for (const id of ids) {
+    const it = st.items.find((x) => x.id === id)
+    if (!it) continue
+    it.weight = Math.max(0.2, Number(it.weight || 1) - Number(amount || 0))
+    it.lastUsedAt = now
+    touched++
+  }
+  if (!touched) return st
+  st.updatedAt = now
+  return persist(st)
 }
 
 /* ── 原话流：她的一切，一个字不删 ─────────────────────────────────── */
@@ -244,7 +345,12 @@ export function readStream({ from = 0, limit = 200 } = {}) {
 
 function persist(st) {
   try {
-    mutateJson(innerPath(), empty(), () => ({ items: st.items, updatedAt: st.updatedAt }))
+    mutateJson(innerPath(), empty(), () => ({
+      items: st.items,
+      updatedAt: st.updatedAt,
+      // 增量注压的基线：丢掉它，settle 就会每拍从 0 重算 → 回到"每拍都推一次"。
+      settledLoad: Number(st.settledLoad || 0),
+    }))
   } catch (e) { swallow(e, 'inner:persist') }
   return st
 }

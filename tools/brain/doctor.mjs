@@ -22,6 +22,7 @@ import * as bond from '../lib/bond.mjs'
 import * as fieldMod from './field.mjs'
 import * as reflexMod from './reflex.mjs'
 import * as rhythmMod from './rhythm.mjs'
+import * as sleepM from './organ/sleepstage.mjs'
 import { neuronPath } from './paths.mjs'
 
 function ok(name, pass, detail = '') {
@@ -115,6 +116,33 @@ export function run({ measurePrompt = true, now = Date.now() } = {}) {
     const rs = reflexMod.snapshot()
     items.push(ok('C5 反射弧就位', rs.threshold === 0.75, `阈值 ${rs.threshold}，弧上 ${rs.tone}，不应期余 ${rs.refractoryIn}ms`))
   } catch (e) { items.push(ok('C5 反射弧就位', false, String(e?.message || e))) }
+
+  // B12 睡眠状态机没卡死（2026-11-04）。
+  //
+  // 这一项存在的原因：`inSleep=false` 只能由 wake() 写，而 wake() 的唯一生产调用方
+  // 是 spawn 出去的 sleep 子进程。子进程没起来 → 状态位永久 true →
+  // 睡眠债冻结 → 她对外表现成"一直想睡觉"。
+  //
+  // 实测事故：卡了 44 小时，`sleep.json.history` 空、`sleep-state.json` 根本不存在。
+  // 而**所有别的体检项都是绿的** —— 记忆在跑、交付有账、提示词没超预算。
+  // 这正是"体检绿着、人已经坏了"的形状，所以必须单独占一项。
+  try {
+    const sn = sleepM.snapshot(now)
+    // 上限判据与看门狗同源（sleepLimitMin），计划时长读 night 的编排层入口，
+    // 但 doctor 不该为了一个读数去拼 night-work.json 的形状，所以这里用硬上限口径：
+    // 有计划时看门狗会用更紧的数（计划×1.6），doctor 报硬上限只作"最坏情况"兜底。
+    const limit = sleepM.sleepLimitMin(0)
+    const stuck = sn.inSleep && Number(sn.elapsedMin || 0) > limit
+    items.push(ok(
+      'B12 睡眠状态机没卡死',
+      !stuck,
+      sn.inSleep
+        ? (stuck
+          ? `已睡 ${sn.elapsedMin} 分钟 > 上限 ${Math.round(limit)}（看门狗下一拍会结算）`
+          : `在睡 ${sn.elapsedMin} 分钟（上限 ${Math.round(limit)}）`)
+        : `醒着，上次 ${sn.lastNight?.sleptMin ?? '?'} 分钟${sn.lastNight?.reason ? ' / ' + sn.lastNight.reason : ''}`,
+    ))
+  } catch (e) { items.push(ok('B12 睡眠状态机没卡死', false, String(e?.message || e))) }
 
   if (measurePrompt) {
     try {

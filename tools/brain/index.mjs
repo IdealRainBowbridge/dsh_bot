@@ -267,9 +267,14 @@ export function tick(now = Date.now()) {
   return out
 }
 
-/** 巩固（CLI / 子进程调用）。chatFn 可选，不传就只跑规则。 */
-export function runConsolidation({ now = Date.now(), chatFn = null, dryRun = false } = {}) {
-  const r = consolidate.run({ now, chatFn, dryRun })
+/** 巩固（CLI / 子进程调用）。chatFn 可选，不传就只跑规则。
+ *
+ * 2026-11-04：随 consolidate.run 一起改成 async（chatFn 是 async 的，见那边的注释）。
+ * 调用方必须 await —— 不 await 会拿到一个 Promise，`r.processed` 全是 undefined，
+ * 于是日志里"处理了 undefined 条"而实际什么都没写完。
+ */
+export async function runConsolidation({ now = Date.now(), chatFn = null, dryRun = false } = {}) {
+  const r = await consolidate.run({ now, chatFn, dryRun })
   try { if (!dryRun) rebuildDerived({ now }) } catch (e) { swallow(e, 'index:runConsolidation') }
   return r
 }

@@ -68,10 +68,34 @@ export function readResults(stamp) {
 async function jobTidy() {
   const brain = await import('../brain/index.mjs')
   let r = { processed: '?' }
+  // ⚠️ 2026-11-04：**必须传 chatFn，否则巩固的 LLM 抽取整段是死的。**
+  //
+  // `consolidate.run()` 的签名是 `{ chatFn }`，不传就只跑规则抽取。
+  // 而这里原来写的是 `runConsolidation({ now })` —— 于是：
+  //   · ruleFacts 只认主人亲口说的 5 条正则（吃/在做什么/要去/情绪/《作品》）
+  //   · 实测 40 条 episode 里大多数是"她自己说的"和"群友说的"，正则一条都抽不到
+  //   · 结果 sem/ 里 facts 0 / intents 0 / schemata 0 / competence 0
+  //     —— 巩固"跑了 25/36 条"，产出是零。这就是"供血缺失"的形状。
+  //
+  // 档位选 fast（不是 deep）：这是批量抽取，每条 cluster 一次调用，
+  // 一天几十个 cluster，用 deep 档会把这台机器烧穿。
+  // max_tokens 400 与 commands/brain.mjs 的 --llm 路径保持一致（同一件事两个入口，
+  // 参数不一致就会"手动跑有效果、夜里跑没效果"，那种 bug 最难查）。
+  let chatFn = null
   try {
-    const c = brain.runConsolidation({ now: Date.now() })
+    const llm = await import('../lib/llm.mjs')
+    chatFn = (messages) => llm.chat(messages, { temperature: 0.3, max_tokens: 400, purpose: 'fast' })
+  } catch (e) { swallow(e, 'nightwork:tidy:llm') }
+  try {
+    const c = await brain.runConsolidation({ now: Date.now(), chatFn })
     const n = c && ((c.processed != null && c.processed) || c.extracted)
-    r = { processed: n != null ? n : '?' }
+    r = {
+      processed: n != null ? n : '?',
+      facts: c && c.facts,
+      llmCalls: c && c.llmCalls,
+      // 供血判据落进结果文件：processed>0 而 added===0 且没调 LLM → 一眼看出
+      llm: !!chatFn,
+    }
   } catch (e) { return { ok: false, error: String(e.message).slice(0, 200) } }
   return { ok: true, ...r }
 }

@@ -71,9 +71,26 @@ function clusterEps(eps) {
 
 /**
  * 跑一次巩固。chatFn(messages) → 文本（要 JSON）；不传就只跑规则。
- * @returns {{ok:boolean, reason?:string, processed:number, facts:{added:number,merged:number,rejected:number}, llmCalls:number}}
+ *
+ * ⚠️ 2026-11-04：改成 **async**。
+ *
+ * 改前是同步函数，里面 `extractLLM(c, chatFn)` 直接 `String(chatFn([...]))`。
+ * 而 `chatFn` 从两个入口来，**两个都是 async**：
+ *   · `commands/brain.mjs --llm`: `(m) => llm.chat(m, {...})`
+ *   · `commands/nightwork.mjs`:   同上
+ * 于是 `String(Promise)` → `"[object Promise]"` → 正则抠不到 JSON 数组 →
+ * `extractLLM` 恒返回 `[]`。**即使传了 chatFn，LLM 抽取也一条都抽不出来。**
+ *
+ * 这不是假设：sem/ 里 facts 0 / intents 0 / schemata 0 / competence 0，
+ * 而 done.jsonl 已经记了 40 条 —— 巩固"跑过了"，但一条语义都没长出来。
+ *
+ * 同步签名让这个 bug 无法被发现：调用方写了 chatFn、参数看着对、
+ * 函数有返回值、日志说"处理了 25 条"，只有产出是空的。
+ * 所以修法不是"在调用方补个 .then"，而是**让这个函数的签名承认它要做异步 IO**。
+ *
+ * @returns {Promise<{ok:boolean, reason?:string, processed:number, facts:{added:number,merged:number,rejected:number}, llmCalls:number}>}
  */
-export function run({ now = Date.now(), chatFn = null, dryRun = false, limit = 200, maxCalls = 6 } = {}) {
+export async function run({ now = Date.now(), chatFn = null, dryRun = false, limit = 200, maxCalls = 6 } = {}) {
   const release = tryExclusive('consolidate', { staleMs: 30 * 60_000 })
   if (!release) return { ok: false, reason: 'busy', processed: 0, facts: { added: 0, merged: 0, rejected: 0 }, llmCalls: 0 }
   try {
@@ -92,7 +109,7 @@ export function run({ now = Date.now(), chatFn = null, dryRun = false, limit = 2
       touchLock('consolidate')
       const extracted = ruleFacts(c.eps)
       if (!extracted.length && chatFn && out.llmCalls < maxCalls) {
-        const got = extractLLM(c, chatFn)
+        const got = await extractLLM(c, chatFn)
         out.llmCalls++
         extracted.push(...got)
       }
@@ -132,7 +149,7 @@ export function run({ now = Date.now(), chatFn = null, dryRun = false, limit = 2
   }
 }
 
-function extractLLM(cluster, chatFn) {
+async function extractLLM(cluster, chatFn) {
   const text = cluster.eps.slice(-8).map((e) => `${isoOf(e.at)} ${e.gist}`).join('\n')
   const ask = [
     '从下面这些对话里抽"关于主人"的稳定事实。只输出 JSON 数组，每项',
@@ -142,7 +159,9 @@ function extractLLM(cluster, chatFn) {
     text,
   ].join('\n')
   try {
-    const raw = String(chatFn([{ role: 'user', content: ask }]) || '')
+    // await 是这一行唯一但最关键的改动：chatFn 是 async 的（llm.chat 返回 Promise），
+    // 不 await 就得到 "[object Promise]"。见 run() 的注释（2026-11-04）。
+    const raw = String(await chatFn([{ role: 'user', content: ask }]) || '')
     const m = raw.match(/\[[\s\S]*\]/)
     if (!m) return []
     const arr = JSON.parse(m[0])

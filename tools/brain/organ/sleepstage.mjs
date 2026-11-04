@@ -51,6 +51,77 @@ const MIN = 60_000
 const HOUR = 3_600_000
 
 /**
+ * 一次睡眠的生理上限（分钟）。
+ *
+ * 为什么必须有这个数：`inSleep` 是一个**只能由结算写入 false** 的状态位，
+ * 而结算跑在子进程里（`bot sleep --force`）。子进程被 OOM 杀、被超时砍、
+ * 或它自己前面某一步抛错，`endSleep()` 就永远不执行 —— 状态位卡在 true。
+ *
+ * 后果不是"少跑一次维护"，而是三条链同时断：
+ *   ① `accrueSleepDebt` 每拍 early-return → **欠觉冻结在卡死那一刻的值**
+ *      （实测 0.599 冻了 43.9 小时），
+ *   ② `presence` 在 `inSleep` 时返回 null → 她的在线状态不再变化，
+ *   ③ 任何读 `sense()` 的提示词都会被告知"你正在睡"。
+ *
+ * 实测事故（2026-11-04）：beganAt=11-02 19:34，卡 44 小时，
+ * `sleep-state.json` 这个文件**根本不存在** → 连第一个阶段都没 mark 过，
+ * 说明 sleep 子进程从没跑完过一次。所以看门狗不能依赖"命令自己会醒"。
+ *
+ * 16 小时取的是生理硬上限：人类最长睡眠记录的可靠区间在 12~15 小时，
+ * 超过这个数的"睡眠"只可能是状态机坏了，不可能是她真的在睡。
+ */
+export const MAX_SLEEP_MIN = 16 * 60
+
+/**
+ * 看门狗窗口：超过这个时长还没结算，就认定状态机卡死。
+ *
+ * 为什么不只用 `plannedMin * 1.6`：plan 文件（night-work.json）可能因为
+ * `/home/dsh/.data` 被清、容器重建、或入睡走的是另一条路径（`bot sleep` 补记）
+ * 而不存在。实测就是这样：`night-work.json` 没有、`sleep.json` 里也没时长字段，
+ * 于是"该睡多久"这个唯一能算出超时的输入是空的 —— 判据必须能独立成立。
+ *
+ * 两条路径分开：
+ *   · 有计划 → `plannedMin × 1.6 + 30`，下限 90 分钟
+ *     （打盹 20 分钟 → 62 分钟就该醒；8 小时 → 13.3 小时。给 60% 余量。）
+ *   · 没计划 → 16 小时硬上限，绝不可能是她真的在睡。
+ *
+ * 不取两者的 max：8 小时计划配上 16 小时上限，等于把她的正常夜长放宽一倍，
+ * 卡死要多等 8 小时才被发现。计划存在时它就是更准的那个数。
+ */
+export function sleepLimitMin(plannedMin = 0) {
+  const p = Number(plannedMin)
+  if (p > 0) return Math.max(90, p * 1.6 + 30)
+  return MAX_SLEEP_MIN
+}
+
+/**
+ * 卡死被发现之后，**这一觉该按多久结算**。
+ *
+ * 这一个数比"何时发现"更关键，因为它是唯一会改她身体的量。
+ *
+ * 用真实时长（44 小时）结算的后果：accrual 会算出一整夜 40 倍的 N3/REM，
+ * 于是睡眠债被一次还到 0、valence 被脱敏 55%、HPA 被清空 ——
+ * 那是**把一次故障伪装成一次大修复**，比不还债更糟：她会变成"刚睡了一个半月"的样子。
+ *
+ * 用 16 小时硬上限结算同样错，只是错得少一点：16 小时的 N2/N3/REM 加权
+ * 仍有 7.85 小时等效睡眠（实测），足够把债一次还清。可现实里她
+ * **什么都没睡到**（结算链从没跑过），凭什么是"睡够了"？
+ *
+ * 正确取值：**计划睡多久就按多久**；没有计划就按一个完整夜（8 小时）。
+ * 这不是惩罚，是"她确实躺了那么久"的最近似事实 —— 状态机卡住期间，
+ * 生理上等价于她一直躺着（可能是睡，也可能只是没醒），8 小时是唯一站得住的估计。
+ * 超出的部分是机器时间，不进她的身体。
+ *
+ * @param {number} plannedMin 这一觉的计划时长（0 = 没有计划）
+ * @param {number} rawMin     距入睡的真实分钟数
+ */
+export function settleMin(plannedMin = 0, rawMin = 0) {
+  const p = Number(plannedMin)
+  const cap = p > 0 ? Math.min(p, MAX_SLEEP_MIN) : 8 * 60
+  return Math.min(Math.max(0, Number(rawMin) || 0), cap)
+}
+
+/**
  * 一个周期的结构。数值按真实多导睡眠图的典型比例。
  *
  * ⚠️ 这里改过一次，是个**生物学错误**，必须记下来：
@@ -269,14 +340,22 @@ export function interrupt(now = Date.now()) {
 /**
  * 醒来。**这是所有重置发生的地方。**
  *
+ * @param {number} now
+ * @param {{reason?:string, capped?:boolean, plannedMin?:number}} [o]
+ *   reason  → 进 history（watchdog / manual / natural）
+ *   plannedMin → 这一觉计划睡多久（决定卡死时按多久结算，见 settleMin）
  * @returns {{sleptMin:number, acc:object, resets:object}}
  */
-export function wake(now = Date.now()) {
+export function wake(now = Date.now(), o = {}) {
   const st = hydrate(readJson(sleepPath(), null))
   if (!st.inSleep || !st.beganAt) {
     return { sleptMin: 0, acc: empty().acc, resets: { note: '没在睡' } }
   }
-  const sleptMin = Math.max(0, (now - Number(st.beganAt)) / MIN)
+  const rawMin = Math.max(0, (now - Number(st.beganAt)) / MIN)
+  // 卡死的睡眠**不能按真实时长结算**（见 settleMin 的注释）。
+  // 正常的一觉永远小于上限，所以 settleMin 对它们是一个恒等变换。
+  const sleptMin = settleMin(Number(o.plannedMin || 0), rawMin)
+  const capped = rawMin > sleptMin + 1
   const acc = accrual(sleptMin, Number(st.interruptions || 0))
   const resets = { debt: 0, receptor: 0, emotion: 0, synapse: 0, hpa: 0 }
 
@@ -328,6 +407,8 @@ export function wake(now = Date.now()) {
     at: now, sleptMin: Number(sleptMin.toFixed(0)), acc,
     interruptions: st.interruptions, resets,
     effectiveH: Number(effectiveH.toFixed(2)),
+    reason: String(o.reason || 'natural').slice(0, 40),
+    ...(capped ? { cappedFrom: Number(rawMin.toFixed(0)) } : {}),
   }
   st.inSleep = false
   st.wakeAt = now
@@ -336,7 +417,73 @@ export function wake(now = Date.now()) {
   st.at = now
   st.history = [...st.history, rec].slice(-10)
   save(st)
-  return { sleptMin: Number(sleptMin.toFixed(0)), acc, resets, record: rec }
+  return { sleptMin: Number(sleptMin.toFixed(0)), acc, resets, record: rec, capped, rawMin: Number(rawMin.toFixed(0)) }
+}
+
+/**
+ * 看门狗：睡眠状态机自愈。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么需要它（这是本文件最贵的一段代码）
+ * ══════════════════════════════════════════════════════════════════════
+ * `inSleep=true` 只能由 `wake()` 置回 false。而 `wake()` 的**唯一生产调用方**
+ * 是 `sleep.mjs`（`endSleep`），也就是那个 `spawn(node bot.mjs sleep --force)`
+ * 子进程。于是：
+ *
+ *   子进程没起来 / 起来了但第一步就抛 / 被 OOM 或容器重启杀掉
+ *     → `endSleep()` 永不执行 → `inSleep` 永久为 true
+ *     → 睡眠债永久冻结 → 她的"睡意"永远停在卡死那一拍
+ *
+ * 实测（2026-11-04 15:42）：beganAt = 11-02 19:34，卡了 **44 小时**；
+ * `sleepDebt` 冻在 0.599；`sleep.json.history` 是空数组；
+ * 而 `sleep-state.json`（sleep 命令自己的进度文件）**根本不存在** ——
+ * 说明这个命令从来没跑完过第一个阶段。四条证据指向同一件事：
+ * 结算链从落地那天起就没成功跑过。
+ *
+ * 更糟的是它**看起来像"她想睡觉"**：`sense()` 说"你正在睡"，
+ * presence 返回 null（在线状态不再更新），睡意评分里 debt 项被冻住。
+ * 用户看到的正是"大肥鱼一直想睡觉，但不是因为攒了太多事"。
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * 判据（不能只看时间，否则会误杀正常长睡）
+ * ══════════════════════════════════════════════════════════════════════
+ * 三条同时成立才动手：
+ *   ① 真的在睡（inSleep && beganAt）
+ *   ② 超过这个计划对应的上限（见 sleepLimitMin；没计划 = 16h 硬上限）
+ *   ③ **结算链没有在动**：sleep-state.json 不存在，或它的 `started`
+ *      已经超过 30 分钟（命令正常跑完只要 30~90 秒，30 分钟还没结束就是死了）
+ *
+ * ③ 是关键的防误杀：卡死与"正在跑一次很慢的维护"在时间上看不出差别，
+ * 只有 sleep 命令自己的进度文件能区分。缺了 ③，看门狗会在她正常睡觉时
+ * 把她叫醒并结算 —— 那比不修更糟。
+ *
+ * @returns {{woke:boolean, reason?:string, sleptMin?:number, capped?:boolean}|{woke:false, reason:string}}
+ */
+export function reconcile(now = Date.now(), o = {}) {
+  const st = hydrate(readJson(sleepPath(), null))
+  if (!st.inSleep || !st.beganAt) return { woke: false, reason: '没在睡' }
+
+  const elapsedMin = Math.max(0, (now - Number(st.beganAt)) / MIN)
+  // 计划时长从调用方传入（night-work.json 的 plan.minutes）。
+  // 不在这里读文件：器官不该知道编排层的记账文件长什么样。
+  const limit = sleepLimitMin(Number(o.plannedMin || 0))
+  if (elapsedMin <= limit) {
+    return { woke: false, reason: '还没超时（' + Math.round(elapsedMin) + '/' + Math.round(limit) + ' 分钟）' }
+  }
+
+  if (o.inProgress) {
+    return { woke: false, reason: '结算链还活着（命令进行中），不打断' }
+  }
+
+  const r = wake(now, { reason: 'watchdog', plannedMin: Number(o.plannedMin || 0) })
+  return {
+    woke: true,
+    reason: '卡了 ' + Math.round(elapsedMin) + ' 分钟（上限 ' + Math.round(limit) + '），强制结算',
+    sleptMin: r.sleptMin,
+    capped: !!r.capped,
+    rawMin: r.rawMin,
+    resets: r.resets,
+  }
 }
 
 /** 正在睡的话，现在在哪个阶段（给"被吵醒"判断代价用）。 */

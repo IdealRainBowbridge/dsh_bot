@@ -40,7 +40,7 @@ const ing = episode.ingest({ limit: 50 })
 ok('6 条事件都进了情景', episode.allEpisodes().length >= 6, `ep=${episode.allEpisodes().length} ingested=${ing.ingested}`)
 
 // 第一次巩固
-const r1 = consolidate.run({ now, limit: 100 })
+const r1 = await consolidate.run({ now, limit: 100 })
 ok('第一次巩固跑完', r1.ok && r1.processed >= 6, JSON.stringify({ processed: r1.processed, facts: r1.facts }))
 const total1 = facts.stats().total
 const doneLines1 = fs.existsSync(path.join(paths.consDir(), 'done.jsonl'))
@@ -51,7 +51,7 @@ ok('每条事实都带证据 id', withProv.length === facts.all().length, `${wit
 ok('done.jsonl 记了已处理的 ep', doneLines1 >= 6, `${doneLines1} 行`)
 
 // 第二次巩固：幂等（事实不翻倍、done 不重复记）
-const r2 = consolidate.run({ now: now + 1000, limit: 100 })
+const r2 = await consolidate.run({ now: now + 1000, limit: 100 })
 const total2 = facts.stats().total
 const doneLines2 = fs.readFileSync(path.join(paths.consDir(), 'done.jsonl'), 'utf8').split('\n').filter(Boolean).length
 ok('重复巩固不新增事实', total2 === total1, `${total1} → ${total2}`)

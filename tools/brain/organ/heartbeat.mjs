@@ -71,6 +71,16 @@ export const BEAT = {
   brainEveryBeats: 1,       // 30s  ← 脑编排：消费 inbox → episode / 意图补做 / 巩固判断
   noveltyEveryBeats: 10,    // 5 分钟 ← 探索感受器：扫最近的经历 → arousal（高了刺激 explore）
   presenceEveryBeats: 10,  // 5 分钟 <- 存在感器官：身体状态翻译成 QQ 在线状态（organ/presence）
+  // 睡眠看门狗（2026-11-04）：每 5 分钟检查一次"她是不是卡在睡着状态里"。
+  //
+  // 为什么必须挂在心跳上而不是"等 sleep 命令自己醒"：
+  //   `inSleep` 只能由 wake() 置回 false，而 wake() 的唯一生产调用方是
+  //   spawn 出去的 sleep 子进程。子进程没起来 / 被 OOM 杀 / 容器重启 → 永不结算。
+  // 实测（2026-11-04）：卡了 44 小时，sleepDebt 冻在 0.599，
+  // 而她对外表现成"一直想睡觉"（sense 说"你正在睡"、presence 一直 null）。
+  // 5 分钟一次：卡死的发现延迟 < 5 分钟，而正常心跳的 IO 代价可以忽略
+  // （只在 inSleep=true 时才读两个文件，醒着时一次 readJson 就返回）。
+  sleepWatchEveryBeats: 10,
   collateralEveryBeats: 2,  // 60s ← 侧支循环试跳（lib/collateral，主链全灭后保持侧支活性，2026-11-03）
     // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但 heartbeat 从来没调过它。
     //
@@ -93,6 +103,9 @@ let _timer = null
 let _running = false
 let _log = () => {}
 let _exec = null      // 执行器：由编排层注入（心跳自己不认识 OneBot）
+// 上一份"被保留下来的决定"的 key（action@since）。
+// 见 ④ 那段：同一份决定只执行一次，否则 kept 分支会让它每 30 秒重放一遍。
+let _lastExecKey = ''
 
 /**
  * 注入执行器。心跳只负责"决定"，具体怎么做由编排层提供。
@@ -200,6 +213,18 @@ export async function beat(now = Date.now()) {
     try { metabolism.tick(now) } catch (e) { swallow(e, 'beat:metabolism') }
     // C4 社交节律牵引（2026-11-03）：主人的作息是她的光 —— 每拍按 dt 拖拽相位。
     try { rhythm.zeitgeberTick(now) } catch (e) { swallow(e, 'beat:zeitgeber') }
+    // 睡眠看门狗（2026-11-04）：她卡在"睡着"里没人叫醒时，只有这里能救。
+    // 排在 accrueSleepDebt 之后：这一拍若刚被判卡死，欠觉会从下一拍开始正常累积。
+    if (_beatCount % BEAT.sleepWatchEveryBeats === 0) {
+      try {
+        const w = await night.watchSleep(now)
+        if (w && w.woke) {
+          out.woke = { reason: w.reason, sleptMin: w.sleptMin, capped: !!w.capped }
+          _log('[sleep] ⏰ 看门狗叫醒：' + w.reason + ' → 按 ' + w.sleptMin + ' 分钟结算'
+            + (w.capped ? '（真实 ' + w.rawMin + ' 分钟，已按时长上限截断）' : ''))
+        }
+      } catch (e) { swallow(e, 'beat:sleepwatch') }
+    }
 
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────
     // 这些是"身体自己在跑的部分"，不是她决定做的事。
@@ -271,7 +296,44 @@ export async function beat(now = Date.now()) {
     try {
       thalamus.focus({ channel: 'self', label: String(d.action || ''), ttlMin: Math.max(1, Math.round(Number(d.spanMin || 5))), now })
     } catch (e) { swallow(e, 'beat:thalamus:focus') }
-    if (ex[d.action]) {
+    //
+    // ⚠️ 2026-11-04：**"决定"不等于"指令"。**
+    //
+    // 改前这里无条件 `exec[d.action](d)`。而 decide() 在"专心窗口"内
+    // （`prev.until > now` 且不困不被打断）会返回 `{...prev, kept:true}`——
+    // 也就是**同一份决定原样返回**。于是每 30 秒执行一次同一件事：
+    //
+    //   实测 #1：think 的 spanMin 是 17 分钟，而心跳 30 秒一拍
+    //   → 同一个 since 内执行 34 次 → 34 次 LLM 调用去想同一件事。
+    //   自决历史 30 条里 29 条是 think、spanMin 恒 17 —— 这就是它的形状。
+    //   日耗 39 万 token，产出是 inner 池里 51 条同题 reflect。
+    //
+    // 真实生物里决定是**转移**：选完进入执行态，执行期间不再重新发起同一动作。
+    // 所以这里加一道门：同一份决定（action + since）只执行一次。
+    //
+    // 为什么用 `since` 而不是单纯去重 action：她可能连续做两次"整理记忆"
+    // （做完一次又想做），那是两次不同的决定（不同 since），都该执行。
+    // 只有**同一份决定被反复重放**才是 bug。
+    //
+    // 门放在内存里而不是落盘：进程重启后重新决定一次是合理的（她"醒了一下"），
+    // 而落盘会把"崩溃"变成"这件事永远不做了"——那更糟。
+    //
+    // ⚠️ 判据是 `since`，不是 `kept`。
+    //
+    // 第一版只挡 `kept:true`，实测漏掉一半：decide() 先返回 kept:false 的新决定
+    // （since = 该拍的 now），**下一拍它自己变成 kept:true 且 since 不变**——
+    // 于是同一个 since 被执行了两次。调试记录：
+    //     beat 0  kept=false  since=X  → 执行
+    //     beat 1  kept=true   since=X  → 又执行一次   ← 重复
+    //     beat 2+ kept=true   since=X  → 被挡
+    //
+    // 语义上这也更对：`since` 是"这份决定从什么时候开始的"，它是同一份决定的身份。
+    // 无论它这拍被标成 kept 还是刚被重算出来，只要 since 没变，就是同一份决定。
+    const execKey = String(d.action || '') + '@' + Number(d.since || 0)
+    if (execKey === _lastExecKey) {
+      out.skippedExec = execKey
+    } else if (ex[d.action]) {
+      _lastExecKey = execKey
       try { await ex[d.action](d, now) } catch (e) { swallow(e, 'beat:exec:' + d.action) }
     }
     // 执行完释放焦点（"这件事做完了"，别一直压着别的通道）

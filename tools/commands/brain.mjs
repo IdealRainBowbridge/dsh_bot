@@ -89,7 +89,7 @@ export async function run(argv = []) {
       const llm = await import('../lib/llm.mjs')
       chatFn = (messages) => llm.chat(messages, { temperature: 0.3, max_tokens: 400, purpose: 'fast' })
     }
-    const r = brain.runConsolidation({ dryRun, chatFn })
+    const r = await brain.runConsolidation({ dryRun, chatFn })
     console.log(JSON.stringify(r, null, 1))
     return
   }
