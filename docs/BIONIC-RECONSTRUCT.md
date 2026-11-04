@@ -442,16 +442,26 @@ v1 的 P0-1~P0-4 **已于 16:12 全部落地并经过运行态验证**（见 §9
 | **P0-3 念头→压力限幅** | `settle()` 改增量语义（`settledLoad` 落盘）+ `think()` 改饱和增量 + `innerBlock` 取用即衰减 | `tension` 5.9999 → **1.798**；`inner:pending` 不再每拍出现；pending 60 → 14 |
 | **P0-4 巩固供血** | `consolidate.run` 改 async + `await extractLLM` + `nightwork` 传 `chatFn` | 单测 `brain-consolidate-llm-test`：`chatFn` 被调用、事实真的入库、LLM 挂了不拖死巩固 |
 
-新增 4 套回归测试（`brain-sleep-watchdog` / `brain-heartbeat-gate` / `brain-inner-loop` / `brain-consolidate-llm`），本地全绿。
-**尚未注册进 `tools/run-tests.mjs`** —— 这是下一件要做的事（否则全套跑轮不覆盖它们）。
+新增 5 套回归测试（`brain-sleep-watchdog` / `brain-heartbeat-gate` / `brain-inner-loop` /
+`brain-consolidate-llm` / `llm-usage`），**已全部注册进 `tools/run-tests.mjs`**，
+全量跑轮 **97 套全绿**（72.9s）。提交 `66ebe06`，门禁 314 文件通过。
 
 ### 9.2 新增 P0-5~P0-8（都是"接线债"，不是新能力）
 
-**P0-5 修 cache 记账（改一行，收益最直接）**
+**P0-5 修 cache 记账 —— ✅ 已落地（提交 `66ebe06`）**
 - 现象：`llm-usage.jsonl` 的 `cache` 恒 0，而真值命中率 94%（§8.1）。
-- 改法：`llm.mjs:32` 增加 `prompt_cache_hit_tokens` 到取值链最前。
-- 验收：`llm-usage.jsonl` 次日出现 `cache > 0`；`llm-physio.dailyTokens().total` 下降约 90%；
-  `ledger-brief` 的"今天吃了 X 万 token"与实际计费对得上（余额变化量可交叉验证）。
+- 改法（**比预估多一处，是串行暴露的两个错**）：
+  1. 取值链：`prompt_cache_hit_tokens` 提到最前。
+  2. **口径拆分**：LLM 的 `prompt_tokens` = 命中 + 未命中，而账本铁律是
+     `total = input + output + cache`。若把 `prompt_tokens` 照原样塞进 `input`
+     再把命中塞进 `cache`，命中那 94% 会被算两遍 —— 修完第一处才暴露出来。
+     现在 `input` 只记未命中（优先用 `prompt_cache_miss_tokens`，没有就 `prompt − hit` 拆）。
+  3. 连带修 `readDirectUsage` 与 `llm-physio` 的 brief 回落分支：`total` 都不含 `cache`，
+     在 cache 恒 0 的两年里无症状，修完立刻少报 94%。
+- 验证（运行态）：连打两次同一大前缀 ——
+  `{"input":1832,"cache":0}` → `{"input":168,"cache":1664}`；
+  `ledger.usage()` 逐日核对 `total === input+output+cache` 全部成立；
+  新增 `test/llm-usage-test.mjs`（11 项）锁住"三者互不重叠"，`llm-physio` / `ledger` 两套既有测试仍绿。
 
 **P0-6 清掉生产里的测试号**
 - 现象：三个不存在的"主人" + 两个测试账号写在永久账本里（§8.2 D3）。
