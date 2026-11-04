@@ -266,6 +266,8 @@
     min-width: 44px; text-align: right; font-family: var(--mono); font-size: 12px;
     color: var(--fg); font-variant-numeric: tabular-nums;
   }
+  input[type=range]:disabled { opacity: .4; cursor: default; }
+  input[type=range]:disabled::-webkit-slider-thumb { transform: none; }
 
   /* 记忆 */
   .mem-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
@@ -951,28 +953,37 @@ function bind() {
   $('refresh_mem').addEventListener('click', loadMemory);
   $('reload').addEventListener('click', () => boot(true));
 
-  // 导航高亮：首屏所有段会同时相交，必须取文档序最靠前的那一段，
-  // 否则后到的回调把高亮盖到下一个分区上（实测首屏永远高亮「平台」）。
+  // 导航高亮：判据是"视口阅读带中心落在哪一段"，不是 IntersectionObserver 的相交集合 ——
+  // 首屏会有 4 段同时相交，靠回调顺序决定高亮，实测永远错一段；
+  // 滚到文档末尾时最后几段也永远进不了带（页面到底，scrollIntoView 顶不到顶）。
   const links = Array.from(document.querySelectorAll('.nav a'));
   const pairs = links
     .map((a) => ({ a, el: document.querySelector(a.getAttribute('href')) }))
     .filter((x) => x.el);
-  const visible = new Set();
+  let paintRaf = 0;
   const paint = () => {
-    const first = pairs.find((x) => visible.has(x.el)) || pairs[0];
+    paintRaf = 0;
+    // 判据 = 已滚过视口顶部的那一段（"你正在看的"），不是阅读带中心：
+    // 中心判据在短段上会跳到下一段（滚到「音色」高亮「作息」）。
+    // 到底时特判最后一段 —— 页尾几段永远滚不过顶部线。
+    const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+    let cur = pairs[0];
+    if (atBottom) {
+      cur = pairs[pairs.length - 1];
+    } else {
+      const anchor = window.scrollY + 80;
+      for (const x of pairs) {
+        if (x.el.getBoundingClientRect().top + window.scrollY <= anchor) cur = x;
+      }
+    }
     for (const x of pairs) {
-      if (x === first) x.a.setAttribute('aria-current', 'true');
+      if (x === cur) x.a.setAttribute('aria-current', 'true');
       else x.a.removeAttribute('aria-current');
     }
   };
-  const io = new IntersectionObserver((entries) => {
-    for (const en of entries) {
-      if (en.isIntersecting) visible.add(en.target);
-      else visible.delete(en.target);
-    }
-    paint();
-  }, { rootMargin: '-4% 0px -64% 0px', threshold: 0 });
-  for (const x of pairs) io.observe(x.el);
+  const requestPaint = () => { if (!paintRaf) paintRaf = requestAnimationFrame(paint); };
+  window.addEventListener('scroll', requestPaint, { passive: true });
+  window.addEventListener('resize', requestPaint, { passive: true });
   paint();
 }
 

@@ -624,7 +624,12 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 > **子路径挂载**：面板可能挂在 `/deepseekharness/` 下（nginx 前缀反代）。`client.js` 从
 > 注入自己的 `<script src="…/plugins/??dsh_bot/client.js…">` 反推 API 前缀，`settings.html`
 > 从 `location` 反推 —— 两处都不能写死 `/dsh_bot/api`，否则请求打到站点根、整页 404。
-> 回归锚点：`test/client-base-test.mjs`。
+> 回归锚点：`test/client-base-test.mjs`、`test/settings-page-test.mjs`。
+>
+> **`lib/settings.html`（独立设置页）**：左侧分区导航 + 连续表单面，写入语义与 DSH 面板一致
+> （深合并、`platforms.*` 与 `qq/wechat.enabled` 双写）。控件只允许绑后端白名单里真实生效的键 ——
+> `douyin.maxPerRun` 这类既不在 `/api/config` 白名单、也没人读的假键会被静默丢弃，
+> 由 `test/settings-page-test.mjs` 的变异用例钉死。
 >
 > **访问栅栏**：插件 API 只接受「回环」或「宿主声明的 `--trusted-host` + 对端为容器网关
 > （宿主反代）」，其余 403。回归锚点：`test/access-fence-test.mjs`。
