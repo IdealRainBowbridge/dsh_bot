@@ -282,6 +282,70 @@ QQ / 微信需要实时响应，走直连 API。
 
 ---
 
+## 五·五、DSH 里「她」是怎么生效的（2026-11-04）
+
+这一段写给维护者：它记录三个**曾经静默失效**的机制和我们最终落地的方式。
+
+### 1. 人格接管的两层结构
+
+| 层 | 位置 | 作用 | 失效时的表现 |
+|---|---|---|---|
+| 全局 complete 段 | `lib/agent-prompt.mjs` 的 `registerTakeover` | 在 system-prompt 注册表里放一个 `complete: true` 的段 | 只对**没有** agentPreset 的会话生效 |
+| 装配层强制 | 同文件的 `attachAssembleHook` | 监听 `system-prompt/assemble` waterfall，直接改返回的 `sections` | 真正的兜底 —— 能穿透 preset 隔离 |
+
+**为什么必须两层**：DSH 的会话绑定 `agentPreset`（默认 `standard`），而 preset 是 cordis
+的**隔离作用域**（`isolate`），它自带一整套 persona / 工具栈。插件在全局层注册的段
+**对 preset 内的会话不可见**。实测：注册成功、`/api/status` 显示 `verified: true`，
+但真实会话的 `system/message` 依然是 `You are a coding agent powered by …`。
+装配 waterfall 是每个 agent 都必须经过的咽喉，所以第二层才是决定性的。
+
+### 2. 人格不是只靠 persona.md
+
+`persona.md` 是**可写**的运行时文件（她自己会改、人也会改、备份可能漏）。它丢失或写坏时，
+旧实现退回一段 100 字的兜底，表现是"一个自称鲸鱼娘的通用助手"。
+
+现在的分层：
+
+| 层 | 来源 | 缺失时 |
+|---|---|---|
+| **核心锚点**（她是谁/跟谁什么关系/怎么说话/不做什么） | `CORE_ANCHOR`，焊在代码里，不可关闭 | 不可能缺失 |
+| 「此刻的你」（会长大的那部分） | `~/.data/persona.md` | 缺失/可疑时退回核心锚点，并在 `/api/status` 报 `persona.reason` |
+
+人设可用性判定（任一命中即不采用，绝不静默）：
+太短（<200 字）、只剩标题、含自我否认（"作为 AI/我无法访问外部信息/我没有记忆"）。
+
+### 3. 能力桥（DSH 会话 = QQ 里的她）
+
+`lib/dsh-bridge.mjs` 注册 6 个工具，并把她与老爸的对话写进记忆库：
+
+| 工具 | 做什么 |
+|---|---|
+| `bot_recall` | 翻记忆（search / recent / old / facts / stats） |
+| `bot_remember` | 记一条情节 / 关系事实 / 世界设定 |
+| `bot_state` | 看她此刻（情绪 / 在做什么 / 欠着谁的事 / 今天的账 / 自主计划） |
+| `bot_diary` | 读/写两本日记 |
+| `bot_tell_owner` | 用 QQ 给老爸发一条 |
+| `bot_act` | 跑 `bot.mjs` 的任何命令（白名单**从 bot.mjs 解析**，不抄清单；`qq-server` 等常驻进程被排除） |
+
+两个必须知道的实现约束：
+
+- **不能用 `import('@deepseek-ai/dsh-tools')`**：插件的 node_modules 链里没有宿主包
+  （实测 `ERR_MODULE_NOT_FOUND`）。所以走"裸定义"路线：只要 `{name, description,
+  parameters, output:{schema,render}, execute}`，schema 用宿主支持的原始 JSON Schema 子集。
+- **宿主不做 arguments 校验**：`ctx.tools.register()` 只校验 `output.schema`。
+  裸注册路线的参数校验必须自己做（`validateArgs`），否则拼错的枚举值会静默落进 else 分支。
+
+### 4. 会话 cwd 自愈（这个曾让她的自主活动整天空转）
+
+会话头里的 `cwd` **不可变**，而 `sessionController.create()` 对已存在的同名会话
+**保留原 cwd**。宿主用户名从 `feiyu` 改成 `dsh` 之后，会话 `dsh_bot` 的 cwd 仍钉在
+`/home/feiyu/.dsh/bot-work`（已不存在）——于是每次唤醒都投递成功、turn 也起来了，
+却在第一秒以 `working-directory: directory does not exist` 结束。
+
+`lib/scheduler.js` 的 `sessionUsability()` / `readSessionHeader()` 负责自愈：
+旧 cwd 不存在 → 换一个带日期的新会话 id，**旧会话原样保留**（历史不伪造）。
+`ensureSession()` 在**所有** prompt 路径前置（自由唤醒/人格进化/每日回顾/webui 主动）。
+
 ## 六、安装
 
 > **部署实况（2026-11-03）**：现役跑在 Arch 宿主的 docker 容器 `dsh_bot` 里——仓库挂载

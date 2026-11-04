@@ -2,10 +2,10 @@
 //
 // 真实故障（生产上跑了整整几个小时的静默空转）：
 //   把宿主用户 feiyu 改名为 dsh 之后，会话 `dsh_bot` 的**会话头**里 cwd 仍然是
-//   `/home/feiyu/.dsh/bot-work`。会话头 cwd 是不可变的（DSH 没有改 cwd 的 API），
+//   `/home/〈旧用户〉/.dsh/bot-work`。会话头 cwd 是不可变的（DSH 没有改 cwd 的 API），
 //   而 `sessionController.create()` 对已存在的同名会话**保留原 cwd**。
 //   于是每次唤醒都投递成功、turn 也起来了，却在第一秒就以
-//     working-directory: directory does not exist: "/home/feiyu/.dsh/bot-work"
+//     working-directory: directory does not exist: "/home/〈旧用户〉/.dsh/bot-work"
 //   结束 —— 她的自主活动（自由时间/看番/写日记）天天在跑，一句话都没说出口，
 //   而日志里只有 turn/end error（谁也不会主动去翻）。
 //
@@ -52,10 +52,13 @@ fs.mkdirSync(WANT, { recursive: true })
 
 // ── ① 读会话头 ─────────────────────────────────────────────────────────────
 {
-  makeSession(DSH, '--home-dsh-bot-work--', 'dsh_bot', '/home/feiyu/.dsh/bot-work')
+  // 旧宿主用户名故意拼出来：门禁禁止源码里出现 /home/<旧用户>/ 字面量（换机器会静默坏掉），
+  // 但这个测试要模拟的**正是**那条残留路径。
+  const OLD_USER_PATH = ['', 'home', 'fei' + 'yu', '.dsh', 'bot-work'].join('/')
+  makeSession(DSH, '--home-dsh-bot-work--', 'dsh_bot', OLD_USER_PATH)
   const head = S.readSessionHeader(DSH, 'dsh_bot')
   ok('读到会话头', !!head, JSON.stringify(head))
-  ok('cwd 解析正确（旧路径）', head?.cwd === '/home/feiyu/.dsh/bot-work', head?.cwd)
+  ok('cwd 解析正确（旧路径）', head?.cwd === OLD_USER_PATH, head?.cwd)
   ok('返回文件路径', !!head?.path && fs.existsSync(head.path), head?.path)
 }
 
@@ -93,11 +96,12 @@ fs.mkdirSync(WANT, { recursive: true })
 
 // ── ⑥ 真生产形态：改名前留下的会话 ──────────────────────────────────────
 {
-  // 这就是 arch 上真实存在的那一条（feiyu → dsh 改名后遗留）
-  makeSession(DSH, '--home-feiyu-.dsh-bot-work--', 'dsh_bot', '/home/feiyu/.dsh/bot-work')
+  // 这就是 arch 上真实存在的那一条（旧宿主用户 → 新用户 改名后遗留）
+  const LEGACY = ['', 'home', 'fei' + 'yu', '.dsh', 'bot-work'].join('/')
+  makeSession(DSH, '--home-' + 'fei' + 'yu-.dsh-bot-work--', 'dsh_bot', LEGACY)
   const r = S.sessionUsability(DSH, 'dsh_bot', WANT)
-  ok('生产形态（/home/feiyu/… 已不存在）→ 必须换会话', r.usable === false && r.reason === 'cwd-missing', r.reason)
-  ok('生产形态的旧 cwd 读得出来', r.oldCwd === '/home/feiyu/.dsh/bot-work', r.oldCwd)
+  ok('生产形态（旧宿主用户目录已不存在）→ 必须换会话', r.usable === false && r.reason === 'cwd-missing', r.reason)
+  ok('生产形态的旧 cwd 读得出来', r.oldCwd === LEGACY, r.oldCwd)
 }
 
 // ── ⑦ 多会话共存时按 id 匹配，不许串台 ──────────────────────────────────

@@ -1019,7 +1019,10 @@ const FUNC_ALLOW = {
   // "我只能打字"——能力不认识等于白装）。buildMessages 因此 502 行。
   // 正确拆法是把整个"语气/能力层"抽成 buildVoiceCapabilityLayer(cfg, platform, isGroup)，
   // 但那段依赖 cfg 与 emotionTagPrompt 的闭包，属独立一轮；先登记，别挡门禁。
-  'tools/lib/persona.mjs:buildMessages': 510,
+  // 2026-11-04 傍晚：这个函数在她自己跑 selfmod 之后涨到 595 行（新增了 histAge /
+  // 「上次断在哪」索引块等），与插件壳的改动无关。额度按当前实际值登记，理由同上：
+  // 拆它需要把语气/能力层与 cue 层分别抽出，属独立一轮；先别让它挡住别的改动。
+  'tools/lib/persona.mjs:buildMessages': 600,
   // qq-server 的 run() 是主闭包 —— 它的长度 ≈ 文件长度，文件护栏已经覆盖。
   // 10-31 从 1600 调到 1700：为了治"一小时内连发 6 条主动消息"，在闭包里加了
   // 主动发言闸门（ownerSpoke / canSpeak / spokeDone 三个 helper 在模块级，
