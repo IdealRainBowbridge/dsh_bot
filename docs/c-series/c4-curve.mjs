@@ -12,8 +12,8 @@ process.env.DSH_HOME = path.join(TMP, '.dsh')
 fs.mkdirSync(path.join(TMP, '.dsh'), { recursive: true })
 fs.writeFileSync(path.join(TMP, '.dsh', 'bot.config.json'), JSON.stringify({ owner: { qq: '10000' } }))
 
-const { epFile, rhythmPath } = await import('/home/feiyu/plugins/dsh_bot/tools/brain/paths.mjs')
-const rhythm = await import('/home/feiyu/plugins/dsh_bot/tools/brain/rhythm.mjs')
+const { epFile, rhythmPath } = await import('/home/dsh/plugins/dsh_bot/tools/brain/paths.mjs')
+const rhythm = await import('/home/dsh/plugins/dsh_bot/tools/brain/rhythm.mjs')
 
 const localMidnight = new Date(); localMidnight.setHours(0, 0, 0, 0)
 const DAY0 = localMidnight.getTime()

@@ -13,7 +13,7 @@ v2 相对 v1 修的四个真问题
 4. **慢**：真凶不是 UI，是 wechatauto 的拟人节流（natural 档两次发送强制隔 2.5–6s）。
    现在按配置切 fast 档（实测 1.4–1.9s/条），并把轮询/发送/推理拆成三条线程，互不堵。
 
-配置（~/.dsh/feiyu.config.json → wechat）
+配置（~/.dsh/bot.config.json → wechat）
 --------------------------------------------------
   rhythm            拟人节奏档：fast（默认）/ natural / calm / off
   merge_window_sec  对方说完多久才回（秒，默认 3.0）
@@ -46,8 +46,8 @@ from wechatauto import WeChat
 from wechatauto.db import WeChatDB, Listener
 
 # ── 路径 ────────────────────────────────────────────────────────────────────
-CONFIG_PATH = os.path.expanduser("~/.dsh/feiyu.config.json")
-MEMORY_DIR = os.path.expanduser("~/.feiyu-ai")
+CONFIG_PATH = os.path.expanduser("~/.dsh/bot.config.json")
+MEMORY_DIR = os.path.expanduser("~/.data")
 EPISODES = os.path.join(MEMORY_DIR, "episodes.jsonl")
 LOG_PATH = os.path.join(MEMORY_DIR, "wechat-bot.log")
 LOCK_PATH = os.path.join(MEMORY_DIR, "wechat-bot.lock")
@@ -341,7 +341,7 @@ def _similar(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
-# ── 表情包 / 颜文字（和 QQ / B站 / 抖音共用 ~/.feiyu-ai/stickers）────────────
+# ── 表情包 / 颜文字（和 QQ / B站 / 抖音共用 ~/.data/stickers）────────────
 FACE_FALLBACK = {
     "开心": "(๑˃̵ᴗ˂̵)و",
     "无语": "(・_・;)",

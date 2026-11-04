@@ -7,8 +7,8 @@ process.env.BOT_DATA_DIR = TMP
 process.env.USERPROFILE = TMP
 process.env.HOME = TMP
 process.env.DSH_HOME = path.join(TMP, '.dsh')
-const neuron = await import('/home/feiyu/plugins/dsh_bot/tools/brain/cell/neuron.mjs')
-const { neuronPath, fieldPath } = await import('/home/feiyu/plugins/dsh_bot/tools/brain/paths.mjs')
+const neuron = await import('/home/dsh/plugins/dsh_bot/tools/brain/cell/neuron.mjs')
+const { neuronPath, fieldPath } = await import('/home/dsh/plugins/dsh_bot/tools/brain/paths.mjs')
 const T0 = 1_700_000_000_000, IVL = 30 * 60_000
 for (let i = 0; i <= 30; i++) neuron.rpe(0.6, { source: 'owner', care: 1, now: T0 + i * IVL })
 const raw = JSON.parse(fs.readFileSync(neuronPath(), 'utf8'))

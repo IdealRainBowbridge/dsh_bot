@@ -70,7 +70,7 @@
 </head>
 <body>
   <h1>🐟 大肥鱼 · 设置</h1>
-  <div class="sub">改动即时保存到 <code id="cfgpath">feiyu.config.json</code>（下次唤醒/重启生效）</div>
+  <div class="sub">改动即时保存到 <code id="cfgpath">bot.config.json</code>（下次唤醒/重启生效）</div>
 
   <div class="card">
     <h2>平台开关</h2>
@@ -141,7 +141,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const API = '/dsh-feiyu/api';
+const API = '/dsh_bot/api';
 const $ = (id) => document.getElementById(id);
 let state = { config: {}, voices: [] };
 
@@ -226,7 +226,7 @@ function fillForm() {
     }
     $('voice_hint').textContent = '选中音色会自动写入参考音频 + 参考文本；换音色后重启 DSH 生效';
   }
-  $('cfgpath').textContent = state.configPath || 'feiyu.config.json';
+  $('cfgpath').textContent = state.configPath || 'bot.config.json';
 }
 
 async function saveSection(patch, okMsg) {
