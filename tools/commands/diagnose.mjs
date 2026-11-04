@@ -276,7 +276,17 @@ export async function run(argv = []) {
     const decl = pkg?.dshFeiyu || {}
     let runtime = null
     try { runtime = JSON.parse(fs.readFileSync('/opt/dsh/package.json', 'utf8')) } catch (e) { swallow(e, 'diagnose:dsh-version') }
-    if (runtime) {
+    // 2026-11-05：优先读运行时实况（插件每次启动写的 contract-report.json）——
+    // 它回答「此刻缺哪个 API」；版本对账只回答「宿主和实测版本一样吗」。两者互补。
+    let live = null
+    try { live = JSON.parse(fs.readFileSync(dataPath('contract-report.json'), 'utf8')) } catch { /* 没跑过插件就退回版本对账 */ }
+    if (live) {
+      const fresh = live.at && (Date.now() - live.at) < 24 * 60 * 60_000
+      if (!fresh) items.push(warn('DSH 契约', '实况快照已过 24h（' + new Date(live.at).toLocaleString() + '）—— 插件很久没启动了，建议重启一次让契约重新体检'))
+      else if (live.missing?.length) {
+        for (const m of live.missing) items.push(m.critical ? bad('DSH 契约', '✗ ' + m.id + '：' + m.impact) : warn('DSH 契约', '⚠ ' + m.id + '：' + m.impact))
+      } else items.push(ok('DSH 契约', '运行时实况全绿（' + (live.dsh ? live.dsh.name + '@' + live.dsh.version : '版本未知') + '，' + new Date(live.at).toLocaleString() + ' 体检）'))
+    } else if (runtime) {
       const same = runtime.version === String(decl.testedAgainst || '').split('@').pop()
       items.push(same
         ? ok('DSH 契约', '运行时 ' + runtime.name + '@' + runtime.version + ' · 契约版本 ' + (decl.contractVersion || '?') + '（与实测版本一致）')
