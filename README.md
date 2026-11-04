@@ -245,6 +245,9 @@ dsh_bot/
 │   ├── index.js                路由（status/cookie/selftest/config/memory/persona/services/report/watch）
 │   │                           + 生物钟 + QQ 网关(NapCat)自愈 + 自由上网自愈 + GPT-SoVITS 自愈
 │   ├── scheduler.js            60s tick → 生物钟 / 人格进化 / 每日回顾 / 完全自由 → sessionController.prompt
+│   ├── agent-prompt.mjs        **人格接管**：注册 complete 段 → DSH 里所有会话都是她
+│   │                           （宿主身份/编码 agent 设定让位，工具 schemas 照常）
+│   ├── http-utils.mjs          信任栅栏（回环 或 已声明反代 + 容器网关）
 │   └── node-runtime.js         找真 node（DSH 自带运行时 / PATH / DSH_NODE）
 ├── client.js                   浏览器半边：DSH 设置里那一页「🐟 大肥鱼」
 ├── tools/                      工具链（spawn 真 node 跑，改完不用重启 DSH）
@@ -268,7 +271,7 @@ dsh_bot/
 │                               act replies voice sing sticker web selfup produce vision debrief
 │                               binge promises（10-27：真看番 + 承诺账本）
 ├── wechat/wechat_bot.py        微信机器人（副本；运行的是 D:/wechat-bot/ 那份）
-├── test/                       90 套测试（client-smoke / client-render / stickers / imggen /
+├── test/                       92 套测试（client-smoke / client-render / stickers / imggen /
 │                               memory / memory-recall / qq-human / vision / focus-one-thing /
 │                               reply-style / memory-hygiene（10-27 记忆卫生）/ …）
 └── package.json
