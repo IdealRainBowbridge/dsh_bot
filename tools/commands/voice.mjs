@@ -17,7 +17,8 @@ import { dataPath, configPath } from '../lib/paths.mjs'
 import { swallow } from '../lib/swallow.mjs'
 import { onebotFileValue } from '../lib/onebot-file.mjs'
 
-const MODELS_DIR = 'D:/GPT-SoVITS/models'
+// 2026-11-05 跨平台：配置优先（voice.modelsDir），默认按平台给 —— Windows 开发机 D:/，其余用户主目录
+const MODELS_DIR = config().voice?.modelsDir || (process.platform === 'win32' ? 'D:/GPT-SoVITS/models' : (process.env.USERPROFILE || process.env.HOME || '') + '/GPT-SoVITS/models')
 const INTRO = '主人，这是我现在的声音，好听吗？我是大肥鱼，这条声音你觉得适合我就换上吧。'
 
 function arg(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? String(argv[i + 1] ?? d) : d }

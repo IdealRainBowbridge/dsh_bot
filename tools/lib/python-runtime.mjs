@@ -24,9 +24,16 @@ function candidates() {
   push(process.env.BOT_PYTHON)
   push(process.env.BOT_TTS_PYTHON)
   // 容器里 DSH 自带的 pyenv（存在但没有第三方库，作为"能跑"的最低保障）
+  if (process.platform === 'win32') {
+    // Windows: venv 布局是 Scripts\python.exe；pyenv-win 的 shim 在 %USERPROFILE%\.pyenv\pyenv-win
+    push(path.join(process.env.USERPROFILE || '', '.dsh', 'pyenv', 'Scripts', 'python.exe'))
+    push(path.join(process.env.USERPROFILE || '', '.pyenv', 'pyenv-win', 'shims', 'python.exe'))
+  }
   push(path.join(process.env.HOME || '', '.dsh', 'pyenv', 'bin', 'python3'))
   push(path.join(process.env.HOME || '', '.dsh', 'pyenv', 'bin', 'python'))
   // 系统
+  // macOS Homebrew（Apple Silicon 在 /opt，Intel 在 /usr/local，后者已有）
+  push('/opt/homebrew/bin/python3')
   push('/usr/bin/python3')
   push('/usr/local/bin/python3')
   push('python3')
