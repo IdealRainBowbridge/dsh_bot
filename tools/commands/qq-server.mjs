@@ -653,9 +653,13 @@ export async function run(argv = []) {
       let answer = ''
       let toolTrace = []
       const purpose = dynTemp <= 0.6 ? 'deep' : 'chat'   // 严肃问题走深答档（1200tok）：需要想清楚再答的题给足字数
+      // 2026-11-04：chatWithTools 原先是 if 块内的 const，块外（thinkThenSay 与内省）引用它
+      // 直接 ReferenceError: chatWithTools is not defined —— 每轮都抛，内省/先想后说全程失效。
+      // 提升到块外，按需动态 import（工具关着就不加载）。
+      let chatWithTools = null
       if (toolsOn) {
         try {
-          const { chatWithTools } = await import('../lib/agent.mjs')
+          ({ chatWithTools } = await import('../lib/agent.mjs'))
           const r = await chatWithTools(messages, { temperature: dynTemp, purpose })
           answer = r.text
           toolTrace = r.tools || []

@@ -50,7 +50,11 @@ export async function introspect({ userText = '', chatId = '', isGroup = false, 
   const F = await import('../brain/field.mjs')
   const IN = await import('../brain/inner.mjs')
 
-  const depth = F.cognitiveDepth(now)
+  // 2026-11-04 修：cognitiveDepth 的第一个参数是**状态对象**，不是时间戳。
+  // 原写法 cognitiveDepth(now) 传了数字 → st.dims 为 undefined →
+  // 每轮都 "Cannot read properties of undefined (reading 'sleepDebt')"，
+  // 「先想后说」整层静默失效（只在内省日志里冒一行 ERR）。先演化再求值。
+  const depth = F.cognitiveDepth(F.evolve(now))
   if (isGroup || depth <= RULES.minDepth) return { thought: '', used: false, depth }
 
   const thoughtBlock = IN.innerBlock(2, now)
