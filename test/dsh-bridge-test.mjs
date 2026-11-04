@@ -257,6 +257,37 @@ const B = await import('../lib/dsh-bridge.mjs')
   ok('失败的那个不出现在已注册列表里', !r.tools.includes('bot_state'))
 }
 
+// ── ⑧ attachIdentity：两个子插件按服务可用性各自启动，壳按需缺席 ──────────
+// 这是本轮最关键的一条：cordis 的 inject 全有或全无，静态 inject 会让插件在
+// headless/tui 里永远 pending —— "装了插件"和"她是不是她"变成两个不相关的问题。
+{
+  // 起一个"最小宿主"：只有 systemPrompt，没有 tools、没有任何 web 服务（= headless）
+  const started = []
+  const ctx = {
+    get: (n) => (n === 'systemPrompt' ? { section: () => () => {}, assemble: async () => ({ sections: [] }) } : undefined),
+    inject: (deps, cb) => { started.push(deps.join('+')); cb({ get: ctx.get, inject: ctx.inject, effect: () => () => {} }); return { then: () => {} } },
+    effect: () => () => {},
+  }
+  globalThis.__dshBotTakeover = null
+  globalThis.__dshBotBridge = null
+  let shell = null
+  let threw = null
+  try { shell = B.attachIdentity(ctx) } catch (e) { threw = e }
+  ok('attachIdentity 不抛（缺服务只降级）', threw === null, threw ? String(threw.message) : '')
+  ok('两个子插件都尝试挂载（systemPrompt / tools）', started.includes('systemPrompt') && started.includes('tools'), started.join(' | '))
+  ok('人格接管在只有 systemPrompt 时也起来了', !!globalThis.__dshBotTakeover && globalThis.__dshBotTakeover.registered === true)
+  ok('没有 tools 服务时能力桥明确报缺（不静默）', !!globalThis.__dshBotBridge && globalThis.__dshBotBridge.reason === 'no-tools-service', String(globalThis.__dshBotBridge && globalThis.__dshBotBridge.reason))
+  ok('缺 web 服务时返回 false（壳不装）', shell === false, String(shell))
+
+  // 完整 web 环境 → 壳继续
+  const fullCtx = {
+    get: (n) => ({ systemPrompt: {}, tools: { register: () => () => {} }, sessionController: {}, webServer: {}, connection: {} }[n]),
+    inject: (deps, cb) => { cb({ get: fullCtx.get, inject: fullCtx.inject, effect: () => () => {} }); return { then: () => {} } },
+    effect: () => () => {},
+  }
+  ok('服务齐全时返回 true（壳继续装）', B.attachIdentity(fullCtx) === true)
+}
+
 fs.rmSync(TMP, { recursive: true, force: true })
 console.log(bad ? `\n✗ 能力桥：${bad} 项失败` : '\n✓ 能力桥：全绿')
 process.exit(bad ? 1 : 0)
