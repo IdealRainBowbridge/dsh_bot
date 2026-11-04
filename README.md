@@ -58,11 +58,11 @@
 前置：DSH ≥ 0.2.1-rc.2，Node ≥ 20。
 
 ```bash
-# 1. 放到 DSH 插件目录
-cp -r dsh_bot ~/.dsh/plugins/
+# 方式一（推荐）：DSH 插件命令
+dsh plugin --profile desktop add "link:<本仓库路径或 git url>"
 
-# 2. 安装依赖（零运行时依赖，dev 依赖仅测试用）
-cd ~/.dsh/plugins/dsh_bot && npm ci
+# 方式二：手动放到 DSH 插件目录
+cp -r dsh_bot ~/.dsh/plugins/
 
 # 3. 自检
 node tools/bot.mjs selftest
