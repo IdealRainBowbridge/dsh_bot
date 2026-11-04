@@ -13,7 +13,7 @@
   }
   h1 { font-size: 20px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
   h2 { font-size: 14px; margin: 0 0 12px; color: #9aa4b2; font-weight: 600; letter-spacing: .02em; }
-  .sub { color: #6b7480; font-size: 12px; margin-bottom: 22px; }
+  .sub { color: #808a97; font-size: 12px; margin-bottom: 22px; }
   .card {
     background: #1d2027; border: 1px solid #2a2e37; border-radius: 12px;
     padding: 16px 18px; margin-bottom: 14px;
@@ -42,7 +42,7 @@
     background: #12141a; border: 1px solid #262b34; border-radius: 10px; padding: 10px 12px;
   }
   .sw span { font-size: 13px; }
-  .sw small { display: block; color: #6b7480; font-size: 11px; }
+  .sw small { display: block; color: #808a97; font-size: 12px; }
   .toggle { position: relative; width: 40px; height: 22px; flex: none; }
   .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
   .toggle i {
@@ -57,7 +57,7 @@
   .mem { max-height: 260px; overflow: auto; font-size: 12px; line-height: 1.7; }
   .mem-item { padding: 4px 0; border-bottom: 1px dashed #262b34; color: #b9c1cd; }
   .mem-item b { color: #7f8b9b; font-weight: 500; margin-right: 6px; }
-  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #262b34; color: #8b95a5; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 6px; background: #262b34; color: #8b95a5; }
   .toast {
     position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(10px);
     background: #2b7a4b; color: #fff; padding: 9px 18px; border-radius: 8px; font-size: 13px;
@@ -65,7 +65,7 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.err { background: #a13b3b; }
-  .hint { color: #6b7480; font-size: 11.5px; margin-top: 6px; }
+  .hint { color: #808a97; font-size: 12px; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -141,7 +141,14 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const API = '/dsh_bot/api';
+// 2026-11-04：同 client.js —— 本页也可能挂在子路径（/deepseekharness/dsh_bot/），
+// 写死根路径会让整页所有请求 404。按当前页 URL 推前缀，只取 pathname 保持同源。
+const API = (() => {
+  try {
+    const dir = new URL('.', location.href).pathname.replace(/\/+$/, '');
+    return dir.replace(/\/dsh_bot$/, '') + '/dsh_bot/api';
+  } catch { return '/dsh_bot/api'; }
+})();
 const $ = (id) => document.getElementById(id);
 let state = { config: {}, voices: [] };
 

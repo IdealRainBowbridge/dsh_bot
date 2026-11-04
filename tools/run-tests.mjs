@@ -15,6 +15,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TESTS = [
   'client-smoke.mjs',
   'client-render.mjs',
+  'client-base-test.mjs',     // 挂载前缀：子路径 / 根挂载都不能打错 API 基址（2026-11-04）
+  'access-fence-test.mjs',    // 访问栅栏：回环 / 反代 / 陌生来源三分（2026-11-04）
   'stickers-test.mjs',
   'collateral-test.mjs',     // A1 侧支循环：门控/血债/试跳恢复/describe（2026-11-03）
   'immune-test.mjs',         // B1 免疫系统：耐受/先天模式/抗体记忆/发热/退烧（2026-11-03）

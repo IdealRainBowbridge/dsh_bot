@@ -24,7 +24,26 @@ window.__ModuleLoader__.load({
 		const inject = ["slots"];
 
 		// ── 接口层 ────────────────────────────────────────────────────────────
-		const API = "/dsh_bot/api";
+		// 挂载前缀：DSH 以 <script src="plugins/??dsh_bot/client.js&rev=…"> 注入本文件，
+		// 从它自己的 URL 反推站点前缀，和 SPA 当前路由深度无关（面板可能挂在
+		// /deepseekharness/ 子路径下，写死 "/dsh_bot/api" 会打到根 server → 全站 404）。
+		// 取不到脚本标签时退回文档 base；都取不到就当根挂载。
+		function mountPrefix() {
+			try {
+				const scripts = document.querySelectorAll ? document.querySelectorAll("script[src]") : [];
+				const el = Array.prototype.find.call(scripts, (s) => String(s.src || "").indexOf("dsh_bot/client.js") >= 0);
+				if (el) {
+					const p = new URL(el.src).pathname;          // /deepseekharness/plugins/
+					const i = p.indexOf("plugins/");
+					if (i >= 0) return p.slice(0, i).replace(/\/+$/, "");
+				}
+			} catch (e) {
+				// 没有 DOM / 没有 URL 实现（测试桩）：落到下面的 base 推导
+			}
+			try { return new URL(".", document.baseURI).pathname.replace(/\/+$/, ""); }
+			catch (e2) { return ""; }
+		}
+		const API = mountPrefix() + "/dsh_bot/api";
 
 		async function api(path, init) {
 			// 2026-11-02：门禁补扫 client.js 时抓到 —— 原来没有超时。后端卡住（比如 /services

@@ -620,6 +620,14 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 
 > 前端改完跑 `npm test`（契约 + 假 hooks 真渲染，防白屏）。
 > 面板改动是**深合并**写配置：改一个字段不会把别的字段清掉。
+>
+> **子路径挂载**：面板可能挂在 `/deepseekharness/` 下（nginx 前缀反代）。`client.js` 从
+> 注入自己的 `<script src="…/plugins/??dsh_bot/client.js…">` 反推 API 前缀，`settings.html`
+> 从 `location` 反推 —— 两处都不能写死 `/dsh_bot/api`，否则请求打到站点根、整页 404。
+> 回归锚点：`test/client-base-test.mjs`。
+>
+> **访问栅栏**：插件 API 只接受「回环」或「宿主声明的 `--trusted-host` + 对端为容器网关
+> （宿主反代）」，其余 403。回归锚点：`test/access-fence-test.mjs`。
 
 ---
 

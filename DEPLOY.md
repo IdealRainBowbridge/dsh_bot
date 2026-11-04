@@ -297,5 +297,7 @@ npm test                                      # 8 套测试全过
 | DSH web | `:3080` |
 | 进程守护 | `im-gateway.sh`（node 挂了 ~52s 拉起）；她的自重启走 `selfmod-restart.flag`，**禁止 docker restart 整容器** |
 | git | 仓库分支 `refactor/v5`，身份 `bot <bot@local>`；她整点 :00/:10 前后跑 auto 快照（会卷走工作区未提交改动——动手前先 git log/status 核对） |
-| 门禁 | `node scripts/check.mjs`（295 文件，含 2026-11-03 新增「裸 catch{} 必须带注释」规则） |
-| 测试 | `node tools/run-tests.mjs`（83 套，全套 10+ 分钟，容器内跑用 nohup 后台 + 轮询日志） |
+| 门禁 | `node scripts/check.mjs`（303 文件，含 2026-11-03 新增「裸 catch{} 必须带注释」规则） |
+| 面板入口 | nginx `127.0.0.1:8415`（`/deepseekharness/` → `3090`，注入 DSH 会话 cookie）；另有 tailscale serve `:3081` 直连 3090。**子路径挂载**：`client.js`/`settings.html` 的 API 基址从自身脚本 URL 反推（写死 `/dsh_bot/api` 会 404） |
+| 插件访问栅栏 | 回环放行；其余要求「Host ∈ entry.sh 的 `--trusted-host` 且对端是容器网关 `172.17.0.1`（= 宿主反代）」，否则 403。鉴权仍由 DSH `connection.requestRejection` 负责 |
+| 测试 | `node tools/run-tests.mjs`（88 套，全套约 52 秒，容器内直接跑；含 2026-11-04 新增 `client-base-test` / `access-fence-test`） |
