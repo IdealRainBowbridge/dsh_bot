@@ -76,7 +76,7 @@ export const MAX_SLEEP_MIN = 16 * 60
  * 看门狗窗口：超过这个时长还没结算，就认定状态机卡死。
  *
  * 为什么不只用 `plannedMin * 1.6`：plan 文件（night-work.json）可能因为
- * `/home/dsh/.data` 被清、容器重建、或入睡走的是另一条路径（`bot sleep` 补记）
+ * `~/.data` 被清、容器重建、或入睡走的是另一条路径（`bot sleep` 补记）
  * 而不存在。实测就是这样：`night-work.json` 没有、`sleep.json` 里也没时长字段，
  * 于是"该睡多久"这个唯一能算出超时的输入是空的 —— 判据必须能独立成立。
  *
