@@ -106,21 +106,30 @@ function acquireSameDirLock(file) {
         if (pid && pid !== process.pid) { process.kill(pid, 0); alive = true }
       } catch { /* 读不到 = 残锁，当死的 */ }
       if (!alive) {
-        // Steal only what we verified dead. 2026-11-03: our liveness verdict
-        // can be stale by the time we rm - another waiter may have legally
-        // acquired the lock in between, and blindly rm-ing here deletes a
-        // LIVE lock -> two writers in the critical section -> lost updates
-        // (observed once in 81-suite run: tension 2.7 != 3.0). Re-read the
-        // lock right before rm; shrink the window from ms to us.
-        try {
-          const pid2 = Number(fs.readFileSync(lock, 'utf8'))
-          if (pid2 && pid2 !== process.pid) {
-            let alive2 = false
-            try { process.kill(pid2, 0); alive2 = true } catch { alive2 = false }
-            if (alive2) continue   // someone fresh holds it now; go wait
+        // 抢占死锁。2026-11-03 的版本是"复核 pid2 存活 → rm"，但复核与 rm 之间
+        // **仍有窗口**：两个等待者可以同时判定"死"，各自 rm 掉对方刚抢到的活锁 →
+        // 两个写入者同时进临界区 → 丢更新（实测 tension 2.7 != 3.0，隔几十次全套跑一次）。
+        //
+        // 2026-11-04 改成**原子抢占**：`renameSync(lock, graveyard)`。
+        // rename 是原子的，且只有一个竞争者能成功（另一个会 ENOENT），
+        // 所以"把一个具体的历史锁文件搬走"这件事天然互斥 —— 不存在 rm 掉别人新锁的可能。
+        // 搬走后先验尸（万一搬走的其实是活锁，就把它放回去），再继续抢。
+        const graveyard = `${lock}.stale.${process.pid}.${Math.random().toString(36).slice(2, 8)}`
+        let stole = false
+        try { fs.renameSync(lock, graveyard); stole = true } catch { /* 别人先搬走了 / 已被释放 */ }
+        if (stole) {
+          let holderAlive = false
+          try {
+            const pid2 = Number(fs.readFileSync(graveyard, 'utf8'))
+            if (pid2 && pid2 !== process.pid) { process.kill(pid2, 0); holderAlive = true }
+          } catch { /* 读不到 = 确实死了 */ }
+          if (holderAlive) {
+            // 误判：搬走的是一把活锁。放回去（放不回去也无妨 —— 它已经不在位，
+            // 持有者释放时会 rm 一个不存在的路径，接下来按"无锁降级"处理）。
+            try { fs.linkSync(graveyard, lock) } catch { /* 已被别人抢到，就这样 */ }
           }
-          try { fs.rmSync(lock, { force: true }) } catch { /* ignore */ }
-        } catch { /* lock vanished; nothing to steal, just retry link */ }
+          try { fs.rmSync(graveyard, { force: true }) } catch { /* ignore */ }
+        }
         continue
       }
       if (Date.now() > deadline) return { ok: false, why: 'timeout', lock }
