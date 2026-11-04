@@ -582,9 +582,6 @@ export async function run(argv = []) {
       const messages = brained?.messages
         ?? buildMessages({ platform: 'qq', userText, chatId, userId, turnsToday: turns, isGroup, quote: quoteLine, openThread })
       messages[0].content += thinkingInstruction()
-      if (physioNote) {
-        messages[0].content += '\n\n【身体现在的状态】' + physioNote + '\n（这是你自己的体感，照着它说话就行，别向对方解释身体、别提"状态"两个字。）'
-      }
       // 时间锚点已经搬进 persona 的「【现在】」常驻层（10-25 重构，照 dsh-world 的 timeContext）：
       // 贴在最后一条消息上的临时提示一重写就丢，现在每轮都在 system 里。
       // 这里只保留事后兜底要用的真实间隔（sanitizeDayClaims 的口径）。
@@ -645,6 +642,12 @@ export async function run(argv = []) {
         } catch (e) { swallow(e, 'qq:physiotemp') }
         return t
       })()
+      // 体感注进 system（2026-11-04 修 TDZ）：这段原先在 `let physioNote` 之前就读取它，
+      // 每条消息都抛 "Cannot access 'physioNote' before initialization"，QQ 回复链整条中断。
+      // 时序要求：必须在 dynTemp（内部赋 physioNote）之后拼接，否则读到的是空串。
+      if (physioNote) {
+        messages[0].content += '\n\n【身体现在的状态】' + physioNote + '\n（这是你自己的体感，照着它说话就行，别向对方解释身体、别提"状态"两个字。）'
+      }
       // 10-31：带工具的一轮（记承诺/查记忆/写日记/上网/看视频），失败自动退回纯文本。
       const toolsOn = config().qq?.tools?.enabled !== false
       let answer = ''
