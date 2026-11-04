@@ -429,6 +429,22 @@ export async function run(argv = []) {
       let imageDesc = ''
       let imageIsSticker = false
       const imageUris = []   // 10-30 合并通道：原图直接进聊天请求，不再先 VL 描述成文字
+      // 2026-11-05 视频抽帧：真的看，而不是只打【发了一段视频】占位。
+      // 只处理第一个视频（抽帧 IO 不该拖垮回复）；帧走与图片相同的 image_url 合并通道。
+      let videoNote = ''
+      try {
+        const vurl = (parsed.videos || []).find(Boolean)
+        if (vurl) {
+          const vf = await sampleVideoFrames({ url: vurl.startsWith('http') ? vurl : '' })
+          if (vf) {
+            videoNote = vf.note
+            if (vf.frames?.length) for (const f of vf.frames) imageUris.push(f)
+            else if (vf.note) videoNote = vf.note   // 没看成：诚实说明
+          }
+        }
+      } catch (e) { swallow(e, 'qq-server:videoframe') }
+      // 没看成时的诚实降级：抽帧失败 → 描述流里明确"没打开"，绝不装看过
+      if (videoNote && /没能打开/.test(videoNote)) extra = (extra ? extra + ' ' : '') + videoNote
       if (images.length) {
         try {
           fs.mkdirSync(dataPath('qq-img'), { recursive: true })
@@ -627,6 +643,10 @@ export async function run(argv = []) {
         }
         messages[messages.length - 1] = { role: 'user', content }
         log(`[qq] 🖼 图片已并入聊天请求（${imageUris.length}张）`)
+        if (videoNote && !/没能打开/.test(videoNote)) {
+          const lastC = messages[messages.length - 1]
+          if (Array.isArray(lastC.content)) lastC.content[0].text = (videoNote + '\n' + (lastC.content[0]?.text || '')).slice(0, 2000)
+        }
       }
       // 动态温度（10-31 智能化）：按内容特征调——严肃/长文沉稳，日常/短句轻快
       let physioNote = ''

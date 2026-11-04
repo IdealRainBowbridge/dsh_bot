@@ -52,12 +52,13 @@ export function splitBubbles(text, max = 4, perMax = 68) {
 
 /**
  * 解析 OneBot v11 消息（array 段 或 CQ 码字符串）。
- * @returns {{text:string, atMe:boolean, images:string[], marks:string[], replyId:string}}
+ * @returns {{text:string, atMe:boolean, images:string[], videos:string[], marks:string[], replyId:string}}
  */
 export function parseMessage(message, selfId) {
   let text = ''
   let atMe = false
   const images = []   // 图片 URL（等视觉模型来"看"）
+  const videos = []   // 视频 URL（2026-11-05: 抽帧看）
   const marks = []    // 非文字内容的描述标记
   let replyId = ''    // 引用了哪一条
   if (Array.isArray(message)) {
@@ -70,7 +71,11 @@ export function parseMessage(message, selfId) {
         if (/^https?:\/\//.test(u)) images.push(u)
         marks.push('【发了一张图片】')
       } else if (t === 'face') marks.push('【QQ表情】')
-      else if (t === 'video') marks.push('【发了一段视频】')
+      else if (t === 'video') {
+        // 2026-11-05: 视频真的看——URL 带出去走 videoframe 抽帧进视觉通道
+        videos.push(String(seg.data?.url || seg.data?.file || ''))
+        marks.push('【发了一段视频】')
+      }
       else if (t === 'record') marks.push('【发了一条语音】')
       else if (t === 'reply') {
         replyId = String(seg.data?.id ?? seg.data?.message_id ?? '').trim()
@@ -103,5 +108,5 @@ export function parseMessage(message, selfId) {
     const m = /\[CQ:reply,id=(-?\d+)/.exec(message)
     if (m) replyId = m[1]
   }
-  return { text: text.trim(), atMe, images, marks, replyId }
+  return { text: text.trim(), atMe, images, videos, marks, replyId }
 }
