@@ -1015,6 +1015,11 @@ const FILE_ALLOW = {
 // 先登记，别让它挡住门禁；门禁的价值是"新账不许再欠"，不是"旧账一天还完"。
 const FUNC_ALLOW = {
   'client.js:FeiyuSection': 900,
+  // 2026-11-04：她在语气层后面补了 7 行「你发得出语音」的能力说明（实测主人要语音时她答
+  // "我只能打字"——能力不认识等于白装）。buildMessages 因此 502 行。
+  // 正确拆法是把整个"语气/能力层"抽成 buildVoiceCapabilityLayer(cfg, platform, isGroup)，
+  // 但那段依赖 cfg 与 emotionTagPrompt 的闭包，属独立一轮；先登记，别挡门禁。
+  'tools/lib/persona.mjs:buildMessages': 510,
   // qq-server 的 run() 是主闭包 —— 它的长度 ≈ 文件长度，文件护栏已经覆盖。
   // 10-31 从 1600 调到 1700：为了治"一小时内连发 6 条主动消息"，在闭包里加了
   // 主动发言闸门（ownerSpoke / canSpeak / spokeDone 三个 helper 在模块级，
