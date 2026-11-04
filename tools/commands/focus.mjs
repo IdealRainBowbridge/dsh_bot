@@ -49,7 +49,7 @@ export async function run(argv = []) {
       : s.remainMin > 0 ? `（还剩 ${s.remainMin} 分钟）` : '（没设时限）'
     console.log(`现在在做：${s.label}${s.min ? ` · 计划 ${s.min} 分钟` : ''}${tail}`)
     if (s.note) console.log(`  由头：${s.note}`)
-    console.log(`  记录于 ${s.setAgoMin} 分钟前 → ${FOCUS_PATH.replace(process.env.USERPROFILE || '', '~')}`)
+    console.log(`  记录于 ${s.setAgoMin} 分钟前 → ${FOCUS_PATH.replace(process.env.USERPROFILE || process.env.HOME || '', '~')}`)
     return
   }
 

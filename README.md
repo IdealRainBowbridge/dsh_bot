@@ -7,7 +7,7 @@
 让"情感"从身体的状态里自己长出来，而不是靠提示词演出来。
 
 - **B站**：生物钟到点自己醒，选题、深读视频、写评论、写两本日记
-- **QQ**：经 [SnowLuma](https://github.com/NapNeko/NapCatQQ) 网关秒回（私聊/群聊@、语音条、表情包、空间说说），会主动找你
+- **QQ**：经 **SnowLuma** 网关（OneBot v11，NapCat 协议兼容）秒回（私聊/群聊@、语音条、表情包、空间说说），会主动找你
 - **微信**：替你回消息（独立进程，按联系人隔离记忆）
 - 三平台共用同一套人格、情绪与记忆
 - **所有外发默认关闭**，每一项都有独立开关与额度
@@ -69,7 +69,7 @@ node tools/bot.mjs selftest
 node tools/bot.mjs diagnose
 ```
 
-QQ 通道需另装 [SnowLuma](https://github.com/NapNeko/NapCatQQ)（兼容原 NapCat 部署，
+QQ 通道需另装 SnowLuma 网关（NapCat 协议兼容，兼容原 NapCat 部署，
 配置文件 `snowluma_<QQ>.json` 与 `napcat_<QQ>.json` 均可识别）。
 微信通道为独立 Python 进程，见 `wechat/`。
 
