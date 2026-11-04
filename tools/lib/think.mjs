@@ -54,10 +54,24 @@ export async function introspect({ userText = '', chatId = '', isGroup = false, 
   // 原写法 cognitiveDepth(now) 传了数字 → st.dims 为 undefined →
   // 每轮都 "Cannot read properties of undefined (reading 'sleepDebt')"，
   // 「先想后说」整层静默失效（只在内省日志里冒一行 ERR）。先演化再求值。
-  const depth = F.cognitiveDepth(F.evolve(now))
-  if (isGroup || depth <= RULES.minDepth) return { thought: '', used: false, depth }
+  // 2026-11-05 意识-身体耦合：内省不只要认知深度，还要看情绪场的"愿不愿意想"。
+  // cognitiveDepth 只测睡眠债/疲劳（生理），patience/irritability 是情绪（心理）——
+  // 烦躁的人不是想不动，是**不想想**。这两个门槛缺一不可。
+  const st = F.evolve(now)
+  const depth = F.cognitiveDepth(st)
+  let willing = F.patience(st)
+  try {
+    const ir = F.irritability(st)
+    if (Number.isFinite(ir)) willing = Math.min(willing, 1 - ir * 0.8)  // 越烦越不想内省
+  } catch { /* irritability 缺席就只用 patience */ }
+  if (isGroup || depth <= RULES.minDepth || willing < 0.25) {
+    return { thought: '', used: false, depth, skippedBy: willing < 0.25 ? 'emotion' : 'depth' }
+  }
 
   const thoughtBlock = IN.innerBlock(2, now)
+  // 情绪底色一行（field.sense 已有现成实现：给提示词用的、能读出方向的一句话）
+  let moodLine = ''
+  try { const lines = F.sense(st); if (Array.isArray(lines) && lines[0]) moodLine = String(lines[0]) } catch { /* 情绪读不出就不注 */ }
   const ask = [{
     role: 'user',
     content:
@@ -70,7 +84,8 @@ export async function introspect({ userText = '', chatId = '', isGroup = false, 
       '- 不要用引号，不要写"我想："这种前缀\n' +
       '- 如果你其实不太想理他 / 不知道说什么，就照实写出来\n\n' +
       thoughtBlock +
-      '\n\n他说：「' + String(userText || '').slice(0, 300) + '」',
+      '\n\n他说：「' + String(userText || '').slice(0, 300) + '」' +
+      (moodLine ? '\n\n（你现在的情绪底色：' + moodLine + '）' : ''),
   }]
 
   let raw = ''
