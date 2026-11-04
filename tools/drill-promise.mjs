@@ -33,8 +33,10 @@ if (planOnly) {
 
 // ③ 把到期时间改成现在，模拟"到点了" → 走 binge
 const fs = await import('node:fs')
+const os = await import('node:os')
 const path = await import('node:path')
-const P = path.join(process.env.USERPROFILE, '.bot-ai', 'promises.json')
+const HOME = process.env.USERPROFILE || process.env.HOME || os.homedir()
+const P = path.join(HOME, '.bot-ai', 'promises.json')  // 2026-11-05 修复: Linux 上 USERPROFILE 未定义时抛 TypeError
 const j = JSON.parse(fs.readFileSync(P, 'utf8'))
 for (const it of j.items) if (it.state === 'open') it.dueAt = Date.now() - 1000
 fs.writeFileSync(P, JSON.stringify(j, null, 1) + '\n')
