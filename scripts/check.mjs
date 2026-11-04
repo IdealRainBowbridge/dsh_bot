@@ -1000,7 +1000,7 @@ function checkHardcodedPaths(files) {
 const FILE_LIMIT = 1800
 const FUNC_LIMIT = 500
 const FILE_ALLOW = {
-  // 已知欠账：闭包耦合太深，拆分风险 > 收益（见 AUDIT-FIX-20261031.md 第八节）
+  // 已知欠账：闭包耦合太深，拆分风险 > 收益（见 docs/audit-fix-2026-10-31.md 第八节）
   'tools/commands/qq-server.mjs': 1750,
   'lib/index.js': 1150,
   'client.js': 1150,

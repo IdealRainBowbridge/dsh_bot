@@ -174,13 +174,13 @@ node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.
 
 | 文件 | 作用 | 新对话是否需要读 |
 |---|---|---|
-| `BRAIN-HANDOFF.md` | **本文**：事实、约束、现状、下一步 | **必读** |
+| `BRAIN-docs/handoff-index.md` | **本文**：事实、约束、现状、下一步 | **必读** |
 | `BRAIN-PLAN.md` | **最终方案**：七器官四回路、schema、算法、S1~S4、29 条探针 | **必读** |
 | `BRAIN-AUDIT.md` | 现状取证（13 记忆缺陷 + 10 行为缺陷，含实测数字与代码行号） | 质疑某个判断时回查 |
 | `BRAIN-DESIGN.md` | 器官设计推演（含人格自维护护栏、痛感记忆决定） | 需要设计理由时回查 |
 | `BRAIN-UNITY.md` | 跨端一致 + 承诺履约的推演 | 同上 |
 | `BRAIN-PRESENCE.md` | 群聊事故复盘（scope/speaker/presence 的由来） | 同上 |
-| `HANDOFF.md` / `README.md` | 项目历史铁律与功能地图（86KB / 43KB，很旧但有用） | 需要历史决策时查 |
+| `docs/handoff-index.md` / `README.md` | 项目历史铁律与功能地图（86KB / 43KB，很旧但有用） | 需要历史决策时查 |
 
 ---
 

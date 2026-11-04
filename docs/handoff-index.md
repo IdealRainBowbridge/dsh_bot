@@ -3,7 +3,7 @@
 > **生成时间**：2026-10-25（单日 33 个 commit 的全量交接）
 > **基线 commit**：`ff35b19`（全部已推送 GitHub `baishuyue/dsh_bot`）
 > **接手顺序**：读本文 → 读 `README.md`（仓库功能清单）→ 遇到坑先查「七、踩坑铁律」
-> 本文档取代旧版 PROJECT_HANDOFF.md（旧版历史细节已并入本文）
+> 本文档取代旧版 PROJECT_docs/handoff-index.md（旧版历史细节已并入本文）
 
 ---
 

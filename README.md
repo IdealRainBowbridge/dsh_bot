@@ -123,7 +123,7 @@ QQ 通道需另装 SnowLuma 网关（NapCat 协议兼容，兼容原 NapCat 部�
 
 ## 七、开发文档
 
-设计细节、事故记录与交接文档在 `docs/` 与根目录 `*-HANDOFF.md` / `BRAIN-*.md`——
+设计细节、事故记录与交接文档在 `docs/` 与根目录 `*-docs/handoff-index.md` / `BRAIN-*.md`——
 它们保留了每一次踩坑的完整上下文，新贡献者建议先读 `BRAIN-DESIGN.md`。
 
 ## 许可

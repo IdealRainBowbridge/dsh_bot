@@ -1,6 +1,6 @@
 # 最终重构方案：中央统筹的"脑"（v1.0 · 2026-10-29 定稿）
 
-> 这是**唯一执行依据**。新对话只需本文件 + `BRAIN-HANDOFF.md`。
+> 这是**唯一执行依据**。新对话只需本文件 + `BRAIN-docs/handoff-index.md`。
 > 背景论证见 `BRAIN-AUDIT.md`（取证）/ `BRAIN-DESIGN.md`（器官）/ `BRAIN-UNITY.md`（跨端）/ `BRAIN-PRESENCE.md`（在场），
 > 它们是证据与推演，**不是实现依据**；本文件与它们冲突时，以本文件为准。
 > **状态：设计定稿，代码未动。**
