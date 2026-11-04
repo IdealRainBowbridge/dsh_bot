@@ -88,21 +88,40 @@ export function readJsonl(file, { limit = 0 } = {}) {
 // 可能是测试沙箱里的任意路径。同目录锁与文件同生共死，测试隔离天然生效。
 const LOCK_WAIT_MS = 5000
 
+/**
+ * 从锁文件内容里取 pid。内容格式：第一行 pid，第二行 token（2026-11-04 起）。
+ * 老格式只有 pid 一行 —— 同样能读，向后兼容。
+ * @param {string} raw 锁文件原文
+ * @returns {number} pid（读不出返回 0 = 当死锁处理）
+ */
+function parseLockPid(raw) {
+  const first = String(raw || '').split('\n')[0].trim()
+  const n = Number(first)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
 function acquireSameDirLock(file) {
   const lock = `${file}.lock`
-  const mine = `${file}.${process.pid}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}.lock`
+  // token 唯一标识"这一次获取"：release 时用它认领（只删自己那份），
+  // 避免"我的租约已被抢占/过期清走后，我还把别人的锁 rm 掉"（2026-11-04 修）。
+  const token = `${process.pid}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}`
+  const mine = `${file}.${token}.lock`
   let fd = null
   try { fd = fs.openSync(mine, 'wx') } catch (e) { return { ok: false, why: 'create:' + (e && e.code) } }
-  try { fs.writeSync(fd, String(process.pid)) } finally { try { fs.closeSync(fd) } catch { /* ignore */ } }
+  // 锁内容 = pid + token（两行）：pid 给存活探测用，token 给 release 认领用
+  try { fs.writeSync(fd, String(process.pid) + '\n' + token) } finally { try { fs.closeSync(fd) } catch { /* ignore */ } }
   const deadline = Date.now() + LOCK_WAIT_MS
   for (;;) {
-    try { fs.linkSync(mine, lock); try { fs.rmSync(mine, { force: true }) } catch { /* ignore */ } return { ok: true, lock } }
+    try { fs.linkSync(mine, lock); try { fs.rmSync(mine, { force: true }) } catch { /* ignore */ } return { ok: true, lock, token } }
     catch (e) {
       if (!e || e.code !== 'EEXIST') { try { fs.rmSync(mine, { force: true }) } catch { /* ignore */ } return { ok: false, why: 'link:' + (e && e.code) } }
       // 已被占：持锁者还活着吗？死了就清掉重抢。
+      // ⚠️ 锁内容是 "pid\ntoken" 两行：必须只取第一行再转数字。
+      // 直接 Number(整份内容) = NaN → 每次探测都判"死" → 疯狂抢占 → 双写入者。
+      // （2026-11-04 加 token 时正是这个坑，靠下面这行 parsePid 统一收口。）
       let alive = false
       try {
-        const pid = Number(fs.readFileSync(lock, 'utf8'))
+        const pid = parseLockPid(fs.readFileSync(lock, 'utf8'))
         if (pid && pid !== process.pid) { process.kill(pid, 0); alive = true }
       } catch { /* 读不到 = 残锁，当死的 */ }
       if (!alive) {
@@ -120,7 +139,7 @@ function acquireSameDirLock(file) {
         if (stole) {
           let holderAlive = false
           try {
-            const pid2 = Number(fs.readFileSync(graveyard, 'utf8'))
+            const pid2 = parseLockPid(fs.readFileSync(graveyard, 'utf8'))
             if (pid2 && pid2 !== process.pid) { process.kill(pid2, 0); holderAlive = true }
           } catch { /* 读不到 = 确实死了 */ }
           if (holderAlive) {
@@ -140,8 +159,25 @@ function acquireSameDirLock(file) {
   }
 }
 
-function releaseSameDirLock(lock) {
-  try { fs.rmSync(lock, { force: true }) } catch { /* 残锁会被下一个获取者按死进程清走 */ }
+/**
+ * 释放锁 —— **只删自己那一份**。
+ *
+ * 2026-11-04 修：旧实现无条件 `rmSync(lock)`。如果本进程的租约已经被别人当作
+ * 死锁抢占（或过期被清走），这个 rm 会把**别人正在持有的锁**删掉 → 第三个进程
+ * 立刻进来 → 两个写入者同时在临界区 → 丢更新。
+ * 实测症状：10 个并发 poke 偶发只加了 2.4（丢了 2 条），20 次里出现 1 次。
+ *
+ * 认领方式：锁内容含 token，只有对得上才删。读不到/对不上就什么都不做 ——
+ * 残留锁会被下一个获取者按"pid 死了"清走，不会永久堵住。
+ * @param {string} lock 锁文件路径
+ * @param {string} token 本进程这次获取的令牌
+ */
+function releaseSameDirLock(lock, token) {
+  try {
+    const raw = fs.readFileSync(lock, 'utf8')
+    if (!token || !raw.includes(token)) return   // 不是我的锁：让真正的主人去释放
+    fs.rmSync(lock, { force: true })
+  } catch { /* 锁已不在（被别人清了）：正常，无副作用 */ }
 }
 
 /**
@@ -162,7 +198,7 @@ export function mutateJson(file, fallback, fn) {
   }
   const g = acquireSameDirLock(file)
   if (g.ok) {
-    try { return body() } finally { releaseSameDirLock(g.lock) }
+    try { return body() } finally { releaseSameDirLock(g.lock, g.token) }
   }
   try { swallow(new Error('mutateJson 无锁降级：' + file + ' —— ' + g.why), 'json:mutateLock') } catch { /* ignore */ }
   return body()
