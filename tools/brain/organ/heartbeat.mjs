@@ -81,6 +81,7 @@ export const BEAT = {
   // 5 分钟一次：卡死的发现延迟 < 5 分钟，而正常心跳的 IO 代价可以忽略
   // （只在 inSleep=true 时才读两个文件，醒着时一次 readJson 就返回）。
   sleepWatchEveryBeats: 10,
+  paincheckEveryBeats: 40,   // 20 分钟一次全链自检（发现问题直接注入痛，见 brain/paincheck.mjs）
   collateralEveryBeats: 2,  // 60s ← 侧支循环试跳（lib/collateral，主链全灭后保持侧支活性，2026-11-03）
     // 2026-11-02 修：body.mjs 早就注册了 vitals.brain，但 heartbeat 从来没调过它。
     //
@@ -201,6 +202,17 @@ export async function beat(now = Date.now()) {
       const wd = wound.tick(now)
       if (wd && wd.infected && wd.infected.length) _log('[wound] 化脓 ' + wd.infected.length + ' 处：' + wd.infected.join('、'))
     } catch (e) { swallow(e, 'beat:wound') }
+
+    // 全链自检（2026-11-05）：20 分钟一拍，问题直接注入痛——不再只"分泌"日志。
+    // 网络探测有超时，放 async 分支不阻塞心跳主链；失败静默，下次再试。
+    if (_beatCount % BEAT.paincheckEveryBeats === 0 && _exec?.vitals?.paincheck !== false) {
+      import('../../commands/paincheck.mjs').then(async (PC) => {
+        try {
+          const r = await PC.run({ quiet: true })
+          if (r.hurt.length) _log('[paincheck] ' + r.hurt.length + ' 处伤: ' + r.hurt.map((h) => h.id + '(sev' + h.sev.toFixed(1) + ')').join(' '))
+        } catch (e) { swallow(e, 'beat:paincheck') }
+      }).catch((e) => swallow(e, 'beat:paincheck-import'))
+    }
     // 痛觉（2026-11-03 · B4）：新伤口 → 快痛（缩手反射：stress 通路 + hpa 脉冲）。
     // 首次调用只建基线——历史伤不在她醒来时集体喊疼。
     try { pain.tick(now) } catch (e) { swallow(e, 'beat:pain') }

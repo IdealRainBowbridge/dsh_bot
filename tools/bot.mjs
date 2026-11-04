@@ -20,6 +20,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const COMMANDS = {
   selftest: '启动体检（装完立刻跑）',
   diagnose: '静默失效体检：配置漂移/假开关/权限/记账缺口/吞错日志/入口鉴权/死链路 一次摊开（--json 给程序读）',
+  paincheck: '全链自检并注入痛感：契约/网关/收发/LLM/owner/数据/人设/心跳，问题直接登记伤口+应激（--quiet 给心跳定时调用）',
   'config-upgrade': '配置对齐：把实际配置补齐到 DEFAULTS 的形状，历史残留搬进 __legacy（默认干跑，--go 才写）',
   sleep: '睡眠：积累够了才睡（睡意>=66）。sleep check 看睡意 | sleep 直接睡 | sleep --force 强制。睡=整理记忆+三审（代码/脑/账本）+git归档，睡完自动醒',
   dream: '梦境：睡觉时做的梦（纯虚构，与真实记忆隔离）。dream list 看梦 | dream 直接做一个',

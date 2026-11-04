@@ -303,6 +303,15 @@ export async function run(argv = []) {
     else items.push(warn('表达神经汇', '此刻无器官发声（正午平静期属正常；若长期全空查 field/rhythm 接线）'))
   } catch (e) { items.push(bad('表达神经汇', 'spinal 加载失败：' + e.message)) }
 
+  // 2026-11-05：paincheck 实况（全链扫描 + 痛注入的最近一次结果）
+  try {
+    const pc = JSON.parse(fs.readFileSync(dataPath('paincheck', 'last.json'), 'utf8'))
+    const bad = pc.items.filter((x) => !x.ok)
+    const age = Date.now() - pc.at
+    if (bad.length) items.push(bad('全链自检', `${bad.length} 项坏（${bad.map((x) => x.id).join(',')}）· 痛已注入 ${pc.hurt.length} 处 · ${Math.round(age / 60000)}min 前扫的`))
+    else items.push(ok('全链自检', `全绿（${Math.round(age / 60000)}min 前扫的${pc.healed ? `，愈合 ${pc.healed} 伤` : ''}）`))
+  } catch { /* 没跑过 paincheck，不报 */ }
+
   // ── v5 新增体检：把"看起来正常、其实已经死了"的链路摊开 ──────────────────
 
   // 5.6) 入口鉴权：这是最容易被忽略的一项（服务一旦绑 0.0.0.0 就等于门户大开）
