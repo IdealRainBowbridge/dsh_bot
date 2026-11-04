@@ -18,6 +18,17 @@ export const DEFAULTS = {
     ownerTitle: '主人',  // 她怎么称呼你
     selfClaim: '我',     // 她怎么自称
   },
+  // DSH 会话接管（2026-11-04）：装了这个插件，DSH 里开任何会话都是她 ——
+  // 宿主自己的 system prompt（harness 身份 / "You are a coding agent" / 工具规范段）
+  // 全部被一个 complete 段替换掉。工具 schemas 不受影响（它是 assemble 的独立字段）。
+  // 需要拿同一个 DSH 干原生编码活时，把 enabled 改成 false 立刻回退，不用动代码。
+  agent: {
+    takeover: {
+      enabled: true,
+      // 显示在 /api/status 与面板上的"谁在当值"，纯诊断用
+      label: '大肥鱼',
+    },
+  },
   // 你本人（分享型评论要 @ 的人）：mid 用于校验，name 用于正文 @
   owner: { mid: '', name: '' },
   // 作息（来自 bili-whale night-plan；跨零点自动处理；wakes = 每窗口醒几次，硬上限 12）
