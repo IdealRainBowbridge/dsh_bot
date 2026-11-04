@@ -102,6 +102,20 @@ export async function bindBody(deps) {
         // 独立进程跑（同 sleep 派活）：不钉心跳事件循环；换失败下一拍自然重算重试。
         try { deps.spawn(process.execPath, [deps.botPath(), 'status', '--step'], { detached: true, stdio: 'ignore', windowsHide: true }).unref() } catch (e) { swallow(e, 'body:presence') }
       },
+      sleeptick: (w) => {
+        // 看门狗叫醒后的收尾（2026-11-04）：把在线状态切回。
+        //
+        // 为什么在这里而不是在 night.mjs：`watchSleep` 是脑层器官，它只该报告
+        // "我刚醒了、状态该变了"（`w.needsOnline`）。真正碰 OneBot 的动作属于编排层 ——
+        // 第一版直接写在器官里，被门禁的「分层反向依赖」规则抓住（night → commands/status）。
+        //
+        // 走独立进程（同 presence），理由一样：不把网络 IO 钉在心跳的事件循环上，
+        // 而且换状态失败不该影响这一拍的其余体征。
+        try {
+          deps.spawn(process.execPath, [deps.botPath(), 'status', 'online'], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+          deps.log('[body] 🌅 醒了(' + (w?.reason || '?') + ') → 状态切回在线')
+        } catch (e) { swallow(e, 'body:sleeptick') }
+      },
       novelty: () => {
         // 探索的感受器（2026-11-02 晚）：每 10 拍（5 分钟）扫一次最近的经历，
         // arousal 越过门槛 → 刺激 explore 通路 —— 新奇是真的会让她坐不住。

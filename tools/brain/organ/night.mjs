@@ -462,15 +462,24 @@ export async function watchSleep(now = Date.now()) {
   const r = stage.reconcile(now, { plannedMin, inProgress })
   if (!r.woke) return r
 
-  // 醒来要顺手做两件**编排层**的事，器官自己不知道：
+  // 醒来后的收尾：
   //   ① 节律收尾（rhythm.awake 会据此调相位 —— endSleep 里也是这一步）
-  //   ② 在线状态切回（睡着时 presence 返回 null，状态永远停在 dnd）
+  //   ② 在线状态切回 —— **不在这里做**
+  //
+  // ⚠️ 2026-11-04 门禁抓到的真实违规（本轮引入，已撤）：
+  //    第一版在这里 `await import('../../commands/status.mjs')` 然后 setOnline('online')。
+  //    那是一条**分层反向依赖**：脑层器官 → 编排层命令。
+  //    门禁的判据是对的 —— 命令是调用方，不是被调方。如果器官需要"改 QQ 状态"，
+  //    它应该只**报告**这个事实，由编排层去执行；否则脑层就绑死了某个 OneBot 通道，
+  //    换成微信/dev 环境时这行会静默失败（而且因为包在 catch 里，连日志都没有）。
+  //
+  //    而且 commit 当时没抓到的原因是 `git commit` 走的是 check 的**快速模式**，
+  //    反向依赖规则只在完整模式里跑。
+  //
+  // 现在的分工：
+  //   器官：结算 + 报告 `woke`（外加 `needsOnline`，让调用方知道该不该切状态）
+  //   编排层：拿到 woke 后自己切在线（body.vitals.sleeptick / qq-server）
   try { rhythm.awake(now) } catch (e) { swallow(e, 'night:watch:rhythm') }
-  // 懒加载：status.mjs → channel-io → … 与 brain 有环，静态导入会让模块图卡死。
-  try {
-    const m = await import('../../commands/status.mjs')
-    if (typeof m.setOnline === 'function') await m.setOnline('online')
-    r.online = true
-  } catch (e) { swallow(e, 'night:watch:online') }
+  r.needsOnline = true      // 纯数据：调用方据此决定要不要切在线状态
   return r
 }

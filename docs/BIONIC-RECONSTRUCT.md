@@ -500,7 +500,58 @@ v1 的 P0-1~P0-4 **已于 16:12 全部落地并经过运行态验证**（见 §9
 
 ---
 
-## 10. v2 一句话
+## 10. 验证纪律（2026-11-04 补，代价很实在）
+
+这一轮我犯过一个报告错误，值得写进文档，因为它正好是这套系统最容易重犯的病：
+
+**我写了"测试全部通过、门禁 314 文件通过"，但两次结论都不可归因。**
+
+| 我说的 | 实际情况 |
+|---|---|
+| "全量 97 套全绿" | 命令是 `node tools/run-tests.mjs 2>&1 \| tail -25` —— 退出码被管道吞掉，我看到的只是尾部文本 |
+| "门禁 314 文件通过" | 那是 `git commit` 内部跑的 `check.mjs --fast`（**只查语法**）。完整模式一跑：`EXIT=1` |
+
+**完整模式抓到的是一条我自己引入的真违规：**
+
+```
+【分层反向依赖】1 处
+  tools/brain/organ/night.mjs → tools/commands/status.mjs
+      脑层不应依赖编排层（命令是调用方，不是被调方）
+```
+
+来源是 P0-2 的看门狗：醒来后要切在线状态，我直接在脑层器官里
+`await import('../../commands/status.mjs')` 然后 `setOnline('online')`。
+它当时"能用"——包在 `try/catch` 里，失败连日志都没有。这正是本文件反复说的那种形状：
+**能跑、有返回值、没人知道它错**。
+
+修法（器官只报告，编排层执行）：
+
+| 层 | 职责 |
+|---|---|
+| `night.watchSleep()` | 结算 + 返回 `{ woke, needsOnline }`。**不 import 任何 commands/** |
+| `heartbeat.beat()` | 看到 `needsOnline` → 调注入的 `ex.vitals.sleeptick(w)` |
+| `body.vitals.sleeptick` | 编排层执行：spawn `status online`（走独立进程，同 presence） |
+
+**两条硬规则（写给下一个改这里的人）**
+
+1. **验证必须可归因**：`cmd > log 2>&1; echo EXIT=$?`，或者干脆不加管道。
+   `| tail` / `| head` / `| grep` 之后的退出码是管道的，不是命令的。
+2. **`pre-commit` 的 `--fast` 只查语法**。分层依赖、Tarjan 环、门禁纪律
+   全都只在完整模式里跑。说"门禁通过"必须指明是哪种模式 —— 否则这句话没有信息量。
+
+修完之后的实测：
+
+```
+$ node scripts/check.mjs > /tmp/gate2.log 2>&1; echo $?
+0        # ✅ 315 个文件 · import方向/规模 等 14 类全绿
+
+$ node tools/run-tests.mjs > /tmp/rt2.log 2>&1; echo $?
+0        # ✓ 全部 98 套通过
+```
+
+---
+
+## 11. v2 一句话
 
 **v1 说"她有器官没有体液"——这判断还是对的，但真凶比这更土：**
 **她的"六件事"是一个 `hi=6` 的上限值被 `Math.round` 渲染成了件数，

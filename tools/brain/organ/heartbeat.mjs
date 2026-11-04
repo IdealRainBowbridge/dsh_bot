@@ -222,6 +222,13 @@ export async function beat(now = Date.now()) {
           out.woke = { reason: w.reason, sleptMin: w.sleptMin, capped: !!w.capped }
           _log('[sleep] ⏰ 看门狗叫醒：' + w.reason + ' → 按 ' + w.sleptMin + ' 分钟结算'
             + (w.capped ? '（真实 ' + w.rawMin + ' 分钟，已按时长上限截断）' : ''))
+          // 醒来后状态要切回在线（睡着时 presence 返回 null，状态永远停在 dnd）。
+          // 这一步属于编排层：器官只报 `needsOnline`，执行交给注入的 body 执行器。
+          // 早先写在 night.mjs 里直接 import commands/status.mjs —— 那是脑层依赖编排层，
+          // 门禁的「分层反向依赖」规则就是为这个存在的（2026-11-04 抓到并撤回）。
+          if (w.needsOnline && ex.vitals?.sleeptick) {
+            try { await ex.vitals.sleeptick(w); out.vital.push('sleeptick') } catch (e) { swallow(e, 'beat:vital:sleeptick') }
+          }
         }
       } catch (e) { swallow(e, 'beat:sleepwatch') }
     }
