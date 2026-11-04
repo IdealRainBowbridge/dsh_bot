@@ -270,22 +270,15 @@ const B = await import('../lib/dsh-bridge.mjs')
   }
   globalThis.__dshBotTakeover = null
   globalThis.__dshBotBridge = null
-  let shell = null
   let threw = null
-  try { shell = B.attachIdentity(ctx) } catch (e) { threw = e }
+  try { B.attachIdentity(ctx) } catch (e) { threw = e }
   ok('attachIdentity 不抛（缺服务只降级）', threw === null, threw ? String(threw.message) : '')
   ok('两个子插件都尝试挂载（systemPrompt / tools）', started.includes('systemPrompt') && started.includes('tools'), started.join(' | '))
   ok('人格接管在只有 systemPrompt 时也起来了', !!globalThis.__dshBotTakeover && globalThis.__dshBotTakeover.registered === true)
   ok('没有 tools 服务时能力桥明确报缺（不静默）', !!globalThis.__dshBotBridge && globalThis.__dshBotBridge.reason === 'no-tools-service', String(globalThis.__dshBotBridge && globalThis.__dshBotBridge.reason))
-  ok('缺 web 服务时返回 false（壳不装）', shell === false, String(shell))
-
-  // 完整 web 环境 → 壳继续
-  const fullCtx = {
-    get: (n) => ({ systemPrompt: {}, tools: { register: () => () => {} }, sessionController: {}, webServer: {}, connection: {} }[n]),
-    inject: (deps, cb) => { cb({ get: fullCtx.get, inject: fullCtx.inject, effect: () => () => {} }); return { then: () => {} } },
-    effect: () => () => {},
-  }
-  ok('服务齐全时返回 true（壳继续装）', B.attachIdentity(fullCtx) === true)
+  // 壳是否该装由**插件的 static inject** 决定（cordis 会等服务就绪），这里不再手判 ——
+  // attachIdentity 只管人格与桥，返回 undefined 是正确行为（它没有壳的发言权）。
+  ok('attachIdentity 不越权决定壳（返回值 undefined）', B.attachIdentity(ctx) === undefined)
 }
 
 fs.rmSync(TMP, { recursive: true, force: true })

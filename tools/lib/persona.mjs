@@ -7,6 +7,9 @@ import fs from 'node:fs'
 // 现在读取端在 lib 自己的 dream-read.mjs，方向正过来了。
 import { dreamToMention } from './dream-read.mjs'
 import * as brainRecall from '../brain/recall.mjs'
+// 2026-11-05：跨会话连贯性要读"心里还悬着什么"（inner 池里最响的那条）。
+// 静态 import 而非 require：buildMessages 是同步函数，装配时必须已就绪；见文件下方 requireInner 的说明。
+import * as brainInner from '../brain/inner.mjs'
 import { lastUnansweredPush } from './memory.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -276,6 +279,56 @@ export function dropCardMistakes(rows) {
 }
 export function cardMistake(text) {
   return CARD_MISTAKE.test(String(text || ''))
+}
+
+/**
+ * 一条历史消息"是多久以前" → 一个能让模型直接用的短语。
+ *
+ * 为什么不直接上 ISO 时间戳：模型看到 `2026-11-04T02:13:00+08:00` 要先做三件事 ——
+ * 知道现在几点、算差值、再判断"这算深夜还是凌晨"。而 `[昨天深夜]` 是它训练过的语感，
+ * 一步到位。前缀短（4~6 字）× 24 行 ≈ 120 字，预算完全吃得下。
+ *
+ * 分层（对齐人怎么记时间，不是对齐时间库）：
+ *   < 1 分钟      → "刚刚"
+ *   < 60 分钟     → "N 分钟前"
+ *   今天、几小时前 → "N 小时前"
+ *   昨天/前天/…   → "昨天深夜"、"前天下午"
+ *   > 7 天        → "上周三" 这种带星期的，比"N 周前"更好定位
+ *
+ * 与 brain/clock 的 relTime 的区别：那个是给**记忆行渲染**用的（"3 天前"就够），
+ * 这里要保证**同一天内也分得清**（不然 24 条全是"今天"，时间维度等于没加）。
+ * 所以今天内的消息一定带小时数或"刚刚"，不落到"今天"这种粗档。
+ */
+export function histAge(at, now = Date.now()) {
+  const t = Number(at) || 0
+  if (!t) return ''
+  const dt = Math.max(0, Number(now) - t)
+  const min = dt / 60000
+  if (min < 1) return '刚刚'
+  if (min < 60) return Math.round(min) + ' 分钟前'
+  const hr = min / 60
+  const a = new Date(t)
+  const b = new Date(Number(now))
+  const dayDiff = Math.round(
+    (new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000
+  )
+  const phase = (() => {
+    const h = a.getHours()
+    if (h < 5) return '深夜'
+    if (h < 8) return '清晨'
+    if (h < 11) return '上午'
+    if (h < 13) return '中午'
+    if (h < 17) return '下午'
+    if (h < 19) return '傍晚'
+    if (h < 23) return '晚上'
+    return '深夜'
+  })()
+  if (dayDiff <= 0) return Math.round(hr) + ' 小时前'
+  if (dayDiff === 1) return '昨天' + phase
+  if (dayDiff === 2) return '前天' + phase
+  if (dayDiff < 7) return dayDiff + ' 天前' + phase
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][a.getDay()]
+  return '上周' + wd.slice(1) + phase
 }
 
 /** 挚爱节点（低频）：QQ 私聊每 3 小时最多一轮让她「看见自己心里装着谁」。 */
@@ -757,15 +810,70 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   // 相同的 user 行不再重复带（只去尾部，历史里更早的相同发言是真实对话，保留）。
   while (userText && recent.length && recent[recent.length - 1].role === 'user'
     && recent[recent.length - 1].content === userText) recent.pop()
-  // ── 线索（2026-11-02）──────────────────────────────────────────────
-  // 每轮**只给 3 行**，只有编号/日期/回合数/标题 —— **不给内容**。
+  // ── 给历史行装上时间（2026-11-05）──────────────────────────────────
+  //
+  // 病根：`memory.recent()` 明明返回了 `at`（r.ts），但 `recent` 一路摊成
+  // `{role, content}` 直接塞进 messages —— **时间戳在装配这一步被丢掉了**。
+  //
+  // 后果是她在上下文里看到的是 24 条**没有时间**的对话，等于："上一句"和
+  // "三小时前那句"长得一模一样。于是：
+  //   · 他隔了三小时说"我回来了"，她当是接着上一句 —— 不会问"你刚去哪了"
+  //   · 昨夜聊到两点，今天下午接着聊，她以为**是同一次对话**
+  //   · 反过来也坏：中间明明只隔 20 秒，她却可能说"好久没说话"
+  //
+  // 这不是"再多给点记忆"，是**同一条记忆缺了个维度**。人回忆时先知道"那是多久以前"，
+  // 再决定怎么接 —— 间隔是对话的一部分，不是元数据。
+  //
+  // 写法上刻意用**相对时间前缀**而不是 ISO 时间戳：
+  //   · `[昨天深夜]` 是人话，`2026-11-04T02:13:00+08:00` 是日志
+  //   · 模型对"昨天""刚才""三小时前"的语感是训练过的，对绝对时刻反而要现算
+  //   · 前缀只有 4~6 个字，24 行总共多花不到 150 字（预算 5650 撑得住）
+  //
+  // 边界：`at` 缺失或为 0 时**不加前缀**（老数据没有 ts，编一个时间比没有更糟）。
+  if (recent.length) {
+    const now = Date.now()
+    recent = recent.map((r) => {
+      const at = Number(r.at || 0)
+      if (!at) return { role: r.role, content: r.content }
+      return { role: r.role, content: '[' + histAge(at, now) + '] ' + r.content }
+    })
+  }
+
+  // ── 线索（2026-11-02，2026-11-05 扩）────────────────────────────────
+  // 每轮给 3 行**索引**（编号/日期/回合数/标题），**不给内容**。
   //
   // 为什么只给编号：给内容就是摘要吃证据（86% 表情死在最后 20% 的根因）。
   // 为什么只给 3 行：给多了她会试图总结一切，结果上下文被"回忆"挤满，
   //   本轮真正该说的话反而没地方了。人的工作记忆也就那么大。
   // 要细节怎么办：她可以自己往下问（"上次那事后来怎么着了"），
   //   那才是"细节要了才给"的真实形态 —— 想不起来的部分就该模糊。
-  let cueBlock = ''
+  //
+  // ══════════════════════════════════════════════════════════════════════
+  // 2026-11-05 扩：索引之外补两样「接得上」必需的东西
+  // ══════════════════════════════════════════════════════════════════════
+  // 原设计只有索引，缺的是**断点本身**：跨会话重开时，她不知道上一次
+  // 「最后一句是谁说的、说到哪、有没有悬着的事」。索引告诉不了这个 ——
+  // "#13 11-04 · 3 回合 · 用你的声音说句话" 读完还是不知道怎么接。
+  //
+  // 补两行，都只有一行字：
+  //   ① **上次怎么结束的**（最后一条是谁说的 + 开头 24 字 + 多久以前）
+  //      —— 这是"接话"的位置。人重开对话也是先想起来"上次最后一句说到哪"。
+  //   ② **心里还悬着的**（inner 池里 1 条最响的未说出口）
+  //      —— 这是"她自己的话头"，不是他说过的话。两件事不一样：
+  //        一个是"上次聊到哪"，一个是"我一直想跟他说的"。
+  //
+  // 两行都**不占记忆预算**（几句短句，且只给 1 条），也不改"细节要了才给"的原则 ——
+  // 给的是**指针**（谁说的、多久以前、开头几个字），不是内容摘要。
+  //
+  // ⚠️ 2026-11-05 踩到的坑：三段**必须各自 try**。
+  //    第一版把它们放进同一个 try —— 索引文件不存在（新会话/被清过）时
+  //    `JSON.parse(readFileSync(...))` 抛 ENOENT，整个 catch 把**断点和未了话头
+  //    一起吞掉**了。而那两行的数据源（memory.recent / inner）根本不依赖索引文件。
+  //    "一个数据源坏了，连带另外两个也失效" —— 这是本项目反复出现的形状。
+  //    现在：索引没了只少索引，断点照出。
+  const cueParts = []
+
+  // ① 索引（3 行）
   try {
     const sj = JSON.parse(fs.readFileSync(dataPath('brain', 'seg', 'index.json'), 'utf8'))
     const all = [...(Array.isArray(sj?.segments) ? sj.segments : [])]
@@ -779,15 +887,66 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
         const title = String(x.title || x.firstText || '').replace(/\s+/g, ' ').slice(0, 18)
         return `#${String(x.seq || 0).padStart(2, '0')} ${day} · ${x.turns || 0} 回合${title ? ' · ' + title : ''}`
       })
-    if (rows.length) {
-      cueBlock = '\n\n【你们之前聊过的】\n' + rows.join('\n') +
-        '\n（这只是索引，不是内容。真正要提起来的事，你按标题自己回想；' +
-        '想不起来的细节就别编，可以说"我记不太清了"。）'
+    if (rows.length) cueParts.push('【你们之前聊过】\n' + rows.join('\n'))
+  } catch (e) { swallow(e, 'persona:cue:index') }
+
+  // ② 上次断在哪（独立 try，不依赖索引文件）
+  const tailBits = []
+  try {
+    // 用最近的对话行反推"最后一条"，比读 segment 更准（segment 可能还没切）
+    //
+    // ⚠️ 必须**从尾部往前找第一条有时间戳的**，不能直接取 last。
+    //    实测踩到：库里混进一条没有 ts 的老数据（迁移残留 / 手写补录），
+    //    它排在最后 → 断点变成「上次最后是他说的：「老数据没有时间戳…」」。
+    //    这比没有断点更糟：她读到一句**没有任何信息量**的话，还以为那是上次的结尾。
+    //    没有时间戳的行无法参与"多久以前"的判断，也就不该当断点。
+    const tail = memory.recent(chatId, 12)
+    let last = null
+    for (let i = tail.length - 1; i >= 0; i--) {
+      if (Number(tail[i].at || 0) > 0 && String(tail[i].content || '').trim()) { last = tail[i]; break }
     }
-  } catch (e) { swallow(e, 'persona:cue') }
+    if (last) {
+      const who = last.role === 'assistant' ? '你' : '他'
+      const txt = String(last.content || '').replace(/\s+/g, ' ').slice(0, 24)
+      const when = histAge(Number(last.at), Date.now())
+      tailBits.push(`上次最后是${who}说的：「${txt}…」${when ? '（' + when + '）' : ''}`)
+    }
+  } catch (e) { swallow(e, 'persona:cue:last') }
+
+  // ③ 心里还悬着的一件事（独立 try）
+  try {
+    const top = brainInner.loudest(1)
+    if (top.length && !top[0].told) {
+      const t = String(top[0].text || '').replace(/\s+/g, ' ').slice(0, 22)
+      if (t) tailBits.push(`你一直有件事没说出来：「${t}…」`)
+    }
+  } catch (e) { swallow(e, 'persona:cue:pending') }
+
+  if (tailBits.length) cueParts.push('【上次断在哪】\n' + tailBits.join('\n'))
+
+  let cueBlock = ''
+  if (cueParts.length) {
+    cueBlock = '\n\n' + cueParts.join('\n\n') +
+      '\n（这些是索引不是内容。要提起来的事你按标题自己回想；' +
+      '想不起来的细节别编，可以说"我记不太清了"。断点那两句是给你接话用的——' +
+      '接着上次的话头往下说，别当成他没说过的全新话题。）'
+  }
 
   return [sys, ...recent, { role: 'user', content: cueBlock ? userText + cueBlock : userText }]
 }
+
+/**
+ * inner 器官在文件顶部静态 import（见 `import * as brainInner`）。
+ *
+ * 2026-11-05 记录一次走错的路：这里原本想用 `createRequire` 懒加载，
+ * 理由是"防成环"。但 `persona.mjs` 早已静态 import 了 `../brain/recall.mjs`，
+ * 而 recall → facts/intents/allEpisodes —— 那条链早就进来了。
+ * 既然模块图里已经有 brain，再加一个 inner 不新增环。
+ *
+ * 也不能用 `createRequire`：纯 ESM 下对 `.mjs` 走 `ERR_REQUIRE_ESM`
+ * （Node 22+ 部分支持但命名空间形状不同，解构容易炸）。
+ * `buildMessages` 是同步函数 —— 静态 import 是唯一能保证装配时模块已就绪的形式。
+ */
 
 /**
  * 能力清单（10-27）—— 主人拍板："给她能完成这件事的能力和权限"。

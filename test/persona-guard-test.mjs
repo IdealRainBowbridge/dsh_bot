@@ -235,6 +235,53 @@ const GOOD = '# 你是大肥鱼\n\n'
   ok('缺 systemPrompt 时 registered=false 且有原因', r?.registered === false && r?.verifyReason === 'no-systemPrompt', r?.verifyReason)
 }
 
+// ── ⑩ 装配层强制（穿透 agentPreset 隔离作用域）────────────────────────────
+// 这一条对应本轮最重要的发现：会话绑定 agentPreset 时，preset 是 cordis 隔离作用域，
+// 全局注册的 complete 段对它不可见 —— 实测真实会话的 system/message 仍是
+// "You are a coding agent"，而 status 显示 verified=true。装配 waterfall 是唯一咽喉。
+{
+  writePersona(GOOD)
+  fs.writeFileSync(configPath, JSON.stringify({ agent: { takeover: { enabled: true } } }))
+
+  // 假 ctx：只实现 on（收集 waterfall 监听），next() 返回"宿主原生"的 assembly
+  const hooks = []
+  const ctx = { on: (name, fn) => { hooks.push([name, fn]); return () => {} } }
+  const dispose = A.attachAssembleHook(ctx)
+  ok('挂了 system-prompt/assemble 监听', hooks.length === 1 && hooks[0][0] === 'system-prompt/assemble')
+  ok('返回 disposer', typeof dispose === 'function')
+
+  const nativeAssembly = {
+    sections: [
+      { name: 'harness:identity', text: 'You are an AI agent powered by DeepSeek Harness.' },
+      { name: 'deployment:persona-prefix', text: 'You are a coding agent powered by the deepseek-flash model.' },
+      { name: 'tool:bash', text: 'Check the [exit code: N] marker on every bash result.' },
+    ],
+    contexts: [{ name: 'working-directory:current', text: 'cwd=/work' }],
+    tools: [{ name: 'bash', description: 'run', parameters: { type: 'object', properties: {} } }],
+    variables: { model: 'deepseek-flash' },
+  }
+  const transformed = await hooks[0][1](nativeAssembly, { agent: {} }, async () => nativeAssembly)
+  ok('transformed.sections 只剩 1 个（宿主身份/编码说明全让位）', transformed.sections.length === 1, String(transformed.sections.length))
+  ok('那一个就是她', transformed.sections[0].name === A.SECTION_NAME && transformed.sections[0].text.startsWith('# 你是大肥鱼'))
+  ok('宿主原生提示词彻底不在结果里', !/You are a coding agent|DeepSeek Harness/.test(JSON.stringify(transformed.sections)))
+  ok('tools 原样保留（她照样有手）', Array.isArray(transformed.tools) && transformed.tools.length === 1, JSON.stringify(transformed.tools?.map?.((t) => t.name)))
+  ok('contexts 原样保留（工作目录/沙箱仍归宿主）', transformed.contexts?.[0]?.name === 'working-directory:current')
+  ok('variables 原样保留（{{model}} 之类还能解析）', transformed.variables?.model === 'deepseek-flash')
+
+  // 关掉接管 → 一个字节都不改（回退能力必须还在）
+  fs.writeFileSync(configPath, JSON.stringify({ agent: { takeover: { enabled: false } } }))
+  const untouched = await hooks[0][1](nativeAssembly, { agent: {} }, async () => nativeAssembly)
+  ok('接管关闭时原样返回（不回退不了）', untouched === nativeAssembly && untouched.sections.length === 3)
+
+  // 装配异常不能连累会话：buildTakeoverPrompt 抛错时退回宿主装配
+  fs.writeFileSync(configPath, JSON.stringify({ agent: { takeover: { enabled: true } } }))
+  const origRead = fs.readFileSync
+  fs.readFileSync = (p, ...rest) => { if (String(p).includes('persona.md')) throw new Error('boom'); return origRead(p, ...rest) }
+  const fallback = await hooks[0][1](nativeAssembly, { agent: {} }, async () => nativeAssembly)
+  fs.readFileSync = origRead
+  ok('人设读取异常时仍返回她（退回核心锚点，不抛）', fallback.sections?.[0]?.text?.startsWith('# 你是大肥鱼'), String(fallback.sections?.[0]?.text || '').slice(0, 24))
+}
+
 fs.rmSync(TMP, { recursive: true, force: true })
 console.log(bad ? `\n✗ 人格加固：${bad} 项失败` : '\n✓ 人格加固：全绿')
 process.exit(bad ? 1 : 0)

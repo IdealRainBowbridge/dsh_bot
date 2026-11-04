@@ -346,7 +346,27 @@ const LEGACY_PUSH = /^【(?:B站|哔哩|抖音|微信|视频|分享|提醒|QQ)�
 /** 最近 n 条对话（按 chatId 过滤，时间正序返回）。返回 {role, content} 格式，供 LLM 直接使用。
  *  ⚠️ 只放 user/assistant（10-25 修的 bug）：抖音那边会把"刷到某条视频"记成 role=event 的流水，
  *  混进 messages 里会被模型接口直接拒掉（HTTP 422 unknown variant `event`）——
- *  抖音 interact 因此整条链路一条评论都生成不出来。 */
+ *  抖音 interact 因此整条链路一条评论都生成不出来。
+ *
+ *  ══════════════════════════════════════════════════════════════════════
+ *  2026-11-05：旧文件读不到时，回退到新脑的情景库
+ *  ══════════════════════════════════════════════════════════════════════
+ *  实测（生产容器）：`/home/dsh/.data/qq/episodes.jsonl` **不存在**，
+ *  而同一段对话完完整整躺在 `brain/ep/2026-11.jsonl`（42 条，带 at/atIso/role）。
+ *  于是 `recent()` 返回 0 行 → 她读不到任何历史 → 每轮都像第一次说话，
+ *  日志里反复打「记忆里没有主人的消息 → 按刚聊过处理」。
+ *
+ *  这不是"新功能没做"，是**两套存储的读取端没接上**：
+ *  写入侧 `brain.onEvent()` 一直在存（旧路径 memory.remember 也双写），
+ *  但读取侧只有旧路径的读法。容器重建/清盘后旧文件没了，新库还在，
+ *  于是"记忆突然全没了"——而数据其实一条没丢。
+ *
+ *  回退规则（只在旧库**完全读不到对话**时触发，不做合并）：
+ *    · 不做合并的理由：两套库里同一条对话会出现两次，合并要按内容去重，
+ *      而"同一句话说了两遍"在真实对话里是**可能**的 —— 去重会误删真实重复。
+ *    · 触发条件用"旧库 0 行"而不是"旧库比新库少"：后者会让她在两边都有数据时
+ *      看到一份拼接的、顺序错乱的对话，比缺失更糟。
+ */
 export function recent(chatId, n = 8) {
   const rows = readRows(chatId).filter(r => r.role === 'user' || r.role === 'assistant')
   // 10-26 主人报"记忆错乱"：她那边的"最近聊过"里塞满了自己推的视频（她一次能连推 7 条
@@ -357,9 +377,58 @@ export function recent(chatId, n = 8) {
   const need = Math.max(3, Math.ceil(n / 2))
   const convo = rows.filter(r => r.kind !== 'push' && !LEGACY_PUSH.test(String(r.text || '')))
   const pool = convo.length >= need ? convo : rows
-  return pool
-    .slice(-n)
-    .map(r => ({ role: r.role, content: r.text, at: r.ts, kind: r.kind }))
+  const out = pool.slice(-n).map(r => ({ role: r.role, content: r.text, at: r.ts, kind: r.kind }))
+  if (out.length) return out
+  // 旧库空 → 回退到新脑（见上面那段注释）
+  try {
+    const fb = recentFromBrain(chatId, n)
+    if (fb.length) return fb
+  } catch (e) { swallow(e, 'memory:recent:brain-fallback') }
+  return out
+}
+
+/**
+ * 从 `brain/ep/*.jsonl` 还原「最近的对话行」。
+ *
+ * 为什么需要单独一段而不是复用 brain/recall：recall 是**按相关性检索**，
+ * 它给的是"和这句话有关的记忆"；这里要的是"**按时间顺序的最近几条**"。
+ * 两个问题不同，混用会让 recent 变成"检索结果"——那样她每轮读到的上下文
+ * 都在变，反而更不连贯。
+ *
+ * 字段映射（brain 的 episode → 对话行）：
+ *   ep.act  'say'  + who.others[0].kind==='owner' → role: 'user'
+ *   ep.act  'say'  + who.others 为空（她说的）    → role: 'assistant'
+ *   其它 act（action/observe/promise/feel）       → 跳过（不是对话）
+ *   at → at（毫秒时间戳，recent 的时间前缀靠它）
+ *
+ * 内容用 `quote`（原话）而不是 `gist`（摘要）：上下文里给她摘要，
+ * 她会照着摘要的措辞说话，读起来像在复述笔记。
+ */
+function recentFromBrain(chatId, n = 8) {
+  const dir = dataPath('brain', 'ep')
+  let files = []
+  try { files = fs.readdirSync(dir).filter((f) => /^\d{4}-\d{2}\.jsonl$/.test(f)).sort() } catch { return [] }
+  if (!files.length) return []
+  // 只读最近两个月的分片：跨月时上个月月末的对话也要能接上
+  const rows = []
+  for (const f of files.slice(-2)) {
+    let lines = []
+    try { lines = fs.readFileSync(path.join(dir, f), 'utf8').split('\n').filter(Boolean) } catch { continue }
+    for (const line of lines) {
+      let ep
+      try { ep = JSON.parse(line) } catch { continue }
+      if (!ep || ep.where?.chat !== chatId) continue
+      if (ep.act !== 'say') continue
+      const others = Array.isArray(ep.who?.others) ? ep.who.others : []
+      const isOwner = others.some((w) => w.kind === 'owner')
+      const role = isOwner ? 'user' : 'assistant'
+      const text = String(ep.quote || ep.gist || '').trim()
+      if (!text) continue
+      rows.push({ role, content: text, at: Number(ep.at || 0), kind: '' })
+    }
+  }
+  rows.sort((a, b) => Number(a.at) - Number(b.at))
+  return rows.slice(-n)
 }
 
 
