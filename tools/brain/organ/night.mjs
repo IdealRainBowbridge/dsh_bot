@@ -138,19 +138,16 @@ export function sleepiness(now = Date.now(), o = {}) {
 
   const metabolic = parts.memory + parts.events + parts.code + parts.debt
 
-  // 钟表只做调制，不制造睡意
-  let mod = 1
+  // 2026-11-05：钟表调制已删（昼夜模拟剔除）。睡意 = 纯代谢账（清醒积累+修缮状态），
+  // sleepPressure 现在本身就是睡债/疲劳的读数，作为 parts 报出供诊断，不再乘 mod。
   let circ = 0
-  try {
-    circ = rhythm.sleepPressure(now)          // 0..1，曲线上"该困"的程度
-    mod = 0.85 + 0.30 * circ                  // 0.85 ~ 1.15
-  } catch (e) { swallow(e, 'night:sleepiness:clock') }
+  try { circ = rhythm.sleepPressure(now) } catch (e) { swallow(e, 'night:sleepiness:clock') }
 
-  const total = Math.min(100, Math.round(metabolic * mod))
+  const total = Math.min(100, Math.round(metabolic))
 
   return {
     score: total,
-    parts: { ...parts, metabolic, clockMod: Number(mod.toFixed(2)) },
+    parts: { ...parts, metabolic, sleepPressure: Number(circ.toFixed(2)) },
     detail,
     // 三种表述对应三种感觉，但判断依据永远是**账攒了多少**，不是几点了
     //

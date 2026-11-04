@@ -53,9 +53,9 @@ export function spinalState(opts = {}) {
     out.sources.push('field.depth')
   }
 
-  // ── 昼夜节律（rhythm）：睡眠压强与入睡状态 ──
+  // ── 睡眠压强（2026-11-05 重定义：纯清醒积累+睡眠修缮，昼夜钟点已剔除）──
   const pres = num(() => sleepPressure(now))
-  if (pres != null && pres > 0.7) {
+  if (pres != null && pres > 0.65) {
     out.maxTokensMul *= 0.6
     out.note = out.note || '困得很，话会短、可能词不达意'
     out.sources.push('rhythm.sleepPressure')
@@ -67,12 +67,6 @@ export function spinalState(opts = {}) {
     out.note = '半梦半醒被叫起来的含糊劲儿'
     out.sources.push('rhythm.asleep')
     out.maxTokensMul *= 0.5
-  } else {
-    const hour = new Date(now).getHours()
-    if (hour >= 1 && hour < 6) {
-      out.note = out.note || '深夜还醒着，有点飘'
-      out.sources.push('rhythm.lateNight')
-    }
   }
 
   out.temperature = clampBias(out.temperature + (opts.temperatureBias || 0))

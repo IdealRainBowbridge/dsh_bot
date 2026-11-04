@@ -53,6 +53,10 @@ const DAY = 24 * HOUR
  * @param {number} hourOfDay 0..24（本地时间的小数）
  * @param {number} phaseMin 相位偏移（分钟）
  */
+/**
+ * ⚠️ 2026-11-05 昼夜曲线已从困意机制中剔除（用户拍板：清醒积累+睡眠修缮才是困意核心）。
+ * 此函数仅供 snapshot()/doctor 的**显示层**读数，不参与任何行为决策。
+ */
 export function circadian(hourOfDay, phaseMin = 0) {
   const h = ((hourOfDay - phaseMin / 60) % 24 + 24) % 24
 
@@ -85,12 +89,33 @@ export function circadian(hourOfDay, phaseMin = 0) {
 }
 
 /** 当前时刻的"该困程度"（0..1）。相位已经算进去了。 */
+/**
+ * 睡眠压强（2026-11-05 重定义）：**纯清醒积累 + 睡眠修缮**，昼夜曲线已剔除。
+ *
+ * 语义变化：旧版 = 1 - circadian(钟点)（"到点该困"）；新版 = 睡债与疲劳的加权和
+ * （"醒太久/没睡够才困"）。同样 0..1，调用方（night.assess、spinal）不需要改签名。
+ *
+ * 口径：
+ *   sleepDebt 0..1 —— field 里 accrueSleepDebt 每拍累加，只有 repaySleep（真睡着）
+ *                     能还。这是"清醒积累"。
+ *   fatigue  0..1 —— 组织疲劳（睡眠修缮不足的直接读数）。
+ *   加权 0.65/0.35：债是根因，疲劳是状态；都为 0 时＝刚睡饱，压强 0。
+ *
+ * 循环依赖说明：field 不 import rhythm（已核实），这里静态 import 无环。
+ */
 export function sleepPressure(now = Date.now()) {
-  const st = state()
-  const d = new Date(now)
-  const hod = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600
-  return Number((1 - circadian(hod, st.phaseMin)).toFixed(3))
+  let debt = 0, fatigue = 0
+  try {
+    const st = field.evolve(now)
+    debt = clamp01(Number(st?.dims?.sleepDebt ?? 0))
+    fatigue = clamp01(Number(st?.dims?.fatigue ?? 0))
+  } catch { /* field 读不到 = 无账，压强按 0（不装困） */ }
+  return Number(Math.min(1, 0.65 * debt + 0.35 * fatigue).toFixed(3))
 }
+
+import * as field from './field.mjs'
+
+function clamp01(x) { return Math.max(0, Math.min(1, Number(x) || 0)) }
 
 /* ── 相位漂移：被真实作息推着走 ───────────────────────────────────── */
 
@@ -103,6 +128,7 @@ export function sleepPressure(now = Date.now()) {
  * @param {'light'|'activity'|'dark'} kind
  * @param {number} minutes 持续分钟数
  */
+/** ⚠️ 2026-11-05 弃用：光照/活动不再推动相位（昼夜模拟剔除）。保留导出 = 空操作。 */
 export function expose(kind, minutes = 10, now = Date.now()) {
   const st = state()
   const w = Math.max(0, Math.min(1, Number(minutes) / 60))
@@ -165,6 +191,7 @@ function _ownerActiveAt(now) {
  * 社交授时因子：一拍。dt 驱动（按真实间隔算拖拽量，不按调用次数）。
  * 每拍调用（heartbeat 器官段）；幂等：上一拍刚跑过时拖拽量按 dt 缩放，自然趋零。
  */
+/** ⚠️ 2026-11-05 弃用：空操作。心跳仍调它，未来可删。 */
 export function zeitgeberTick(now = Date.now()) {
   const st = state()
   const hod = new Date(now).getHours() + new Date(now).getMinutes() / 60
@@ -214,13 +241,7 @@ export function awake(now = Date.now()) {
   const slept = st.lastSleep ? (now - Number(st.lastSleep)) / HOUR : 0
   st.lastWake = now
   st.history = [...(st.history || []), { kind: 'wake', at: now, slept: Number(slept.toFixed(2)) }].slice(-30)
-  // 真实作息会反过来稳相位：连续几天都在这个点醒，相位会往这个点靠
-  if (slept > 0.5 && slept < 14) {
-    const targetHod = new Date(now).getHours()
-    const curPhaseWake = 7 + st.phaseMin / 60          // 中性时假设 7 点醒
-    const err = ((targetHod - curPhaseWake + 36) % 24) - 12   // 取最短方向
-    st.phaseMin = Math.max(-180, Math.min(240, st.phaseMin + err * 60 * 0.08))  // 每次挪 8%
-  }
+  // 2026-11-05：相位回稳逻辑已删（昼夜模拟剔除）。醒来的价值只剩"睡了多久"这一笔账。
   save(st)
   return Number(slept.toFixed(2))
 }

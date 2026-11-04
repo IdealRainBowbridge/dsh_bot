@@ -13,6 +13,7 @@ process.env.HOME = sandbox
 process.env.BOT_DATA_DIR = path.join(sandbox, '.data')
 
 const S = await import('../tools/brain/spinal.mjs')
+const F = await import('../tools/brain/field.mjs')
 
 let passed = 0
 function ok(name, fn) {
@@ -48,11 +49,11 @@ ok('器官炸了不牵连（mock 一个抛错的模块路径也能出结果）',
   assert.ok(sp, 'spinalState 不该返回空')
 })
 
-ok('凌晨 3 点被叫醒：睡眠压强 + 深夜两个源都发声', () => {
-  const d = new Date(); d.setHours(3, 30, 0, 0)
-  const sp = S.spinalState({ now: d.getTime() })
-  assert.ok(sp.sources.includes('rhythm.sleepPressure') || sp.sources.includes('rhythm.lateNight'),
-    'srcs=' + sp.sources.join(','))
+ok('高睡债时睡眠压强发声（昼夜钟点已剔除，困只看积累）', () => {
+  // 造高睡债: field.poke 直接写（sleepDebt accrualOnly, poke 可写入）
+  F.poke('sleepDebt', 0.9)
+  const sp = S.spinalState()
+  assert.ok(sp.sources.includes('rhythm.sleepPressure'), 'srcs=' + sp.sources.join(',') + ' pressure=')
 })
 
 ok('spinalSources 是 spinalState.sources 的快捷方式', () => {
