@@ -101,6 +101,10 @@ function parseLockPid(raw) {
 }
 
 function acquireSameDirLock(file) {
+  // 2026-11-05：先建目录再建锁文件 —— 以前靠"无锁降级裸写"路径里的 ensureDir
+  // 无意中兜了底，fail-closed 之后目录不存在时锁创建必败（ENOENT）→ 全体写入方
+  // 拿 null。锁系统必须自足，不能依赖写入方先建好目录。
+  try { ensureDir(path.dirname(file)) } catch { /* ensureDir 失败让 openSync 自己抛 */ }
   const lock = `${file}.lock`
   // token 唯一标识"这一次获取"：release 时用它认领（只删自己那份），
   // 避免"我的租约已被抢占/过期清走后，我还把别人的锁 rm 掉"（2026-11-04 修）。
