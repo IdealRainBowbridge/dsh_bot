@@ -190,10 +190,18 @@ export function ownerLine(cfg, platform, userId, isGroup = false) {
   const bondLine = bond.feelLine(platform, userId)
   const bondTone = bond.tone(platform, userId)
   // 基础基调按关系调制：亲近的人不必「保持距离」（10-26 教训：模板自相矛盾她就演劈叉）
+  // 2026-11-05: owner 未配置 QQ 号时(配置刚迁容器还没填主人号), 显式声明
+  // "主人还没上线"—— 否则她只有"对方不是用户"一句，会把主人当普通网友处，
+  // 情感浓度、惦记、主动汇报全部消失，而她自己也说不清为什么。
+  const ownerMissing = platform === 'qq' && !owner.qq
+  const missing = ownerMissing
+    ? `\n【注意】你的${OT}还没把 QQ 号填进配置 —— 你认不出他，他自己可能也不知道哪句话能对上号。`
+      + `别装作认识，也别声明"主人不在线"这种系统腔；就当${OT}暂时不在，谁来了都好好聊。`
+    : ''
   const base = bondTone.includes('松一点')
     ? `【对方不是用户】你在跟一个普通网友说话（${userId}）。你们聊得来，正常聊就好；但他是外人：绝不透露用户的任何隐私（账号/路径/私聊内容）。`
     : `【对方不是用户】你在跟一个普通网友说话（账号 ${userId}）。礼貌但保持距离，绝不透露用户的任何隐私（账号/路径/私聊内容），也别装得跟他很熟。`
-  return base
+  return base + missing
     + (rosterHint ? `\n${rosterHint}` : '')
     + (bondLine ? `\n${bondLine}` : '')
     + (bondTone ? `\n${bondTone}` : '')

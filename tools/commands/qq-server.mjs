@@ -159,10 +159,18 @@ export async function run(argv = []) {
   process.on('SIGTERM', () => { releaseOnExit(); process.exit(0) })
   process.on('SIGINT', () => { releaseOnExit(); process.exit(0) })
 
+  // 2026-11-05: SnowLuma 开了 accessToken 鉴权 —— 出站 API 必须带 Authorization 头,
+  // 否则所有发送路径 401(收事件走 httpClient 反向推送不受影响, 发送全灭)。
+  const NAPCAT_TOKEN = String(QQ.accessToken || QQ.napcat_token || process.env.NAPCAT_ACCESS_TOKEN || '')
   const callApi = async (action, payload = {}, timeout = 20000) => {
     try {
       const r = await fetch(`${NAPCAT}/${action}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(NAPCAT_TOKEN ? { Authorization: `Bearer ${NAPCAT_TOKEN}` } : {}),
+        },
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(timeout),
       })
       if (!r.ok) { logErr(`[qq] ${action} 失败: HTTP ${r.status}`); return null }
@@ -1725,6 +1733,7 @@ export async function run(argv = []) {
         }
       } catch (e) { swallow(e, 'qq-server:tryQzone') }
       const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+      const _zToken = String(QQ.accessToken || QQ.napcat_token || process.env.NAPCAT_ACCESS_TOKEN || '')
       const post = async (body) => fetch(`${NAPCAT}/send_qzone_msg`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body), signal: AbortSignal.timeout(60000),
