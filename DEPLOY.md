@@ -89,6 +89,34 @@
 | 安装/更新 | `bash /opt/whale-tts/install.sh`（幂等） | 建 venv → 装包 → 写 unit → 重启 → health + 合成自检 |
 | 日志 | `journalctl -u whale-tts` | 每条约一行：参数、句数、时长、文本前 24 字 |
 
+### 换声：whale-rvc（2026-11-04 追加）
+
+`edge-tts` 只有 4 个中文女声，音色天花板在那里。加一层 RVC 把输出换成「大肥鱼」音色。
+
+| 组件 | 位置 / 版本 | 说明 |
+|---|---|---|
+| **whale-rvc** | `/opt/whale-rvc/rvc_server.py`，`whale-rvc.service`（enabled） | 监听 `0.0.0.0:9881`，**常驻**（模型只加载一次，省掉每次 5 秒冷启动） |
+| 引擎 | Applio（`/opt/whale-rvc/Applio`，git clone 上游） | 底模 `rmvpe.pt`(181MB) + `contentvec`(378MB)，来自 `huggingface.co/IAHispano/Applio`，**必须走 7890 代理**（HF 直连 000） |
+| 声库 | `FeiyuVoice-RVC-v1.pth`(52MB) + `.index`(30MB) | 星落落授权的那条 SSR 大肥鱼，sha256 与包内 `manifest.json` 一致 |
+| 推理 | torch 2.15.0+**cpu** | GTX 1050 是 Pascal sm_61 且只有 2GB，装 CUDA 轮子不划算；CPU 4 线程实测 **8 秒音频 ≈ 13 秒**（1.6× 实时） |
+| 参数 | `index_rate=0.3`、`protect=0.33`、`f0=rmvpe`、`pitch=0` | 取自模型包 manifest；**音高 100% 跟随输入**（实测 381Hz 进 381Hz 出），只改音色 |
+| 访问栅栏 | 与 whale-tts 同一套（回环 + docker 网桥） | LAN `192.168.5.2:9881` 与 tailnet 实测 403 |
+| 安装/更新 | `bash /opt/whale-rvc/install.sh`（幂等） | 拉 Applio → 补底模 → 装依赖 → 写 unit → 预热 |
+| 日志 | `journalctl -u whale-rvc` | 每条：输入/输出大小、pitch、耗时 |
+
+**为什么常驻**：Applio 的 `infer.py` 每次调用都要 import torch + 加载 contentvec/rmvpe +
+权重，冷启动 5 秒。做成 HTTP 服务后 `VoiceConverter` 只在首个请求加载（实测 4.6–5.0 秒），
+之后每次只付推理时间。
+
+**接线方式**：`whale-tts` 合成完把 WAV 直接 POST 到 `whale-rvc/convert`，拿回换声后的
+WAV 再返回给 `dsh_bot`。失败一律回落原声（换声是加分项，不能因为 RVC 挂了整条语音丢掉）。
+
+延迟实测（8 秒的话）：edge 合成 2 秒 + RVC 13 秒 ≈ **15 秒**；4 秒的话 ≈ 10.5 秒。
+缓存命中 0 秒（缓存键里含 `rvc:开/关` 与模型标识，关掉换声不会命中已换声的旧条目）。
+
+关掉换声：`systemctl stop whale-rvc`（whale-tts 会自动回落），或
+`WHALE_RVC=0` 写进 `/etc/systemd/system/whale-tts.service.d/` 的 Environment。
+
 配置（`~/.dsh/bot.config.json`，容器内 `/home/dsh/.dsh/`）：
 
 ```json
@@ -338,7 +366,7 @@ npm test                                      # 8 套测试全过
 | 面板入口 | nginx `127.0.0.1:8415`（`/deepseekharness/` → `3090`，注入 DSH 会话 cookie）；另有 tailscale serve `:3081` 直连 3090。**子路径挂载**：`client.js`/`settings.html` 的 API 基址从自身脚本 URL 反推（写死 `/dsh_bot/api` 会 404） |
 | 插件访问栅栏 | 回环放行；其余要求「Host ∈ entry.sh 的 `--trusted-host` 且对端是容器网关 `172.17.0.1`（= 宿主反代）」，否则 403。鉴权仍由 DSH `connection.requestRejection` 负责 |
 | 测试 | `node tools/run-tests.mjs`（90 套，全套约 58 秒，容器内直接跑；2026-11-04 新增 `client-base-test` / `access-fence-test` / `settings-page-test` / `silent-failure-test`）；2026-11-04 语音改 whale-tts（见第五节）|
-| 语音服务 | 宿主 `whale-tts.service`（`/opt/whale-tts`，`0.0.0.0:9880`，只放行回环+docker 网桥）；容器侧 `voice.sovits_url=http://172.17.0.1:9880/tts` |
+| 语音服务 | 宿主 `whale-tts.service`（`/opt/whale-tts`，`:9880`）+ `whale-rvc.service`（`/opt/whale-rvc`，`:9881`），两者都只放行回环+docker 网桥；容器侧 `voice.sovits_url=http://172.17.0.1:9880/tts`，换声由 whale-tts 内部串起 |
 
 ## 静默失效修复批次（2026-11-04）
 
