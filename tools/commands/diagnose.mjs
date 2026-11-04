@@ -294,6 +294,15 @@ export async function run(argv = []) {
     } else items.push(warn('DSH 契约', '读不到 /opt/dsh/package.json（非 DSH 环境？）'))
   } catch (e) { items.push(warn('DSH 契约', '检查失败：' + e.message)) }
 
+  // 2026-11-05：表达神经汇自检 —— 哪些器官此刻在向说话链发声。
+  // 全空不一定是坏（正午精神好时可能真的没器官需要说话），但 24h 全空就该查接线了。
+  try {
+    const SP = await import('../brain/spinal.mjs')
+    const srcs = SP.spinalSources()
+    if (srcs.length) items.push(ok('表达神经汇', '在发声：' + srcs.join(' · ') + '（' + srcs.length + ' 器官）'))
+    else items.push(warn('表达神经汇', '此刻无器官发声（正午平静期属正常；若长期全空查 field/rhythm 接线）'))
+  } catch (e) { items.push(bad('表达神经汇', 'spinal 加载失败：' + e.message)) }
+
   // ── v5 新增体检：把"看起来正常、其实已经死了"的链路摊开 ──────────────────
 
   // 5.6) 入口鉴权：这是最容易被忽略的一项（服务一旦绑 0.0.0.0 就等于门户大开）

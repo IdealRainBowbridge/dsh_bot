@@ -619,6 +619,7 @@ export async function run(argv = []) {
       }
       // 动态温度（10-31 智能化）：按内容特征调——严肃/长文沉稳，日常/短句轻快
       let physioNote = ''
+      let dynTokMul = 1   // spinal 的输出预算乘数（spinalState 里赋值；默认 1 = 不收）
       // 动态温度 v2（2026-11-03 晚）：内容定基调（原逻辑），身体定幅度。
       // 免疫/代谢/痛觉各出 llmState()（纯读缓存，永不抛错）——发烧/低血糖/带伤时收着说话。
       // 这是「器官长进说话」的第一次接线：以前身体感只进 system 的自述层，不进表达参数。
@@ -628,17 +629,28 @@ export async function run(argv = []) {
           : /(哈哈|笑死|好家伙|草|乐|梗|表情包)/i.test(ut) ? 1.05
           : 0.92
         try {
-          const [IM, MB, PN, PH, VT] = await Promise.all([
+          const [IM, MB, PN, PH, VT, SP] = await Promise.all([
             import('../lib/immune.mjs'), import('../brain/organ/metabolism.mjs'), import('../brain/organ/pain.mjs'),
             import('../lib/llm-physio.mjs'), import('../brain/organ/vitals.mjs'),
+            import('../brain/spinal.mjs'),
           ])
           // B7（2026-11-03）：表达代谢 —— 今天的直连 token 超预算会"省着点说话"
           // （收温度 + 短句体感）。没配 llm.dailyBudgetTokens 时该器官静默，行为不变。
+          // 2026-11-05 神经汇：spinal 把情绪场（voiceReadiness/patience/irritability）
+          // 和昼夜节律（睡眠压强/深夜）也接进表达 —— 以前情绪和作息不影响说话方式。
+          // sp.maxTokensMul 同时收输出预算：困/累时话短，不是靠提示词求，是身体真的没电。
+          const sp = SP.spinalState()
+          let tokenMul = 1
           for (const s of [IM.llmState && IM.llmState(), MB.llmState && MB.llmState(), PN.llmState && PN.llmState(), PH.note && PH.note(config().llm), VT.llmState && VT.llmState()]) {
             if (!s) continue
             if (typeof s.temperature === 'number') t = Math.max(0.35, Math.min(1.05, t + s.temperature))
             if (s.note) physioNote = s.note   // 后到的覆盖先到的（痛觉最后 = 最贴近当下）
           }
+          t = Math.max(0.35, Math.min(1.05, t + sp.temperature))
+          tokenMul = sp.maxTokensMul
+          if (sp.note) physioNote = physioNote ? physioNote + '；' + sp.note : sp.note
+          // 预算乘数传给后面 llm 调用（闭包变量，见 dynTokMul）
+          dynTokMul = tokenMul
         } catch (e) { swallow(e, 'qq:physiotemp') }
         return t
       })()
@@ -660,7 +672,7 @@ export async function run(argv = []) {
       if (toolsOn) {
         try {
           ({ chatWithTools } = await import('../lib/agent.mjs'))
-          const r = await chatWithTools(messages, { temperature: dynTemp, purpose })
+          const r = await chatWithTools(messages, { temperature: dynTemp, purpose, max_tokens: Math.round((purpose === 'deep' ? 1200 : 700) * dynTokMul) })
           answer = r.text
           toolTrace = r.tools || []
           if (toolTrace.length) log('[qq] 🔧 用了工具：' + toolTrace.map((t) => t.name + (t.ok ? '✓' : '✗')).join(' '))
@@ -668,7 +680,7 @@ export async function run(argv = []) {
           logErr('[qq] 工具链失败，退回纯文本：' + (e?.message ?? e))
         }
       }
-      if (!answer) answer = await llm.chat(messages, { temperature: dynTemp, purpose })
+      if (!answer) answer = await llm.chat(messages, { temperature: dynTemp, purpose, max_tokens: Math.round((purpose === 'deep' ? 1200 : 700) * dynTokMul) })
 
       // ── 2026-11-02 ·「先想后说」────────────────────────────────────
       // 实现挪到 tools/lib/think.mjs：输入是（他说的话 + 她心里的念头 + 身体状态），
