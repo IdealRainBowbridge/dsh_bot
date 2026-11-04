@@ -9,7 +9,7 @@
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
-import { dataPath } from '../lib/paths.mjs'
+import { dataPath, configPath } from '../lib/paths.mjs'
 import { startIdleRestart } from '../lib/selfrestart.mjs'
 import { brainHealth } from '../lib/brain-health.mjs'
 import { swallow } from '../lib/swallow.mjs'
@@ -138,6 +138,9 @@ export async function run(argv = []) {
   try { const n = memory.sweepEpisodes(); if (n) log(`[qq] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch (e) { swallow(e, 'qq-server:run') }
   const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   const port = Number(argv[0]) || 8080
+  // 2026-11-05: 启动即报配置来源与出站地址 —— "SnowLuma 活着但插件说没连上"
+  // 这类问题九成是配置文件名/路径错位, 启动一行日志直接可见。
+  try { console.log('[qq] config:', configPath, '· napcat_http:', NAPCAT, '· token:', QQ.accessToken ? 'set' : 'MISSING') } catch { /* log 失败不挡启动 */ }
 
   // ── 单实例锁（10-31）──────────────────────────────────────────────────────
   // 两套启动机制（im-gateway.sh / 插件 startQQ）都能拉起这个进程。

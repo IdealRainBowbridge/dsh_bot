@@ -303,6 +303,17 @@ export async function run(argv = []) {
     else items.push(warn('表达神经汇', '此刻无器官发声（正午平静期属正常；若长期全空查 field/rhythm 接线）'))
   } catch (e) { items.push(bad('表达神经汇', 'spinal 加载失败：' + e.message)) }
 
+  // 2026-11-05：配置文件来源（双文件名/双副本错位是"显示没连上"的头号根因）
+  try {
+    const legacy = dshPath('feiyu.config.json')
+    const using = configPath
+    const isLegacy = using.endsWith('feiyu.config.json')
+    const botExists = fs.existsSync(dshPath('bot.config.json'))
+    if (isLegacy) items.push(warn('配置来源', '在读旧名 feiyu.config.json —— 建议迁移为 bot.config.json（新默认名）'))
+    else if (!botExists) items.push(ok('配置来源', using + '（无旧名文件，路径干净）'))
+    else items.push(ok('配置来源', using + '（旧名 feiyu.config.json 也在，已忽略）'))
+  } catch (e) { swallow(e, 'diagnose:config-source') }
+
   // 2026-11-05：paincheck 实况（全链扫描 + 痛注入的最近一次结果）
   try {
     const pc = JSON.parse(fs.readFileSync(dataPath('paincheck', 'last.json'), 'utf8'))

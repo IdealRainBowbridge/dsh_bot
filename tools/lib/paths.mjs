@@ -21,7 +21,13 @@ export const dshPath = (...parts) => path.join(DSH_HOME, ...parts)
 export const homePath = (...parts) => path.join(HOME, ...parts)
 
 /** 插件配置文件（BOT_CONFIG 可覆盖）。不含凭据。 */
-export const configPath = process.env.BOT_CONFIG || dshPath('bot.config.json')
+// 2026-11-05: 兼容旧部署的 feiyu.config.json —— 容器迁移时配置文件名没换过,
+// 插件只认 bot.config.json,导致运行实例一直用内置默认值(napcat/owner 全空)。
+// 解析顺序: BOT_CONFIG > bot.config.json > feiyu.config.json(旧名)
+export const configPath = process.env.BOT_CONFIG
+  || (fs.existsSync(dshPath('bot.config.json')) ? dshPath('bot.config.json')
+      : fs.existsSync(dshPath('feiyu.config.json')) ? dshPath('feiyu.config.json')
+      : dshPath('bot.config.json'))
 
 /** 数据目录：凭据 / 账本 / 记忆 / 情绪（换机器时整个拷走）。
  *  ⚠️ 测试一定要隔离：`BOT_DATA_DIR` 或把 USERPROFILE 指到临时目录都行。
