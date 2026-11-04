@@ -143,6 +143,13 @@ export function writeJsonAtomic(file, value, { mode = 0o600 } = {}) {
  * @returns {{ok:boolean, value?:any, error?:string, locked?:boolean}}
  */
 export function updateJson(file, mutate, opts = {}) {
+  // 防呆（2026-11-04 修缮轮2）：mutate 必须是函数。传对象字面量的话
+  // mutate(cur) 会返回 undefined → 走 skipped 静默返回——文件没写、没有任何报错，
+  // 调用方还以为写成功了（实测：watchdog 快照就这样静默丢了一小时）。
+  // 现在直接 fail-fast，把这种调用当场炸出来。
+  if (typeof mutate !== 'function') {
+    throw new TypeError(`updateJson(${String(file)}): mutate 必须是 (cur)=>next 函数，收到 ${typeof mutate} —— 传对象字面量会静默 skipped，见 atomic.mjs 文件头`)
+  }
   const lockPath = opts.lock || (file + '.lock')
   const release = acquireLock(lockPath, { staleMs: opts.staleMs ?? 30_000, waitMs: opts.waitMs ?? 5_000 })
   if (!release) {
