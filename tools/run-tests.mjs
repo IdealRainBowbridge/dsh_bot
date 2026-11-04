@@ -39,6 +39,8 @@ const TESTS = [
   'presence-test.mjs',        // 存在感器官：身体->QQ状态档 映射/否决串行/不应期/落盘（2026-11-03）
   'silent-failure-test.mjs',  // 静默失效四连：heartbeat TDZ / notify 去重 / outbox 原子 / swallow 分账（2026-11-04）
   'takeover-test.mjs',        // 人格接管：complete 段/开关默认值/兜底人设/身体说明（2026-11-04）
+  'persona-guard-test.mjs',   // 人格加固：核心锚点不可让渡/坏掉的 persona 自愈/装配校验三态（2026-11-04）
+  'dsh-bridge-test.mjs',      // 能力桥：bot_* 工具形状与执行/命令白名单来自 bot.mjs/会话事件只收真人输入（2026-11-04）
   'lock-adversarial-test.mjs', // 锁对抗：release 认领/抢占原子性/多行 pid 解析/老格式兼容（2026-11-04）
   'novelty-test.mjs',         // 新颖检测：陌生度/脱敏/见过池沉淀/习惯化（2026-11-02）
   'reply-attach-test.mjs',

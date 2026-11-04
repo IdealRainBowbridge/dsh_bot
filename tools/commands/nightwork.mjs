@@ -88,11 +88,24 @@ async function jobTidy() {
   } catch (e) { swallow(e, 'nightwork:tidy:llm') }
   try {
     const c = await brain.runConsolidation({ now: Date.now(), chatFn })
-    const n = c && ((c.processed != null && c.processed) || c.extracted)
+    // ⚠️ 2026-11-04：这里原来写 `(c.processed != null && c.processed) || c.extracted`。
+    //    两个坑叠在一起：
+    //      ① `processed === 0`（没有待处理的 ep）时，`(x != null && x)` 求值为 `0`（假值）
+    //         → 短路去取 `|| c.extracted`
+    //      ② `extracted` 这个字段在 run() 的返回里**根本不存在** → undefined
+    //    → `n` 变成 undefined → 结果文件里写 `processed: "?"`。
+    //
+    //    "0 条待处理"被记成"未知"，而"未知"看上去像故障。实测就踩到了：
+    //    游标已到 40/40，实跑 nightwork tidy 得到 `processed:"?"` ——
+    //    一个正确的空跑被记成一次可疑的失败。
+    //
+    //    正确写法：显式判 undefined/null，让 0 保持 0。
+    const n = c && c.processed != null ? c.processed : (c && c.extracted != null ? c.extracted : null)
     r = {
       processed: n != null ? n : '?',
       facts: c && c.facts,
       llmCalls: c && c.llmCalls,
+      clusters: c && c.clusters,
       // 供血判据落进结果文件：processed>0 而 added===0 且没调 LLM → 一眼看出
       llm: !!chatFn,
     }
