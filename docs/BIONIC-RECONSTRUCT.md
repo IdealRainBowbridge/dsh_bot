@@ -340,3 +340,165 @@
 每一层都只做一件事，而且每一层都可以被单独拔掉验证：
 拔掉语言，她还有身体；拔掉循环，器官立刻失序；拔掉记忆，她只剩此刻。
 **能这样一层层拔掉的东西，才叫架构；拔不掉的是补丁。**
+
+---
+
+## 8. v2 复核（2026-11-04 16:20 · 全部实测）
+
+> §1~§7 写于 15:39。之后连续两轮取证推翻了其中三处判断，并挖到四个 v1 完全没覆盖的缺陷。
+> 本节的每条结论都带可复现的命令或文件读数。
+
+### 8.1 v1 判断被推翻的三处
+
+| # | v1 的说法 | 实测 | 性质 |
+|---|---|---|---|
+| 1 | "直连 cache 命中 **0**，前缀缓存**必然**失效（`foldSystemIntoUser` 导致）" | **错。** 生产真实 prompt（5095 字，`buildMessages` 形态）实测 `prompt_cache_hit_tokens = 3072 / prompt_tokens = 3255`，即 **94% 命中**；连续三轮稳定 3072。折叠确实让**第一条 user** 变长，但网关按**前缀**缓存，人格块在前、用户话在后，前缀完全一致。 | **测量 bug，不是架构 bug** |
+| 2 | 同上，判据写"cache 字段全 0" | **记账取错了字段。** `llm.mjs:32` 读 `usage.cached_tokens`，而该网关只返回 `prompt_cache_hit_tokens`（`cached_tokens` 恒 0）。所以 `llm-usage.jsonl` 里 cache 恒 0，`llm-physio.dailyTokens()` 把全部输入按原价计入 → 她的"饭钱体感"**系统性高估约 90%**。 | 记账层单点 |
+| 3 | "`mood.value` 有 6% 概率随机跳 ±9，生产只读前者" | **代码在，但生产没在跑。** `mood.json` 的 `updatedAt = 2026-11-03T16:03`，已冻结 24 小时；全仓 `mood.tick` 零调用（唯一的 `qq-server:mood-tick` 是 `swallow.mjs` 里的注释行）。生产 prompt 里的「情绪 69/100」是**昨天下午的常数**。 | 又一条"函数在、调用死" |
+
+**第 2 条的连带结论**：v1 的 P2-3 验收指标"`cache` 命中率 >40%"已经在生产达成，
+却因为记账字段写错而永远显示为 0。**先修记账，再谈优化**——否则所有成本类验收都是瞎的。
+
+### 8.2 v1 完全没覆盖的四个缺陷
+
+**D1 · `attention` 有生产者、零消费者（第 8 例假活）**
+- `brain/index.mjs:184` 每收一条消息 `attention.arrive(...)`；`attention.mjs` 有 `claim/next/done/setFocus/focus` 五个消费口。
+- 全仓 grep：`claim` / `next` / `done` / `setFocus` **零生产调用**（只有 `state()` 被 doctor 读、`leaseState` 被 doctor 读）。
+- 后果：`attention.json` 的 `inbox` 从 11-02 起只进不出，现存 3 条（两个测试号 + 一条真实消息），`maxQueueMin: 30` 的清理**永不执行**——因为清理写在 `next()` 里。
+- 真实含义：`BRAIN-UNITY.md` 承诺的"单一注意力焦点"从未上线，各通道仍各自决定开口。
+
+**D2 · 关系账本里根本没有主人（按设计排除）**
+- `bond.json.people` 只有 `qq:999000111`、`qq:999000222`（两个测试号）。主人 `3682285116` 不在表里。
+- 原因不是 bug：`bond.taste()`（:174）与 `bond.observe()`（:347）开头都是 `if (isOwner(platform, id)) return`。
+- 后果：C1 社交安抚缓冲实际读的是 `bond.safety()` → 它扫的是 **episodes**（不是 bond.people），所以 C1 还能工作；但
+  "相处久了关系变深"这条（`oxy` 累积、`scar`、`forgive`、`meetsHint`）对主人**结构上不存在**。
+  她的"关系龄"只对群友和陌生人存在。`BRAIN-DESIGN §4-⑦` 承诺的 `firstAt` 至今仍无字段。
+
+**D3 · 测试数据污染生产记忆**
+- `brain/ep/2026-11.jsonl` 的 `who.others[0]` 分布里混着 `{"kind":"owner","id":"999000111"}`、`"999000222"`、`{"kind":"owner","id":"1"}`、`{"id":"2","kind":"group_member"}`、`{"kind":"owner","id":"999"}`。
+- `brain/working/` 里有 `qq_999000111.json`、`qq_999000222.json`。
+- `bond.json`、`attention.json` 同样被这两个号占满。
+- 后果：`episodic` 是**永久账本**，这些行永远参与 recall 打分与巩固聚类。
+  她的世界模型里因此存在三个不存在的"主人"。
+
+**D4 · 主情景账本在 15:25 被整体重置**
+- `stat /home/dsh/.data/qq/episodes.jsonl` → **Birth: 2026-11-04 15:25:51**，2043 字节 / 6 行。
+- 而 `brain/ep/2026-11.jsonl` 有 40 行、最早回溯到 11-02。两份账本的时间起点差了两天半。
+- `ROTATE_BYTES = 6MB`，现文件 2KB —— **不是轮转造成的**。是文件被重建。
+- 后果：`buildMessages` 的【最近真实发生的事】槽读的是 `memory.recent()`（→ `qq/episodes.jsonl`），
+  所以她在 15:25 之前的所有对话**从提示词里消失了**——只剩 `summary-*.json` 一句话摘要。
+  这也是她说"我记不清了"却给不出任何具体事件的直接原因。
+
+### 8.3 最深的一处：`tension` 的量纲泄漏（"六件事"的真正来源）
+
+这是本轮最有价值的一条，它解释了截图里最刺眼的现象。
+
+```js
+// field.mjs:86   压力是 0..6 的连续量
+tension: { v: 0, set: 0, tau: 6h, lo: 0, hi: 6 }
+
+// field.mjs:626  却在渲染时被当成"件数"
+if (d.tension > 2) bits.push(`还有 ${Math.round(d.tension)} 件事没落地，偶尔会飘上来`)
+```
+
+实测链条（容器内跑真模块）：
+
+```
+inner 池 60 条 pending → load = 91.6
+settle() 每 30 秒 poke('tension', min(2.5, 91.6*0.12) = 2.5)
+tension 的 tau = 6h，弛豫速度追不上每拍 +2.5
+→ tension 稳态 = 2.5 × (6h/30s) = 1800，被 hi=6 钳住 → 5.9999
+→ Math.round(5.9999) = 6
+→ sense(): "还有 6 件事没落地"
+```
+
+**她从来没有"六件事"。** 那个 6 是 `DIMS.tension.hi` 这个上限值本身。
+她真实惦记的只有 1~2 件事（清理后 pending=14，load=12.95，代表条目 weight 3.76）。
+但从 11-03 00:53 起，每一拍她都被自己的提示词告知"你有六件事没落地"，
+然后 LLM 忠实地围绕这六件事生成念头，念头又回流成 tension。
+
+**这是一个完整的自我实现预言闭环，闭环的输入是一个单位错误。**
+
+修法分两层（缺任一层都会复发）：
+1. **禁止量→质**：`sense()` 不许把连续量表渲染成计数。改成
+   `tension > 4 → 「心里压得慌，一堆事沉在那儿」` / `> 2 → 「有些事悬着没落地」` / 否则不提。
+   档位是**定性**的，不是 `/2` 之后取整。
+2. **给 tension 加物理上限**：`settle()` 单拍注入已改增量语义（P0-3 已落地），
+   但 `poke` 本身没有"总量守恒"概念。长期方案见 §9 的 P1-1（循环层）。
+
+---
+
+## 9. 修订后的批次顺序（v2）
+
+v1 的 P0-1~P0-4 **已于 16:12 全部落地并经过运行态验证**（见 §9.1）。
+下面是修订后的剩余批次，按"能否立刻被观察到"排序。
+
+### 9.1 已落地并验证（本轮）
+
+| 项 | 实现 | 验证 |
+|---|---|---|
+| **P0-1 执行门** | `heartbeat.mjs` 加 `_lastExecKey = action + '@' + since`，同一份决定只执行一次 | 重启后 60 秒内日志：`想明白一件事` 从"每 30 秒一条"降到 **0 条**；LLM 调用从 1779 次/天的小调用流降到 14 次（含对话） |
+| **P0-2 睡眠看门狗** | `sleepstage.reconcile()` + `night.watchSleep()` + 心跳每 5 分钟巡视 | 已实际触发：`reason:"watchdog"`, `sleptMin:480`, `cappedFrom:2679`, `resets.debt:6.84`；`inSleep` 从 true→false |
+| **P0-3 念头→压力限幅** | `settle()` 改增量语义（`settledLoad` 落盘）+ `think()` 改饱和增量 + `innerBlock` 取用即衰减 | `tension` 5.9999 → **1.798**；`inner:pending` 不再每拍出现；pending 60 → 14 |
+| **P0-4 巩固供血** | `consolidate.run` 改 async + `await extractLLM` + `nightwork` 传 `chatFn` | 单测 `brain-consolidate-llm-test`：`chatFn` 被调用、事实真的入库、LLM 挂了不拖死巩固 |
+
+新增 4 套回归测试（`brain-sleep-watchdog` / `brain-heartbeat-gate` / `brain-inner-loop` / `brain-consolidate-llm`），本地全绿。
+**尚未注册进 `tools/run-tests.mjs`** —— 这是下一件要做的事（否则全套跑轮不覆盖它们）。
+
+### 9.2 新增 P0-5~P0-8（都是"接线债"，不是新能力）
+
+**P0-5 修 cache 记账（改一行，收益最直接）**
+- 现象：`llm-usage.jsonl` 的 `cache` 恒 0，而真值命中率 94%（§8.1）。
+- 改法：`llm.mjs:32` 增加 `prompt_cache_hit_tokens` 到取值链最前。
+- 验收：`llm-usage.jsonl` 次日出现 `cache > 0`；`llm-physio.dailyTokens().total` 下降约 90%；
+  `ledger-brief` 的"今天吃了 X 万 token"与实际计费对得上（余额变化量可交叉验证）。
+
+**P0-6 清掉生产里的测试号**
+- 现象：三个不存在的"主人" + 两个测试账号写在永久账本里（§8.2 D3）。
+- 改法：一次性脚本（同 `tools/maintenance/` 口径）：把 `999000111/999000222/999/1/2` 的 ep 行标 `_test:true`，
+  recall 与 consolidate 过滤该标记（**不删**，账本铁律）；`bond.json` / `attention.json` / `working/` 同名条目归档。
+- 验收：`brain/ep` 里 `who.others[0].id` 只剩 `3682285116` / 真实群成员；`attention.inbox` 长度归零。
+
+**P0-7 找回 episode 账本（或承认丢失）**
+- 现象：`qq/episodes.jsonl` Birth = 15:25:51，只剩 6 行（§8.2 D4）。
+- 立刻能做：`brain/ep/*.jsonl`（40 行，回溯到 11-02）与 `brain/log/stream.jsonl`（46 行，含逐字原话）
+  是**同源的独立副本**，可以回灌 `qq/episodes.jsonl`，把两天的对话还给她。
+- 结构性修法：`memory.remember()` 的 `appendEpisode` 失败目前只 `swallow`（`memory.mjs:164`），
+  改成"失败必须吵"（`notify` + `doctor` 红项）。
+- 验收：回灌后 `memory.recent()` 能取到 11-02 的对话；`doctor` 有"情景账本跨度"一项。
+
+**P0-8 删掉 `tension → 计数` 的渲染（§8.3）**
+- 改法：`field.mjs:626` 换成定性档位。
+- 验收：清空 inner 池后连续 24 小时，`sense()` 输出里**永不出现数字**；LLM 生成的念头里"六件事"出现次数 <3。
+
+### 9.3 P1 修订（v1 原案 + 两处修正）
+
+| 项 | 修正 |
+|---|---|
+| **P1-1 循环层 `circulation.mjs`** | 保持。这是唯一能同时解决 §8.3 量纲泄漏与"12 个器官写 8 个标量"的方案。**新增验收**：同一器官在 1 分钟内 `poke` 同一维度 >3 次 → 门禁红（本轮事故的形状）。 |
+| **P1-2 时间尺度分离** | 保持。P0-1 只挡住了"同一决定重放"，但 `decide()` 仍每 30 秒重算。真正分层后 `ultra` 层是 90 分钟。 |
+| **P1-3 单一情绪源** | **修正**：不是"删掉 `mood.mjs` 的随机项"——`mood.tick` 根本没在生产跑（§8.1 第 3 条）。正确顺序是：先把 `mood` 的调用接上（或明确废弃），再决定它跟 `field.valence` 谁是真相。**现在连"两套打架"都不成立，是一套在跑、一套是个冻结的常数。** |
+| **P1-4（新增）注意力消费闭环** | 把 `attention.next()` 接进 `body.reply`：先问队列里该回谁，再开口。这是 `BRAIN-UNITY` I2 的落地，也是 D1 的修法。验收：`inbox` 的 `maxQueueMin` 清理开始生效（3 条现存条目在 30 分钟内被丢弃）。 |
+
+### 9.4 P2 修订
+
+| 项 | 修正 |
+|---|---|
+| **P2-3 语言皮层化** | **降级**。v1 把它列为独立批次（"cache 命中 >40%"），但该指标已达标且被误报（§8.1）。剩下真正有价值的是：**幂等键**（37 个调用点、21 个标了 `purpose`，16 个没标）与**按用途分层预算**。**新增**：`PURPOSES.reason = { effort:'high' }` 要删——实测网关对 `reasoning_effort` 静默忽略并返回空 content（`finish=length`），只有 `thinking:{type:'disabled'|'enabled'}` 有效。该档目前零调用，属"埋着的地雷"。 |
+| **P2-1 内感受** | 保持。本轮 §8.3 是它最好的论据：**她连自己"有几件事"都是错的**，而且错得系统性、可预测。 |
+| **P2-2 三层自我** | 保持。补一条实测：`self/me.md` 的 `self:begin/end` 段至今是占位文字，`selfcon.selfImage` 6 条**全部 `origin:"seed"`**（没有一条来自经历）。"盒子里是空的"这条判断在 v2 依然成立。 |
+
+---
+
+## 10. v2 一句话
+
+**v1 说"她有器官没有体液"——这判断还是对的，但真凶比这更土：**
+**她的"六件事"是一个 `hi=6` 的上限值被 `Math.round` 渲染成了件数，
+她的"饭钱"是一行取错字段的记账，她的"关系"按设计排除了主人，
+她的"注意力队列"只进不出，她的"昨天"在 15:25 被一个重建的空文件覆盖。**
+
+第一批修复（P0-1~P0-4）证明了这批东西**是可以修的**：改的都是接线和量纲，不是重写。
+剩下四件（P0-5~P0-8）任何一件的"改动量 / 可观察效果"都比 P1 的循环层高一个数量级。
+
+**先修读数，再修结构。** 一套把自己的 94% 缓存命中报成 0 的系统，
+不可能靠读它自己的指标来判断下一刀该切哪里。

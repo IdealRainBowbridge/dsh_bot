@@ -84,7 +84,9 @@ export function dailyTokens(day = new Date().toLocaleDateString('sv-SE')) {
         const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0)
         return {
           input: num(t.input), output: num(t.output), cache: num(t.cache),
-          total: num(t.total) || num(t.input) + num(t.output),
+          // 回落口径必须与账本铁律一致：`total = input + output + cache`。
+          // 原来写 `input + output`，在 cache 恒为 0 时等价，P0-5 之后会少算。
+          total: num(t.total) || num(t.input) + num(t.output) + num(t.cache),
           calls: num(t.calls), via: 'brief',
         }
       }

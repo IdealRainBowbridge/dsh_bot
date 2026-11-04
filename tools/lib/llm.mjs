@@ -24,12 +24,36 @@ const DIRECT_USAGE = () => dataPath('llm-usage.jsonl')
 export function recordDirectUsage(usage, meta = {}) {
   if (!usage || typeof usage !== 'object') return
   const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0)
+  // ⚠️ 2026-11-04（P0-5）：`prompt_cache_hit_tokens` 必须排在**第一位**，
+  //    而且 cache 必须从 input 里**拆出来**，不能两边都算。
+  //
+  // 事故一（取值错）：这一行原来从 `cached_tokens` 开始取。a2a 网关
+  // （172.17.0.1:3066）三条都返回，但只有 `prompt_cache_hit_tokens` 是真值，
+  // `cached_tokens` 恒 0。于是账本里 cache 永远是 0，表现得像前缀缓存从未命中。
+  // 实测（同一份 5095 字生产 prompt，连续三轮）：
+  //   cached_tokens = 0 / prompt_cache_hit_tokens = 3072 / miss = 183 / prompt = 3255
+  // 命中率 94%。"cache=0"不是架构问题，是这行取错了字段。
+  //
+  // 事故二（口径错，修第一处才暴露出来）：LLM 的 `prompt_tokens` =
+  // 命中 + 未命中。而 ledger 的账本口径是 **`total = input + output + cache`**
+  // （`ledger.mjs` 与 `ledger_usage.py:8` 都这么写，测试也锁着）。
+  // 所以若把 prompt_tokens 原样塞进 input、再把命中量塞进 cache，
+  // 命中的那 94% 会被算两遍 —— 今天是 0 所以看不出来，修完立刻变成虚高。
+  //
+  // 因此：input 只记**未命中**部分。网关直接给 miss 就用 miss，
+  // 不给就用 prompt − hit 拆。两边都拿不到（非 a2a 通道）时退化成全算 input。
+  const rawIn = num(usage.prompt_tokens ?? usage.input_tokens ?? usage.inputTokens)
+  const hit = num(usage.prompt_cache_hit_tokens ?? usage.cached_tokens
+    ?? usage.cache_read_input_tokens ?? usage.cachedTokens)
+  const miss = usage.prompt_cache_miss_tokens != null
+    ? num(usage.prompt_cache_miss_tokens)
+    : Math.max(0, rawIn - hit)
   const rec = {
     at: Date.now(),
     day: new Date().toLocaleDateString('sv-SE'),
-    input: num(usage.prompt_tokens ?? usage.input_tokens ?? usage.inputTokens),
+    input: hit ? miss : rawIn,
     output: num(usage.completion_tokens ?? usage.output_tokens ?? usage.outputTokens),
-    cache: num(usage.cached_tokens ?? usage.cache_read_input_tokens ?? usage.cachedTokens),
+    cache: Math.min(hit, rawIn || hit),   // 命中量不得超过总输入（防上游字段自相矛盾）
     model: meta.model || '',
     via: meta.via || 'direct',
   }
@@ -64,8 +88,12 @@ export function readDirectUsage() {
     out.lifetime.cache += Number(r.cache) || 0
     out.lifetime.calls += 1
   }
-  for (const d of byDay.values()) { d.total = d.input + d.output; out.days.push(d) }
-  out.lifetime.total = out.lifetime.input + out.lifetime.output
+  // total 必须含 cache：账本口径是 `input + output + cache`（见 `ledger_usage.py:8`
+  // 与 `ledger-test.mjs` 锁着的那条断言）。这里原来写 `input + output`，
+  // 在 cache 恒为 0 的两年里没有任何症状；P0-5 把 cache 修成真值之后，
+  // 它立刻变成"每天少报 94% 的输入量" —— 她的饭钱会突然显得便宜十倍。
+  for (const d of byDay.values()) { d.total = d.input + d.output + d.cache; out.days.push(d) }
+  out.lifetime.total = out.lifetime.input + out.lifetime.output + out.lifetime.cache
   out.days.sort((a, b) => (a.day < b.day ? -1 : 1))
   return out
 }

@@ -83,6 +83,11 @@ const TESTS = [
   // 脑（v3）：事件/巩固/装配/意图/隔离 —— 这五套挂了就别切 live
   'brain-event-test.mjs',
   'brain-consolidate-test.mjs',
+  // 2026-11-04 P0 止血批次：四套各盯一处"静默失效"
+  'brain-consolidate-llm-test.mjs',   // 巩固 LLM 供血：async chatFn 必须被 await（否则 String(Promise) 恒 []）
+  'brain-sleep-watchdog-test.mjs',    // 睡眠看门狗：不误杀/命令在跑不打断/卡死按夜长结算不按 44h
+  'brain-inner-loop-test.mjs',        // 念头→压力：增量语义（同一批念头不再每拍注压）+ 饱和累加 + 取用衰减
+  'brain-heartbeat-gate-test.mjs',    // 心跳执行门：同一 since 只执行一次，不同 since 不误杀
   'brain-prompt-test.mjs',
   'brain-intents-test.mjs',
   'brain-isolation-test.mjs',
@@ -107,6 +112,7 @@ const TESTS = [
   'field-mutate-race-test.mjs',  // 2026-11-03：field 并发 poke 零丢失（mutateJson 上锁后的行为锚）
   'lock-tri-state-test.mjs',     // 2026-11-03：锁三态语义（O_EXCL/死锁抢占/故障降级）
   'llm-physio-test.mjs',         // 2026-11-03：B7 表达代谢（brief/直连双源、超支分支、永不抛）
+  'llm-usage-test.mjs',          // 2026-11-04 补注册：直连记账（此前单跑过、全套从未跑它）
 ]
 
 // ── 测试临时产物统一收尾（2026-11-02）─────────────────────────────────────
