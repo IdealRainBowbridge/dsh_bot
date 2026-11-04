@@ -297,7 +297,34 @@ npm test                                      # 8 套测试全过
 | DSH web | `:3080` |
 | 进程守护 | `im-gateway.sh`（node 挂了 ~52s 拉起）；她的自重启走 `selfmod-restart.flag`，**禁止 docker restart 整容器** |
 | git | 仓库分支 `refactor/v5`，身份 `bot <bot@local>`；她整点 :00/:10 前后跑 auto 快照（会卷走工作区未提交改动——动手前先 git log/status 核对） |
-| 门禁 | `node scripts/check.mjs`（303 文件，含 2026-11-03 新增「裸 catch{} 必须带注释」规则） |
+| 门禁 | `node scripts/check.mjs`（305 文件，含 2026-11-03「裸 catch{} 必须带注释」、2026-11-04「条件里的 `名?.名` 与 TDZ 声明前读取」两条规则） |
 | 面板入口 | nginx `127.0.0.1:8415`（`/deepseekharness/` → `3090`，注入 DSH 会话 cookie）；另有 tailscale serve `:3081` 直连 3090。**子路径挂载**：`client.js`/`settings.html` 的 API 基址从自身脚本 URL 反推（写死 `/dsh_bot/api` 会 404） |
 | 插件访问栅栏 | 回环放行；其余要求「Host ∈ entry.sh 的 `--trusted-host` 且对端是容器网关 `172.17.0.1`（= 宿主反代）」，否则 403。鉴权仍由 DSH `connection.requestRejection` 负责 |
-| 测试 | `node tools/run-tests.mjs`（88 套，全套约 52 秒，容器内直接跑；含 2026-11-04 新增 `client-base-test` / `access-fence-test`） |
+| 测试 | `node tools/run-tests.mjs`（90 套，全套约 58 秒，容器内直接跑；2026-11-04 新增 `client-base-test` / `access-fence-test` / `settings-page-test` / `silent-failure-test`） |
+
+## 静默失效修复批次（2026-11-04）
+
+架构检查出的四类真事故，全部已修并各有回归锚点（`test/silent-failure-test.mjs`，已注册进 `run-tests`）：
+
+| 项 | 症状（修前） | 修法 |
+|---|---|---|
+| `tools/brain/organ/heartbeat.mjs` 的 `ex` TDZ | `const ex` 在第 202 行声明，第 167 行就用了；每 20 拍抛一次 `Cannot access 'ex' before initialization`，被 catch 吞掉 → **存在感器官从上线起一次都没跑过** | 把 `ex` 提到 `beat()` 顶部 |
+| `tools/lib/notify.mjs` 缺 `dataPath` import | 跨窗口去重整段抛 ReferenceError 又被内层 catch 吞掉 → **同一条消息私聊+群聊会重复发两遍** | 补 import；去重表改用 `atomic.updateJson`（多进程读-改-写） |
+| `tools/lib/swallow.mjs` 不分预期缺失 | 1196 行日志里 900+ 行是 ENOENT（首建锁/可选文件），真事故被埋掉 | 拆两本账：`swallowed.log`（真事故，1h 摘要）/ `swallowed-soft.log`（ENOENT/ENOTDIR，6h 摘要）；`readSwallowed()` 默认只读真账 |
+| `tools/lib/channel-io.mjs` outbox 无锁 | `outbox.json` 是多写者文件却无锁读-改-写；drain 的"取出"与"清空"分两步做会抹掉期间新入队的消息 | 入队/取出都走 `atomic.updateJson`；`outbox.json`、`send-dedup.json` 登进门禁的 `MULTI_WRITER` |
+
+**门禁补强（`scripts/check.mjs`）**：旧 9.5 只认 `if (x)` 的**裸标识符**，看不见 `if (N%X===0 && ex.vitals?.presence)`。
+现在① `if/while` 条件里的 `名?.名` 也进嫌疑集；② 新增 TDZ 检查（同一块内、声明行之前被读）。
+口径是"宁可漏报"：`for (const [k,v] of …)` 解构、闭包体（`=> …`）、字符串内容都不算 ——
+实测在 305 个真实文件上零误报、只命中 heartbeat 那一条真事故。新增 `maskLiterals()` 把字符串/正则内容
+抹成空格，否则 `'--from'` 里的 `from` 会把块结构判定带偏。
+
+**出站链路现状（诚实记录）**：`/inbound` + `/outbound` 的机制在，但**当前没有消费者** —— 微信 bot 跑在
+Windows 本机自己直连 LLM、自己发消息，既不入站也不拉出站；`outbox.json` 实测不存在。要么把微信接上
+（入站转发 + 起一个拉取循环），要么承认微信不共用统一通道。现在是两者之间，已在 `channel-io.mjs` 头注写明。
+
+**`brain.mode` 判据**：`metrics.json` 三天累计 `episodesIn=29 / episodesDup=136`（82.4%）。但落盘的 29 条里
+**msgId 零重复** —— 高比例恰恰说明去重闸在正常工作（QQ 消息被 bridge 与 onEvent 各报一次，后者被拦下）。
+切 `live` 的判据不是这个比例，而是**装配质量**：`assemble.assemble` 会整体替换现在 `persona.buildMessages`
+那条路，属她的核心行为，要单独一轮验证再切。
+

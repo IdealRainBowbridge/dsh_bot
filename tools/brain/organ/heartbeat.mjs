@@ -154,6 +154,10 @@ export async function beat(now = Date.now()) {
   _running = true
   _beatCount++
   const out = { at: now, beat: _beatCount, vital: [], action: null, why: '' }
+  // 执行器快照**必须先取**：下面存在感器官（第 167 行）就要用 ex，而它原来声明在
+  // 第 202 行 —— 块内 const 在声明行之前被读是 TDZ（ReferenceError），被外层 catch
+  // 吞掉后表现成"presence 器官从来没跑过"。门禁 9.5 的 TDZ 采样现在会拦这一类。
+  const ex = _exec || {}
   try {
     // ── ① 推进身体时间 ──────────────────────────────────────────
     // 所有按 dt 演化的东西在这里统一推进一次（不靠各自 tick）
@@ -199,7 +203,7 @@ export async function beat(now = Date.now()) {
 
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────
     // 这些是"身体自己在跑的部分"，不是她决定做的事。
-    const ex = _exec || {}
+    // （`ex` 已在函数顶部取好快照，见上面 TDZ 注释。）
     if (_beatCount % BEAT.napcatEveryBeats === 0 && ex.vitals?.napcat) {
       try { await ex.vitals.napcat(now); out.vital.push('napcat') } catch (e) { swallow(e, 'beat:vital:napcat') }
     }

@@ -15,6 +15,7 @@ import { synth } from '../lib/tts.mjs'
 import { compactRef } from '../lib/refclean.mjs'
 import { dataPath, configPath } from '../lib/paths.mjs'
 import { swallow } from '../lib/swallow.mjs'
+import { onebotFileValue } from '../lib/onebot-file.mjs'
 
 const MODELS_DIR = 'D:/GPT-SoVITS/models'
 const INTRO = '主人，这是我现在的声音，好听吗？我是大肥鱼，这条声音你觉得适合我就换上吧。'
@@ -45,7 +46,8 @@ async function sendQQ(file) {
   if (!ownerQQ) throw new Error('owner.qq 未配置')
   const r = await fetch(`${napcat}/send_private_msg`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'record', data: { file } }] }),
+    // file 走 base64：发送方 SnowLuma 在宿主上，容器内路径它 stat 不到（见 lib/onebot-file.mjs）
+    body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'record', data: { file: onebotFileValue(file) } }] }),
     signal: AbortSignal.timeout(15000),
   })
   return r.ok

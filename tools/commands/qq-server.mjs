@@ -56,8 +56,7 @@ const execFileAsync = promisify(execFile)
 
 const LOG_FILE = dataPath('qq-server.log')
 
-// 统一通道（10-31）：QQ 消息先进这里排队 → 同会话合并、跨会话并行、先来先答。
-// 微信/抖音私信后续也接进来（同一个 channel 实例）。
+// 统一通道（10-31）：QQ 消息先进这里排队 → 同会话合并、跨会话并行、先来先答（其它平台后续接同一实例）。
 import { channel as CHANNEL } from '../lib/channel.mjs'
 import * as CHANNEL_IO from '../lib/channel-io.mjs'
 import { gate as replyGate } from '../lib/reply-gate.mjs'
@@ -67,6 +66,7 @@ import { current as currentCtx, runWithContext } from '../lib/reply-context.mjs'
 import { inboundTokenOk, requireInboundToken } from '../lib/inbound-auth.mjs'
 import { createPromiseExecutor, promiseOutcomePath } from '../lib/promise-executor.mjs'
 import { fill } from '../lib/persona-voice.mjs'
+import { onebotFileValue } from '../lib/onebot-file.mjs'   // 媒体段 file 必须 base64（宿主 stat 不到容器路径）
 // 自我账本的镜子 (批二): 每条消息过一遍, 只记"发生了什么", 结算归 REM。
 import * as selfcon from '../brain/organ/selfcon.mjs'
 import * as roster from '../lib/roster.mjs'
@@ -509,7 +509,7 @@ export async function run(argv = []) {
               const title = hit ? hit.title : theme
               await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: hit ? `《${title}》我会唱！马上来～` : `《${title}》我还没学过，给我几分钟学一下哈～` } }] })
               const song = await coverSong({ source: hit ? hit.source : `ytsearch1:${theme}`, title, log: (l) => log(`[qq] 🎤 ${l}`) })
-              const sent2 = await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'record', data: { file: song.file } }] })
+              const sent2 = await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'record', data: { file: onebotFileValue(song.file) } }] })
               if (sent2) {
                 covered = true
                 await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: `🎵 给你唱《${song.title}》——用我自己的声音哦${song.cache === 'hit' ? '' : '（刚学会的）'}～` } }] })
@@ -517,10 +517,10 @@ export async function run(argv = []) {
                 log(`[qq] 🎤 翻唱已发：《${song.title}》`)
               }
             }
-          } catch (e) { logErr('[qq] 专业翻唱没成，回落原创说唱：' + String(e.message).slice(0, 120)) }
+          } catch (e) { logErr('[qq] 翻唱没成，回落原创：' + String(e.message).slice(0, 120)) }
           if (covered) return
           const song = await sing(theme)
-          const sent2 = await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'record', data: { file: song.file } }] })
+          const sent2 = await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'record', data: { file: onebotFileValue(song.file) } }] })
           if (sent2) {
             await send('send_private_msg', { user_id: Number(userId), message: [{ type: 'text', data: { text: `🎵《${song.title}》 ${song.bpm}bpm —— ${song.lyrics.join(' / ')}` } }] })
             memory.remember(EVT_PLATFORM, chatId, userId, 'assistant', `（唱了《${song.title}》：${song.lyrics.join('/')}）`, { isGroup })
@@ -857,7 +857,7 @@ export async function run(argv = []) {
           if (!line) continue
           try {
             const audio = await synth(line, undefined, { emotion })
-            const seg = { type: 'record', data: { file: audio } }   // NapCat 自动转 silk
+            const seg = { type: 'record', data: { file: onebotFileValue(audio) } }   // base64，同上
             const okOne = await send(target.api, { [target.key]: target.id, message: [seg] })
             if (!okOne) break
             spokeParts += 1
@@ -889,7 +889,7 @@ export async function run(argv = []) {
       // 表情：文字或语音发完都补发（以前语音命中时表情整个被跳过——10-25 实测坑）
       if (stickerFile) {
         await new Promise(r => setTimeout(r, 300 + Math.random() * 500))
-        const okImg = await send(target.api, { [target.key]: target.id, message: [{ type: 'image', data: { file: (await import('../lib/onebot-file.mjs')).onebotFileValue(stickerFile) } }] })
+        const okImg = await send(target.api, { [target.key]: target.id, message: [{ type: 'image', data: { file: onebotFileValue(stickerFile) } }] })
         if (okImg) log(`[qq] 已发表情：${tag || caption || '?'}`)
       }
       // AI 表情包：生成入库 + 补发（异步，不占回复主线；干跑分支已在上面 return，走不到这）
@@ -1500,7 +1500,7 @@ export async function run(argv = []) {
         if (pfile) {
           await new Promise(r => setTimeout(r, 400 + Math.random() * 700))
           try {
-            const okImg = await send('send_private_msg', { user_id: Number(ownerQQ), message: [{ type: 'image', data: { file: (await import('../lib/onebot-file.mjs')).onebotFileValue(pfile) } }] })
+            const okImg = await send('send_private_msg', { user_id: Number(ownerQQ), message: [{ type: 'image', data: { file: onebotFileValue(pfile) } }] })
             if (okImg) log(`[qq] 🐟 主动搭话带图：${ptag} → ${path.basename(pfile)}`)
           } catch (e) { logErr('[qq] 主动搭话补图失败：' + (e?.message ?? e)) }
         }
@@ -1709,7 +1709,7 @@ export async function run(argv = []) {
           const caption = String(text).replace(/[，。！？…~～\s]+/g, ' ').trim().split(' ').filter(Boolean).slice(0, 2).join(' ').slice(0, 12) || '今天的心情'
           const { generateStickerImage } = await import('../lib/imggen.mjs')
           const img = await generateStickerImage(caption, {})
-          if (img) images = [(await import('../lib/onebot-file.mjs')).onebotFileValue(img)]
+          if (img) images = [onebotFileValue(img)]
         }
       } catch (e) { swallow(e, 'qq-server:tryQzone') }
       const NAPCAT = (QQ.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')

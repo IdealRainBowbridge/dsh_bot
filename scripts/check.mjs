@@ -448,6 +448,25 @@ function checkUndeclaredIdentifiers(files) {
     // 只取 `if (x)` / `while (x)` —— 这两个位置是"把变量当布尔读"的典型，
     // 且几乎不会被字符串/注释污染。低信噪比的取样（!x 之类）已去掉。
     for (const m of src.matchAll(/\b(?:if|while)\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) suspects.add(m[1])
+    // 2026-11-04 补采样（P1）：**if/while 条件里的成员访问根名**，且必须是 `?.` 形态。
+    // 真实案例：`if (N === 0 && ex.vitals?.presence)` —— `ex` 从未在文件里声明
+    // 或声明在后面（TDZ），每 20 拍抛一次被吞掉，旧门禁只认 `if (x)` 的裸标识符，全绿。
+    //
+    // 口径严格：`名 ?. 名`（可选链）。普通 `名.名` 会命中
+    // `for (const [k, list] of ...)`、字符串拼接里的路径词、`import {a,b}` 成员名等
+    // 一堆结构 —— 实测放进普通点号后立刻涨 46 处假阳性。可选链在真实代码里只会是读取。
+    // 另外：'声明在后面' 不归这条管，归 checkTdz。
+    const condChunks = []
+    for (const m of src.matchAll(/\b(?:if|while)\s*\(/g)) {
+      let depth = 0
+      for (let k = m.index + m[0].length - 1; k < src.length; k++) {
+        if (src[k] === '(') depth++
+        else if (src[k] === ')') { depth--; if (depth === 0) { condChunks.push(src.slice(m.index + m[0].length, k)); break } }
+      }
+    }
+    for (const chunk of condChunks) {
+      for (const m of chunk.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*\?\.[A-Za-z_$]/g)) suspects.add(m[1])
+    }
 
     for (const name of suspects) {
       if (KEYWORDS.has(name) || KNOWN.has(name) || declared.has(name)) continue
@@ -463,6 +482,187 @@ function checkUndeclaredIdentifiers(files) {
       if (!hit) continue
       const line = src.slice(0, src.search(re)).split('\n').length
       push('引用了未声明的变量', `${rel(f)}:${line}`, `\`${name}\` 在这个文件里从未声明（也不是形参/import/全局）—— 运行期会抛 ReferenceError，被 catch 吞掉就成静默失效`)
+    }
+
+    // ── 补采样③（2026-11-04）：块内 const/let 在声明行**之前**被读（TDZ）──
+    // 真实事故：heartbeat.mjs 第 167 行 `ex.vitals?.presence`，而 `const ex` 在第 202 行。
+    // 语法检查通过、9.5 的 `if (x)` 采样看不见（读的是 `ex.prop`），ReferenceError
+    // 被 try/catch 吞掉 → 存在感器官从上线起一次都没跑过，门禁全绿。
+    // 规则（保守，只抓单一词法声明）：某个名字在本文件里**只有一次** const/let 声明，
+    // 且该名字不出现在形参/var/function/class/import 里（那些会提升或遮蔽），
+    // 则声明之前、**同一花括号块内**的任何读取都是 TDZ。读在更内层块也仍是 TDZ。
+    checkTdz(src, f, push, rel)
+  }
+}
+
+/**
+ * 把字符串/模板/正则字面量的**内容**抹成空格（保留换行与引号本身），只给"块边界"
+ * 这类结构判定用。`stripComments` 保留字符串内容（其他检查需要），但字符串里的
+ * `{` `}` `view` `--from` 会让结构判定错位 —— 实测它把 53 处真误报塞进 TDZ 检查。
+ * @param {string} src 源码
+ * @returns {string} 同长度、同换行、字面量内容被空格填充的文本
+ */
+function maskLiterals(src) {
+  const out = src.split('')
+  let i = 0
+  const n = src.length
+  let prev = ''
+  while (i < n) {
+    const c = src[i]
+    if (c === '"' || c === "'" || c === '`') {
+      const q = c
+      i++
+      while (i < n) {
+        if (src[i] === '\\') { out[i] = ' '; i++; if (i < n) { out[i] = ' '; i++ } continue }
+        if (src[i] === q) break
+        if (src[i] !== '\n') out[i] = ' '
+        i++
+      }
+      i++
+      prev = q
+      continue
+    }
+    if (c === '/' && (prev === '' || /[=(,:;!&|?{}\[\]\n]/.test(prev))) {
+      let j = i + 1
+      let inClass = false
+      let ok = false
+      while (j < n) {
+        const d = src[j]
+        if (d === '\\') { j += 2; continue }
+        if (d === '\n') break
+        if (d === '[') inClass = true
+        else if (d === ']') inClass = false
+        else if (d === '/' && !inClass) { ok = true; break }
+        j++
+      }
+      if (ok) {
+        for (let k = i + 1; k < j; k++) if (out[k] !== '\n') out[k] = ' '
+        i = j + 1
+        prev = '/'
+        continue
+      }
+    }
+    if (!/\s/.test(c)) prev = c
+    i++
+  }
+  return out.join('')
+}
+
+/**
+ * TDZ 检测：名字**只有一处** const/let 声明时，声明之前在同一块内的读取必然抛 ReferenceError。
+ *
+ * 为什么不用 AST：门禁是零依赖脚本（只有 node 内建），而这条规则只需要
+ * 「块身份 + 行号」。块身份用「每行行首的最内层 `{` 偏移」表示：
+ * 声明与读取落在同一个最内层块，才可能是同一个绑定的 TDZ。
+ *
+ * 口径是**宁可漏报**：
+ *   · 名字有多处 const/let 声明 → 不猜（不同块里各有一个同名变量很正常）
+ *   · var/function/class/import/形参/catch 参数同名 → 会提升或遮蔽，跳过
+ *   · 读取位于更深的嵌套块 → 拿不到可靠证据，跳过（heartbeat 的真实案例在同一块内，仍会命中）
+ *   · 对象字面量的键（`{ why: ... }`）与方法简写不算读取
+ * @param {string} src 已去注释的源码（行号与源文件一致）
+ * @param {string} f 绝对路径
+ * @param {Function} push 报告函数
+ * @param {Function} rel 相对路径化
+ */
+function checkTdz(src, f, push, rel) {
+  const masked = maskLiterals(src)
+  const lines = masked.split('\n')
+  // 每行行首的"最内层块"标识 = 该层 `{` 的行号（-1 表示顶层）
+  const blockAtLine = new Array(lines.length + 1).fill(-1)
+  {
+    const stack = []
+    for (let ln = 1; ln <= lines.length; ln++) {
+      blockAtLine[ln] = stack.length ? stack[stack.length - 1] : -1
+      for (const ch of lines[ln - 1]) {
+        if (ch === '{') stack.push(ln)
+        else if (ch === '}') stack.pop()
+      }
+    }
+  }
+
+  const decls = new Map()      // name -> { line, block }
+  const ambiguous = new Set()
+  // 关键字 / 字面量：`import { a } from 'x'` 里的 `from` 会被当成同名读取 —— 直接跳过
+  const NOISE = new Set(['from', 'as', 'of', 'in', 'typeof', 'instanceof', 'new', 'delete', 'void',
+    'true', 'false', 'null', 'undefined', 'this', 'super', 'await', 'yield', 'return', 'case'])
+  const hoisted = new Set()
+  for (const m of src.matchAll(/\bvar\s+([A-Za-z_$][\w$]*)/g)) hoisted.add(m[1])
+  for (const m of src.matchAll(/\bfunction\s*\*?\s*([A-Za-z_$][\w$]*)/g)) hoisted.add(m[1])
+  for (const m of src.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)/g)) hoisted.add(m[1])
+  for (const m of src.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) hoisted.add(m[1])
+  for (const m of src.matchAll(/\bimport\s+([^;'"]+?)\s+from\b/g)) {
+    for (const part of m[1].replace(/[{}]/g, ',').split(',')) {
+      const k = part.trim().split(/\s+as\s+/).pop().trim()
+      if (/^[A-Za-z_$][\w$]*$/.test(k)) hoisted.add(k)
+    }
+  }
+  for (const m of src.matchAll(/\bfunction\s*\*?\s*[A-Za-z_$]?[\w$]*\s*\(([^()]*)\)/g)) {
+    for (const part of m[1].split(',')) {
+      const k = part.split('=')[0].split(':').pop().trim().replace(/^[.\s]*/, '').replace(/[{}[\]]/g, '')
+      if (/^[A-Za-z_$][\w$]*$/.test(k)) hoisted.add(k)
+    }
+  }
+  for (const m of src.matchAll(/\(([^()]*)\)\s*=>/g)) {
+    for (const part of m[1].split(',')) {
+      const k = part.split('=')[0].split(':').pop().trim().replace(/^[.\s]*/, '').replace(/[{}[\]]/g, '')
+      if (/^[A-Za-z_$][\w$]*$/.test(k)) hoisted.add(k)
+    }
+  }
+  for (const m of src.matchAll(/\bfor\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w$]*)/g)) ambiguous.add(m[1])
+  // 方法简写的形参：`load(spec) {` / `get(x) {` —— 旧实现只认 `function f(` 与 `(...)=>`
+  for (const m of src.matchAll(/(?:^|[{;,])\s*([A-Za-z_$][\w$]*)\s*\(([^()]*)\)\s*\{/gm)) {
+    for (const part of m[2].split(',')) {
+      const k = part.split('=')[0].split(':').pop().trim().replace(/^[.\s]*/, '').replace(/[{}[\]]/g, '')
+      if (/^[A-Za-z_$][\w$]*$/.test(k)) hoisted.add(k)
+    }
+  }
+  // 对象字面量里的属性赋值左值（`spec: 1`）与解构键不是变量读取
+  for (const m of src.matchAll(/[{,]\s*([A-Za-z_$][\w$]*)\s*:/g)) ambiguous.add(m[1])
+
+  for (const m of src.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=/g)) {
+    const name = m[1]
+    if (NOISE.has(name) || hoisted.has(name) || ambiguous.has(name)) continue
+    const line = src.slice(0, m.index).split('\n').length
+    if (decls.has(name)) { decls.delete(name); ambiguous.add(name); continue }
+    decls.set(name, { line, block: blockAtLine[line] })
+  }
+
+  for (const [name, decl] of decls) {
+    if (decl.line <= 1) continue
+    const wordRe = new RegExp('(?<![.\\w$])' + name.replace(/\$/g, '\\$') + '\\b', 'g')
+    // 声明那行的 blockAtLine 记录的是"该行行首所处的块"。若 `const` 出现在
+    // 行中（`for (...) { const x = ... }`、同一行写了两个语句），行首深度会浅一层，
+    // 于是把外层整片代码都算成同一块 —— 那正是 fix-owner/browser 两处误报的成因。
+    // 修正：只有当声明是**该行第一个非空白 token**时，才用行首深度作为块身份。
+    const declLineText = lines[decl.line - 1] || ''
+    const declAtLineStart = /^\s*(?:const|let)\b/.test(declLineText)
+    const declBlock = declAtLineStart ? decl.block : null
+    if (declBlock === null) continue                    // 行中声明：块身份不可靠，不猜
+    for (let ln = decl.line - 1; ln >= Math.max(1, decl.line - 200); ln--) {
+      if (!/^\s*(?:const|let)\b/.test(lines[ln - 1] || '')) {
+        // 只接受"行首就是这条声明"的块身份；其余行的行首深度未必等于它在块内的真实层级
+      }
+      if (blockAtLine[ln] !== declBlock) continue       // 不同块（或更深的嵌套块）：不猜
+      const text = lines[ln - 1] || ''
+      // 读取出现在**闭包体**里（`=> …` / `function …`）时不是 TDZ：那个体要到
+      // 声明执行之后才调用。真实反例：browser.mjs 的 `new Promise((resolve) => {
+      //  … resolve !== go … })` 后面才 `const go` —— 运行期完全合法。
+      if (/=>|\bfunction\b/.test(text)) continue
+      let hit = false
+      for (const mm of text.matchAll(wordRe)) {
+        const before = text.slice(0, mm.index).replace(/\s+$/, '')
+        const after = text.slice(mm.index + name.length)
+        const isKey = /^\s*:/.test(after) && /(?:^|[{,[])$/.test(before)   // `{ why: ... }` / `, why: ...`
+        const isShorthandMethod = /^\s*\(/.test(after) && /(?:^|[{,])\s*$/.test(before) && /\{\s*$/.test(text.slice(text.indexOf(after) + after.indexOf('('))) === false
+        if (isKey) continue
+        hit = true
+        break
+      }
+      if (!hit) continue
+      push('TDZ 声明前读取', `${rel(f)}:${ln}`,
+        `\`${name}\` 在第 ${decl.line} 行才 \`const/let\` 声明，第 ${ln} 行同一块内就读取了 —— 运行期抛 "Cannot access before initialization"，被 catch 吞掉即成静默失效（heartbeat.mjs 的 presence 器官就是这样死了两周）`)
+      break
     }
   }
 }
@@ -557,6 +757,10 @@ const MULTI_WRITER = [
   'immune.json',
   'wounds.json',
   'metabolism.json',
+  // 2026-11-04：出站队列与跨窗口去重表。前者被 qq-server 的非 QQ 分支写、
+  // 被 /outbound 的拉取端读（多写者）；后者被每个发消息的进程读-改-写。
+  'outbox.json',
+  'send-dedup.json',
 ]
 
 /** 把 arguments 里出现的标识符名抠出来（去掉字符串字面量与数字）。 */

@@ -15,7 +15,12 @@ import path from 'node:path'
 const MAX_BYTES = 4 * 1024 * 1024   // 超过 4MB 不转 base64（请求体太大），退回 file:// 试试
 
 /**
- * 把本地图片路径转成 OneBot image 段可接受的 file 值。
+ * 把本地文件路径转成 OneBot 媒体段可接受的 file 值。
+ *
+ * 2026-11-04：语音条（record）也走这里。以前 record 直接传容器内绝对路径，
+ * 和表情包当初一模一样 —— 宿主上的 SnowLuma 根本 stat 不到那个路径，
+ * 日志里只有一句"语音失败（剩下转文字）"。image 和 record 共用同一套解法。
+ *
  * @param {string} file 本地绝对路径
  * @returns {string} `base64://...` 或 `file:///...`（兜底）
  */

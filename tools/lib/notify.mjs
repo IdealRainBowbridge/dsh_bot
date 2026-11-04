@@ -9,6 +9,10 @@ import * as brainDelivery from '../brain/delivery.mjs'
 import * as brainEvent from '../brain/event.mjs'
 import { swallow } from './swallow.mjs'
 import { sanitizeText } from './sanitize.mjs'
+// 2026-11-04：这个 import 之前缺了 —— 下面跨窗口去重整段抛 ReferenceError，
+// 被内层 catch 全数吞掉，去重从未生效（同一条消息私聊+群聊会重复发两遍）。
+import { dataPath } from './paths.mjs'
+import { updateJson } from './atomic.mjs'
 
 /**
  * 给主人发一条 QQ 私聊（成功后记进 QQ 记忆，对话流里她"记得自己说过"）。
@@ -33,21 +37,31 @@ export async function sendOwnerQQ(text) {
       // 场景：老爹同时私聊+群里说同一件事，她两边都在回复——内容可能撞车。
       try {
         const ddPath = dataPath('send-dedup.json')
-        let dd = {}
-        try { dd = JSON.parse(fs.readFileSync(ddPath, 'utf8')) } catch (e) { swallow(e, 'tools/lib/notify.mjs:35') }
         const fp = String(content).slice(0, 30)
         const now2 = Date.now()
-        for (const [k, v] of Object.entries(dd)) {
-          if (v.fp === fp && now2 - v.at < 5000 && v.from !== 'qq:' + ownerQQ) {
-            console.log('[notify] 跨窗口去重：5秒内已在 ' + v.from + ' 发过类似内容，跳过')
-            return { ok: true, deduped: true }
+        // 跨**进程**（qq-server 两路 + 未来的观察者）共享这张表，所以读-改-写必须整段
+        // 带锁：11-04 前是 "读 JSON → 改 → writeFileSync"，两个进程同时进这里会互相
+        // 覆盖（后写的赢），去重表因此可能少一条也可能多一条。改用 atomic.updateJson。
+        const dedup = updateJson(ddPath, (cur) => {
+          const dd = (cur && typeof cur === 'object') ? cur : {}
+          for (const [k, v] of Object.entries(dd)) {
+            if (v && v.fp === fp && now2 - Number(v.at || 0) < 5000 && v.from !== 'qq:' + ownerQQ) return undefined  // 命中：不写，交给下面判
           }
+          dd[now2] = { fp, at: now2, from: 'qq:' + ownerQQ }
+          // 清理 >10s 的旧记录（表会无限长，一次一条）
+          for (const [k, v] of Object.entries(dd)) { if (now2 - Number(k) > 10000) delete dd[k] }
+          return dd
+        }, { fallback: {}, waitMs: 1500 })
+        if (!dedup.ok) {
+          // 拿不到锁 = 另一个进程正在写：这一次跳过发送（宁可少发一条，也别重复打扰主人）
+          console.log('[notify] 去重表被占用（' + (dedup.error || 'lock-timeout') + '），本次跳过')
+          return { ok: true, deduped: true, reason: 'dedup-lock' }
         }
-        dd[now2] = { fp, from: 'qq:' + ownerQQ }
-        // 清理 >10s 的旧记录
-        for (const [k, v] of Object.entries(dd)) { if (now2 - Number(k) > 10000) delete dd[k] }
-        fs.writeFileSync(ddPath, JSON.stringify(dd))
-      } catch (e) { swallow(e, 'tools/lib/notify.mjs:48') }
+        if (dedup.skipped) {
+          console.log('[notify] 跨窗口去重：5秒内已在其他窗口发过类似内容，跳过')
+          return { ok: true, deduped: true }
+        }
+      } catch (e) { swallow(e, 'notify:send-dedup') }
       // 打字标识（10-31）：推送也是"她在打字"—— 先显示输入状态，发完停止
       try {
         await fetch(`${napcat}/set_input_status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: Number(ownerQQ), event_type: 1 }), signal: AbortSignal.timeout(4000) })

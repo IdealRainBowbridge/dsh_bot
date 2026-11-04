@@ -5,6 +5,7 @@
 //   node bot.mjs sing songs                           # 看她学会了哪些歌（歌单）
 import { sing } from '../lib/sing.mjs'
 import { config } from '../lib/config.mjs'
+import { onebotFileValue } from '../lib/onebot-file.mjs'
 
 function arg(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? String(argv[i + 1] ?? d) : d }
 const has = (argv, name) => argv.includes(name)
@@ -17,7 +18,8 @@ async function sendQQ(file, text) {
   if (!ownerQQ) throw new Error('owner.qq 未配置')
   const r = await fetch(`${napcat}/send_private_msg`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'record', data: { file } }] }),
+    // file 走 base64：发送方 SnowLuma 在宿主上，容器内路径它 stat 不到（见 lib/onebot-file.mjs）
+    body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'record', data: { file: onebotFileValue(file) } }] }),
     signal: AbortSignal.timeout(60000),
   })
   if (r.ok && text) {

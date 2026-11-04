@@ -9,10 +9,21 @@
 //
 // 出站为什么用"拉"而不是"推"：微信是 python、抖音可能又是别的语言，
 // 让它们主动来取比自己实现一套 webhook 简单得多，也不会因为对方挂了丢消息。
+//
+// ⚠️ 2026-11-04 现状核对（架构检查 P2）：这条出站链路**当前没有消费者**。
+//   · `pushOutbox` 的唯一调用点是 qq-server 收到非 QQ 平台的 `send_*`（当前无此来源）；
+//   · `drainOutbox`（`GET /outbound`）没有任何进程在拉，`~/.data/outbox.json` 实测不存在；
+//   · 微信 bot（`wechat/wechat_bot.py`，跑在 Windows 本机的 D:\wechat-bot\）自己直连
+//     LLM、自己发消息，既不走 `/inbound` 也不拉 `/outbound` —— 与本文档第一段设想的
+//     "三平台共用同一套人格/记忆" 不一致。
+// 现在这里只保留**可用且被测试覆盖的机制**，不再假装微信已经接上；真要接，
+// 动作是：微信侧把入站转发到 `POST /inbound`、并起一个循环 `GET /outbound?platform=wechat`。
+// 在此之前 outbox.json 最多只有 200 条上限（MAX_OUT），不会无限涨。
 import fs from 'node:fs'
 import path from 'node:path'
 import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
+import { updateJson } from './atomic.mjs'
 import { isKnownPlatform, RETIRED_PLATFORMS } from './platforms.mjs'
 
 const OUTBOX = () => dataPath('outbox.json')
@@ -21,6 +32,11 @@ const MAX_OUT = 200
 export function readOutbox() {
   try { return JSON.parse(fs.readFileSync(OUTBOX(), 'utf8')) || [] } catch { return [] }
 }
+/**
+ * 整表写入（保留给测试与显式覆盖）。生产路径一律走 updateJson：
+ * outbox.json 是**多写者**文件（qq-server 主进程 + 未来任何通道进程），
+ * 旧的 writeFileSync 是无锁读-改-写，并发下会丢条目。
+ */
 export function writeOutbox(list) {
   try {
     const f = OUTBOX()
@@ -35,7 +51,6 @@ export function pushOutbox({ platform, chatId, userId = '', text = '', images = 
     // v5：入队必须有平台和会话，否则拉取端只能靠猜（旧版允许空 chatId 落库）
     return { ok: false, reason: 'platform-and-chatId-required' }
   }
-  const q = readOutbox()
   const row = {
     id: 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
     at: Date.now(), platform: p, chatId: String(chatId), userId: String(userId || ''),
@@ -43,9 +58,14 @@ export function pushOutbox({ platform, chatId, userId = '', text = '', images = 
     images: (images || []).slice(0, 4),
     ...meta,
   }
-  q.push(row)
-  writeOutbox(q)
-  return { ok: true, id: row.id, queued: q.length }
+  // 原子读-改-写（2026-11-04）：两个进程同时入队时旧写法会丢一条。
+  const r = updateJson(OUTBOX(), (cur) => {
+    const q = Array.isArray(cur) ? cur : []
+    q.push(row)
+    return q.slice(-MAX_OUT)
+  }, { fallback: [], waitMs: 1500 })
+  if (!r.ok) return { ok: false, reason: r.error || 'write-failed' }
+  return { ok: true, id: row.id, queued: r.value.length }
 }
 /** 取（并按需清空）某平台的出站。 */
 export function drainOutbox(platform = '', { drain = true } = {}) {
@@ -55,10 +75,19 @@ export function drainOutbox(platform = '', { drain = true } = {}) {
   // 任何一个"拉取端"（哪怕只是探活）都能偷走别家的消息。
   // 现在：platform 必填，未知平台直接拒绝，不做"通配"。
   if (!p) return { count: 0, items: [], error: 'platform-required' }
-  const all = readOutbox()
-  const mine = all.filter((x) => x.platform === p)
-  const rest = all.filter((x) => x.platform !== p)
-  if (drain && mine.length) writeOutbox(rest)
+  if (!drain) {
+    const mineOnly = readOutbox().filter((x) => x.platform === p)
+    return { count: mineOnly.length, items: mineOnly }
+  }
+  // 取出+清空必须在同一把锁里：分开做会让"取出后、清空前"新入队的消息被一起抹掉。
+  const mine = []
+  const r = updateJson(OUTBOX(), (cur) => {
+    const all = Array.isArray(cur) ? cur : []
+    for (const x of all) if (x.platform === p) mine.push(x)
+    if (!mine.length) return undefined          // 没有我的：不动文件
+    return all.filter((x) => x.platform !== p)
+  }, { fallback: [], waitMs: 1500 })
+  if (!r.ok) return { count: 0, items: [], error: r.error || 'write-failed' }
   return { count: mine.length, items: mine }
 }
 
