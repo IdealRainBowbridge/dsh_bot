@@ -81,7 +81,7 @@ def acquire_single_instance():
     try:
         import ctypes
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        handle = kernel32.CreateMutexW(None, False, "Local\\dsh-feiyu-wechat-bot")
+        handle = kernel32.CreateMutexW(None, False, "Local\\dsh_bot-wechat-bot")
         if not handle:
             return "no-handle"
         if ctypes.get_last_error() == 183:      # ERROR_ALREADY_EXISTS

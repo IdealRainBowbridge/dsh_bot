@@ -393,7 +393,7 @@ export async function run(argv = []) {
   } catch (e) { items.push(warn('数据形状', '检查失败：' + e.message)) }
 
   // ── P1-1 改名六层体检（2026-11-03）：容器内能验的层在这里验 ───────────────
-  // 宿主脚本/单元那两层容器里够不着 —— feiyu-rename-audit.sh（宿主定时跑）
+  // 宿主脚本/单元那两层容器里够不着 —— dsh-bot-rename-audit.sh（宿主定时跑）
   // 把结果写进 rename-audit.json，这里读它的结论。
   try {
     const here = process.cwd()
@@ -406,7 +406,7 @@ export async function run(argv = []) {
       const audit = JSON.parse(fs.readFileSync(dataPath('rename-audit.json'), 'utf8'))
       if (audit.ok) items.push(ok('改名·宿主', audit.summary || '宿主脚本/单元无旧容器名引用（' + (audit.at || '?') + '）'))
       else items.push(bad('改名·宿主', audit.summary || '宿主侧仍有旧容器名引用 —— 见 rename-audit.json'))
-    } catch { items.push(warn('改名·宿主', 'rename-audit.json 不存在 —— 宿主侧体检还没跑过（/usr/local/bin/feiyu-rename-audit.sh）')) }
+    } catch { items.push(warn('改名·宿主', 'rename-audit.json 不存在 —— 宿主侧体检还没跑过（/usr/local/bin/dsh-bot-rename-audit.sh）')) }
   } catch (e) { items.push(warn('改名体检', '检查失败：' + e.message)) }
 
   // ── P1-3 通道多样性（2026-11-03）：第二家 key 就位才算真 fallback ─────────
