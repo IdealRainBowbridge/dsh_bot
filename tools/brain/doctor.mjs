@@ -66,7 +66,7 @@ export function run({ measurePrompt = true, now = Date.now() } = {}) {
   const self = selfM.manifest()
   items.push(ok('O10 自我文件没被绕过写闸改', !self.drift, `version ${self.version} hash ${self.hash}`))
   const ownerWritten = Boolean(selfM.ownerBlock({ limit: 30 }))
-  items.push(ok('O10 主人层（只有主人能写；没写不影响跑）', true, ownerWritten ? '已写' : '还是模板，等主人填'))
+  items.push(ok('O10 用户层（只有用户能写；没写不影响跑）', true, ownerWritten ? '已写' : '还是模板，等用户填'))
 
   const d = delivery.stats({ now })
   const claims = readJsonl(claimsPath(), { limit: 200 }).filter((r) => Number(r.at) >= now - 86400_000)

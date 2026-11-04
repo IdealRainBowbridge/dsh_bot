@@ -80,7 +80,7 @@ function gatherContext(now = Date.now()) {
     return who + '：' + String(j.summary || j.text || '').slice(0, 50)
   }).filter(Boolean)
 
-  // 主人最后说话多久之前（role=user，或 qq 私聊里非 assistant 的）
+  // 用户最后说话多久之前（role=user，或 qq 私聊里非 assistant 的）
   ctx.quietMin = null
   for (let k = all.length - 1; k >= 0; k--) {
     const j = all[k]
@@ -120,7 +120,7 @@ function gatherContext(now = Date.now()) {
     }))
   } catch (e) { swallow(e, 'tools/lib/mind.mjs:93') }
 
-  // 关于主人的事实
+  // 关于用户的事实
   try {
     const f = readJson(dataPath('owner-facts.json'), {})
     ctx.facts = Object.entries(f).slice(-5).map(([k, v]) => `${k}：${String(v).slice(0, 40)}`)
@@ -194,7 +194,7 @@ export async function plan({ now = Date.now(), force = false } = {}) {
   const lines = []
   lines.push(`现在是${slot}（${ctx.hour}点）。你的情绪值 ${ctx.mood}/100${ctx.mood < 40 ? '（低落）' : ''}。`)
   if (typeof ctx.quietMin === 'number') {
-    const OT2 = String(cfg.identity?.ownerTitle || cfg.identity?.callOwner || cfg.owner?.name || '主人')
+    const OT2 = String(cfg.identity?.ownerTitle || cfg.identity?.callOwner || cfg.owner?.name || '用户')
     lines.push(ctx.quietMin < 30 ? `你刚和${OT2}聊过（${ctx.quietMin} 分钟前）。` : `${OT2} ${ctx.quietMin} 分钟没理你了。`)
   }
   if (ctx.lastPlan) lines.push(`你上一段在做：${labelOf(ctx.lastPlan.activity)}（理由：${ctx.lastPlan.why || '没说'}）。`)

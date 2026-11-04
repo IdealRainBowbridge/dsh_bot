@@ -39,8 +39,8 @@ function logWeb(kind, what) {
     const md = LOG()
     let content = ''
     try { content = fs.readFileSync(md, 'utf8') } catch (e) { swallow(e, 'web:logWeb') }
-    if (!content.startsWith('# 大肥鱼 · 上网日志')) content = '# 大肥鱼 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n'
-    if (!content.includes(`## ${day}\n`)) content = content.replace('# 大肥鱼 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n', `# 大肥鱼 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n## ${day}\n\n`)
+    if (!content.startsWith('# 理想的机械人 · 上网日志')) content = '# 理想的机械人 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n'
+    if (!content.includes(`## ${day}\n`)) content = content.replace('# 理想的机械人 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n', `# 理想的机械人 · 上网日志\n\n> 她在网上干过什么（搜索/访问/自我升级），按天记录（最新在上）。\n\n## ${day}\n\n`)
     const at = content.indexOf(`## ${day}\n`) + `## ${day}\n\n`.length
     content = content.slice(0, at) + `- ${time} **${kind}** ${String(what).slice(0, 180)}\n` + content.slice(at)
     fs.mkdirSync(path.dirname(md), { recursive: true })

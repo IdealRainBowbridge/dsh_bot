@@ -25,7 +25,7 @@ export function capOk(kind, max) { return !(Number(max) > 0) || actCount(kind) <
 /**
  * 记一次动作。
  * @param {string} kind like/coin/follow/danmaku/dyn/reply/imgComment
- * @param {object} info {bvid,title,text,to,extra} —— 有就顺手记进社交流水（主人要看得见）
+ * @param {object} info {bvid,title,text,to,extra} —— 有就顺手记进社交流水（用户要看得见）
  */
 export function capRecord(kind, info = {}) {
   // ⚠️ v5：必须走跨进程锁。以前是 read → 改 → write，三个进程同时记录时
@@ -295,7 +295,7 @@ export async function scanReplies({ sinceMs } = {}) {
   return out
 }
 
-/** 回复别人（楼中楼）：不带 @主人（社交回应，不是分享），不过 share 标尺，但照走 guard + 日额度。
+/** 回复别人（楼中楼）：不带 @用户（社交回应，不是分享），不过 share 标尺，但照走 guard + 日额度。
  *  opts.inReplyTo：「对方昵称:对方的话」—— 发言台账用。
  *  opts.aid / opts.title：已知就传进来 —— 省掉一次 /x/web-interface/view（那个接口今天已经被
  *  B站 412 限流过两回，回评论不该被"查 aid"卡死；aid 在评论区接口里本来就有）。 */
@@ -381,7 +381,7 @@ export async function postReply(bvid, rootRpid, parentRpid, rawMessage, { go = f
   const tag = image ? ` [图:${path.basename(image)}]` : ''
   if (!go) return { ok: true, dry: true, why: `【干跑】回评 →《${String(info.title).slice(0, 18)}》：${message}${tag}` }
   if (cfg.enabled !== true) return { ok: false, why: 'bilibili.replies.enabled 是关的' }
-  // bypassCap：主人的评论永远不受日额度限制（跟抖音那边一致 —— 主人说话不许因为额度被吞掉）
+  // bypassCap：用户的评论永远不受日额度限制（跟抖音那边一致 —— 用户说话不许因为额度被吞掉）
   const bucket = String(capKind || 'reply')
   const cap = Number(capMax ?? (bucket === 'reply' ? cfg.dailyMax : (cfg.ownDailyMax ?? 20)) ?? 10)
   if (!bypassCap && !capOk(bucket, cap)) return { ok: false, why: bucket === 'reply' ? '今日回评额度已用完' : '今日回自己作品评论的额度已用完' }
@@ -426,10 +426,10 @@ export async function postReply(bvid, rootRpid, parentRpid, rawMessage, { go = f
 }
 
 // ── ⑦ 自己作品评论区（10-27）──────────────────────────────────────────────
-// 主人要的是：**自己投稿下面，别人的评论（任何类型）都要回**。
+// 用户要的是：**自己投稿下面，别人的评论（任何类型）都要回**。
 // 以前 B站 只有「别人回复了我的评论」这一条被动路径，自己作品下的评论根本没人管。
 /** 我自己的投稿（最近 N 个）。三路来源，从最稳到最容易风控：
- *   ① config.bilibili.ownBvids（主人手填，永远最准）
+ *   ① config.bilibili.ownBvids（用户手填，永远最准）
  *   ② 本地产出记录：~/.data/bili-debut.json 的 bvid + bili-posts/*​/bvid.txt
  *   ③ /x/space/wbi/arc/search（WBI 签名空间接口，最容易被 412 挡；失败就静默退回）
  * 为什么要有 ②（10-27 实测）：space 接口对脚本很凶，第一次试就吃了 HTTP 412 并被熔断 5 分钟 ——
@@ -535,7 +535,7 @@ export async function listOwnVideos({ ps = 10 } = {}) {
 
 /**
  * 某个视频下的评论（含楼中楼），带类型（文字/表情占位/图片评论/空）。
- * 主人 10-27 的原话：「任何类型」—— 所以这里**不筛空文本**，交给上层按 kind 处理。
+ * 用户 10-27 的原话：「任何类型」—— 所以这里**不筛空文本**，交给上层按 kind 处理。
  * @returns {Promise<Array<{rpid,rootRpid,parentRpid,mid,uname,text,kind,label,plain,pictures,ctime,isUp}>>}
  */
 export async function listCommentsOf(aid, { ps = 20, bvid = '', upMid = '' } = {}) {

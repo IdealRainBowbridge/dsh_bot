@@ -18,7 +18,7 @@ process.env.DSH_HOME = path.join(TMP, '.dsh')
 process.env.BOT_CONFIG = path.join(TMP, '.dsh', 'bot.config.json')
 fs.mkdirSync(path.join(TMP, '.dsh'), { recursive: true })
 fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({
-  owner: { qq: '111', name: '笨蛋老爸' },
+  owner: { qq: '111', name: '笨蛋管理员' },
   webui: { proactive: { enabled: true, dailyMax: 2, minGapMin: 0, quietHours: 8 } },
 }))
 

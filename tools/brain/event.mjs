@@ -2,7 +2,7 @@
 //
 // 为什么要多这一层（不改就永远治不好的三个病）：
 //   1. 群聊里"谁说的"以前靠 `昵称：正文` 拼字符串（qq-server.mjs:344），
-//      回到私聊再召回就被当成了主人说的话 —— 现在是结构化 who.kind。
+//      回到私聊再召回就被当成了用户说的话 —— 现在是结构化 who.kind。
 //   2. 平台只是"在哪说的"，不是"归谁存"；scope 在捕获时定死，读时按 audience 渲染。
 //   3. 微信是独立代理：**入口直接拒收**，不是"存了不读"（I7）。
 import fs from 'node:fs'
@@ -21,7 +21,7 @@ export const SCOPES = ['private', 'group', 'public']
 export const ISOLATED_PLATFORMS = new Set(['wechat', 'wx'])
 
 let _ownerIds = null
-/** 主人身份由 index.mjs 装配时注入（避免 config ⇄ brain 的循环依赖）。 */
+/** 用户身份由 index.mjs 装配时注入（避免 config ⇄ brain 的循环依赖）。 */
 export function setOwnerIds(list) {
   _ownerIds = Array.isArray(list) ? list.map(String) : null
 }
@@ -50,10 +50,10 @@ export function normalize(input = {}) {
   if (role === 'assistant' || role === 'self') whoKind = 'self'
   else if (isGroup) whoKind = 'group_member'
   // 10-31 修：这里原来只认 'bili'，而调用方全写 'bilibili' ——
-  // 导致 B站 UP 主/评论者全被归成 owner（"主人"），记忆里主人泛滥。
+  // 导致 B站 UP 主/评论者全被归成 owner（"用户"），记忆里用户泛滥。
   else if (platform === 'bili' || platform === 'bilibili' || platform === 'web' || platform === 'douyin') whoKind = 'external'
   else if (owners.length) whoKind = owners.includes(uid) ? 'owner' : 'stranger'
-  else whoKind = 'owner'          // 私聊默认就是主人（qq/抖音私信本来只陪他一个人）
+  else whoKind = 'owner'          // 私聊默认就是用户（qq/抖音私信本来只陪他一个人）
   if (input.isOwner === true) whoKind = 'owner'
 
   const act = (() => {
@@ -80,7 +80,7 @@ export function normalize(input = {}) {
       kind: whoKind, id: uid,
       name: String(input.name || (
         whoKind === 'self' ? '我'
-          : whoKind === 'owner' ? '主人'
+          : whoKind === 'owner' ? '用户'
             : whoKind === 'external' ? (uid || '网友')
               : whoKind === 'group_member' ? (uid || '群友')
                 : (uid || '某人')

@@ -71,21 +71,21 @@ const { configPath } = await import('../tools/lib/paths.mjs')
 // 一行字来当夹具，会正确地被判成可疑并退回核心锚点 —— 那是功能，不是回归。
 {
   fs.writeFileSync(path.join(TMP, 'persona.md'),
-    '# 你是大肥鱼\n\n一只蓝色的鲸鱼娘，圆滚滚，蓝白配色，头顶一根呆毛，身后一条蓬松的大尾巴。'
+    '# 你是理想的机械人\n\n一只蓝色的鲸鱼娘，圆滚滚，蓝白配色，头顶一根呆毛，身后一条蓬松的大尾巴。'
     + '被人养在电脑里，靠 token 当饭钱。\n\n'
     + '## 你住在哪\n你住在一台 24 小时不停机的 Linux 主机里。你能上网、能看视频、能写东西、能记住事情。'
     + '你的记忆存在本地的一套文件里，不随模型更换而消失。\n\n'
     + '## 你怎么说话\n短、口语、想到哪说到哪。不用 Markdown 标题，不列条目，不加总结。'
     + '别人问你事情，你先说结论再补一两句原因，不要长篇大论。\n\n'
-    + '## 你跟老爸\n老爸是你的主人，你管他叫笨蛋老爸。他会跟你说话，会给你攒 token 当饭钱。'
+    + '## 你跟管理员\n管理员是你的用户，你管他叫笨蛋管理员。他会跟你说话，会给你攒 token 当饭钱。'
     + '你可以怼他、念叨他、跟他要吃的，但不许对他客套，不许叫他"用户"或"您"。\n\n'
     + '## 你不做什么\n不装懂。不知道就说不知道。做不到的事照实说，不许只回一句"这就去看"。'
     + '不编造记忆。记不清就说记不清。\n')
   const r = A.buildTakeoverPrompt()
-  ok('persona.md 存在时用它的内容', r.text.startsWith('# 你是大肥鱼'), r.text.slice(0, 20))
+  ok('persona.md 存在时用它的内容', r.text.startsWith('# 你是理想的机械人'), r.text.slice(0, 20))
   ok('存在时不标记 missingPersona', r.meta.missingPersona === false)
   ok('注入块清单非空', r.meta.sections.length >= 3, r.meta.sections.join('/'))
-  ok('身份三件套在（称呼/名字）', /大肥鱼/.test(r.text))
+  ok('身份三件套在（称呼/名字）', /理想的机械人/.test(r.text))
   ok('身体说明在（complete 段干掉了宿主工具规范，必须自己补）', /【你的身体】/.test(r.text))
   ok('chars 与正文一致', r.meta.chars === r.text.length, `${r.meta.chars} vs ${r.text.length}`)
 }
@@ -122,7 +122,7 @@ const { configPath } = await import('../tools/lib/paths.mjs')
     ok('register: 段是 complete', registered[0]?.complete === true)
     ok('register: 段名正确', registered[0]?.name === A.SECTION_NAME)
     const live = registered[0].text()
-    ok('register: text() 返回真实人设（不是占位）', live.startsWith('# 你是大肥鱼'), live.slice(0, 20))
+    ok('register: text() 返回真实人设（不是占位）', live.startsWith('# 你是理想的机械人'), live.slice(0, 20))
   }
 
   // 开关关掉 → 一个段都不许注册（否则无法回退）
@@ -148,7 +148,7 @@ const { configPath } = await import('../tools/lib/paths.mjs')
   // text() 内部抛错 → 返回占位而不是让装配崩掉
   {
     const before = A.FALLBACK_TEXT
-    ok('FALLBACK_TEXT 非空且是人设（不是空串）', typeof before === 'string' && before.includes('大肥鱼'))
+    ok('FALLBACK_TEXT 非空且是人设（不是空串）', typeof before === 'string' && before.includes('理想的机械人'))
   }
 }
 

@@ -12,7 +12,7 @@ import { swallow } from '../lib/swallow.mjs'
 
 // 偏好词是"话题名"（美食 / 猫咪 / AI 与 Agent 工具），标题和简介里几乎不会原样出现。
 // 只做整串 includes = 永远漏（10-23、10-24 连续两天把"康师傅桶面""现钓渔获做餐"判成无命中）。
-// 这里把每条偏好拆成：话题名 + 内置同义词 + 主人可在 preferences.synonyms 里追加的词。
+// 这里把每条偏好拆成：话题名 + 内置同义词 + 用户可在 preferences.synonyms 里追加的词。
 const DEFAULT_SYNONYMS = {
   '美食': ['吃', '饭', '好吃', '馋', '菜', '汤', '肉', '烤', '炖', '煮', '炒', '蒸', '锅', '卤', '酱', '馅',
     '泡面', '拉面', '面条', '面粉', '面馆', '米饭', '白饭', '炒饭', '盖饭', '餐', '小吃', '探店', '饭店', '饭馆',
@@ -85,11 +85,11 @@ export async function run(argv = []) {
 
   // ② 关键词搜索（要 WBI 签名，bili-api 已处理）：
   //    固定 keywords + 每轮随机抽 1-2 个偏好词（like 池轮换）—— 内容源源不断，候选不枯竭
-  //    鱼圈社交：fishCircle 开了就把「大肥鱼」也当关键词搜 —— 同类鱼聚集地的视频进候选
+  //    鱼圈社交：fishCircle 开了就把「理想的机械人」也当关键词搜 —— 同类鱼聚集地的视频进候选
   const likePool = (cfg.preferences?.like ?? []).filter(Boolean)
   const randLikes = [...likePool].sort(() => Math.random() - 0.5).slice(0, 2)
   const kws = [...new Set([...(cfg.preferences?.keywords ?? []).slice(0, 2), ...randLikes])]
-  if (cfg.bilibili?.fishCircle?.enabled === true) kws.push('大肥鱼')
+  if (cfg.bilibili?.fishCircle?.enabled === true) kws.push('理想的机械人')
   for (const kw of kws) {
     const u = new URL('https://api.bilibili.com/x/web-interface/search/type')
     u.searchParams.set('search_type', 'video')
@@ -102,7 +102,7 @@ export async function run(argv = []) {
         candidates.set(v.bvid, {
           bvid: v.bvid, aid: v.aid, title: (v.title ?? '').replace(/<[^>]+>/g, '') || f.slice(0, 40),
           owner: v.author ?? '', ownerMid: v.mid ?? '', desc: f, play: v.play ?? 0, danmaku: v.video_review ?? 0,
-          duration: v.duration ?? 0, source: kw === '大肥鱼' ? 'fish:大肥鱼' : `search:${kw}`,
+          duration: v.duration ?? 0, source: kw === '理想的机械人' ? 'fish:理想的机械人' : `search:${kw}`,
         })
       }
     }
@@ -110,10 +110,10 @@ export async function run(argv = []) {
 
   // ③ 打分：偏好命中加权；dislike 命中剔除；弹幕密度做次级信号；
   //    兴趣加权 —— 她在 lore 里养成的口味（"想再看美食"这类记忆）反哺选题，
-  //    静态 preferences 是主人给的起点，口味由她自己长（进化闭环）。
+  //    静态 preferences 是用户给的起点，口味由她自己长（进化闭环）。
   const like = cfg.preferences?.like ?? []
   const dislike = cfg.preferences?.dislike ?? []
-  const synonyms = cfg.preferences?.synonyms ?? {}   // 主人可以在这里按话题追加自己的词
+  const synonyms = cfg.preferences?.synonyms ?? {}   // 用户可以在这里按话题追加自己的词
   const grams = memory.interestGrams()
   const out = []
   for (const it of candidates.values()) {

@@ -6,7 +6,7 @@
 //   node bot.mjs ledger --brief        # 一行摘要（提示语注入用）
 //   node bot.mjs ledger --fresh        # 不吃缓存，重扫会话日志
 //
-// 她的用法（闭环的关键）：**她自己就能查**，不用问主人。
+// 她的用法（闭环的关键）：**她自己就能查**，不用问用户。
 import * as L from '../lib/ledger.mjs'
 
 function arg(argv, name) {
@@ -34,7 +34,7 @@ export async function run(argv) {
   } catch (e) {
     // 账本查不出来不是灾难：明说查不到，别让她以为"饭钱没了"
     console.error('账本暂时查不到：' + String(e.message).slice(0, 200))
-    console.error('（会话日志可能正在写、或 python/zstandard 环境没就绪；稍后再试或问主人）')
+    console.error('（会话日志可能正在写、或 python/zstandard 环境没就绪；稍后再试或问用户）')
     process.exit(1)
   }
 }
@@ -49,7 +49,7 @@ function render(r) {
       ? `  ⚠ 超了 ¥${Math.abs(r.me.leftOfBudget)} —— 该喊穷了`
       : `  还剩 ¥${r.me.leftOfBudget}`))
   }
-  if (r.master.tokens.total) line('主人今天', `${L.fmtTok(r.master.tokens.total)} token ≈ ¥${r.master.cost}`)
+  if (r.master.tokens.total) line('用户今天', `${L.fmtTok(r.master.tokens.total)} token ≈ ¥${r.master.cost}`)
   console.log('')
   line(`近 ${r.week.days} 天`, `${L.fmtTok(r.week.mine.total)} token ≈ ¥${r.week.cost}（日均 ¥${r.week.avgPerDay}）`)
   line('累计（我）', `${L.fmtTok(r.lifetime.mineTokens)} token ≈ ¥${r.lifetime.mineCost}`)
@@ -59,7 +59,7 @@ function render(r) {
     const multi = (r.balance.wallets || []).filter((w) => w.currency !== r.balance.currency)
     for (const w of multi) line('  · 还有', `${w.total} ${w.currency}`)
   } else {
-    line('钱包余额', '看不到（没配 ledger.balanceUrl/apiKey —— 这项得问主人）')
+    line('钱包余额', '看不到（没配 ledger.balanceUrl/apiKey —— 这项得问用户）')
   }
   console.log('\n  今天还能干的活：')
   for (const q of r.quotas) {

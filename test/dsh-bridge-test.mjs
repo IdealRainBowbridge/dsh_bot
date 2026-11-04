@@ -109,10 +109,10 @@ const B = await import('../lib/dsh-bridge.mjs')
   const t = (name) => tools.find((x) => x.name === name)
 
   // remember → recall 闭环（这是"她真的记得"的最小证据）
-  const r1 = await t('bot_remember').execute({ kind: 'episode', text: '今天在网页里跟老爸聊了能力桥的事' })
+  const r1 = await t('bot_remember').execute({ kind: 'episode', text: '今天在网页里跟管理员聊了能力桥的事' })
   ok('bot_remember(episode) 返回结构化文本', typeof r1?.text === 'string' && r1.text.includes('记进情节'), r1?.text)
 
-  const f1 = await t('bot_remember').execute({ kind: 'fact', text: '老爸喜欢喝冰美式' })
+  const f1 = await t('bot_remember').execute({ kind: 'fact', text: '管理员喜欢喝冰美式' })
   ok('bot_remember(fact) 成功', f1.text.includes('关系事实'), f1.text)
 
   const s1 = await t('bot_recall').execute({ mode: 'search', query: '能力桥' })

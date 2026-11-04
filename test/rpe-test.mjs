@@ -6,7 +6,7 @@
 //   ③ 重现：负脉冲锁翻篇，actual>expected 再出正误差
 //   ④ 不在意来源（care<0.5）：停供不出负脉冲（不空落）
 //   ⑤ 预期状态落盘：重启（重 import）后 expected 还在（髓鞘化纪律）
-//   ⑥ 主人身份带来的 care 基线：owner 默认 1，普通来源缺省 0.5
+//   ⑥ 用户身份带来的 care 基线：owner 默认 1，普通来源缺省 0.5
 import assert from 'node:assert'
 import fs from 'node:fs'
 import os from 'node:os'

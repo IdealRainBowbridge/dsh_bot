@@ -72,7 +72,7 @@ async function jobTidy() {
   //
   // `consolidate.run()` 的签名是 `{ chatFn }`，不传就只跑规则抽取。
   // 而这里原来写的是 `runConsolidation({ now })` —— 于是：
-  //   · ruleFacts 只认主人亲口说的 5 条正则（吃/在做什么/要去/情绪/《作品》）
+  //   · ruleFacts 只认用户亲口说的 5 条正则（吃/在做什么/要去/情绪/《作品》）
   //   · 实测 40 条 episode 里大多数是"她自己说的"和"群友说的"，正则一条都抽不到
   //   · 结果 sem/ 里 facts 0 / intents 0 / schemata 0 / competence 0
   //     —— 巩固"跑了 25/36 条"，产出是零。这就是"供血缺失"的形状。

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>大肥鱼 · 设置</title>
+<title>理想的机械人 · 设置</title>
 <style>
   :root {
     color-scheme: dark;
@@ -373,7 +373,7 @@
         </svg>
       </div>
       <div class="brand-text">
-        <div class="brand-name">大肥鱼</div>
+        <div class="brand-name">理想的机械人</div>
         <div class="brand-sub">SETTINGS</div>
       </div>
     </div>
@@ -389,7 +389,7 @@
       </a>
       <a href="#owner" data-nav="owner">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        主人
+        用户
       </a>
       <a href="#voice" data-nav="voice">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
@@ -458,10 +458,10 @@
         <p class="help" style="margin-top:12px">QQ / 微信是常驻聊天服务，B站 / 抖音是定时刷。改动后重启 DSH 完全生效。</p>
       </section>
 
-      <!-- 主人 -->
+      <!-- 用户 -->
       <section class="block" id="owner">
         <div class="block-head">
-          <h2>主人</h2>
+          <h2>用户</h2>
           <p class="block-note">认出你，对网友保持距离</p>
         </div>
         <div class="field">
@@ -998,7 +998,7 @@ async function loadMemory() {
     stats.innerHTML = [
       ['对话', st.episodes || 0],
       ['世界设定', st.lore || 0],
-      ['主人事实', st.facts || 0],
+      ['用户事实', st.facts || 0],
     ].map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('')
       + Object.keys(by).map((k) => `<span class="chip">${escapeHtml(k)} <b>${by[k]}</b></span>`).join('');
 

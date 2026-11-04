@@ -1,9 +1,9 @@
-// QQ 专属的长期记忆：滚动摘要 + 主人画像。
+// QQ 专属的长期记忆：滚动摘要 + 用户画像。
 //
 // 为什么要单独一套：
-//   · 微信是"顺手回两句"，QQ 是跟主人聊天 —— 需要记得更久、更懂他这个人；
+//   · 微信是"顺手回两句"，QQ 是跟用户聊天 —— 需要记得更久、更懂他这个人；
 //   · 光靠 recent(24 条) 还是会被截断，所以每聊几轮就用 LLM 把这段对话压成摘要，
-//     再抽一份"关于主人的稳定事实"（称呼、作息、工作、最近在烦什么）滚雪球式更新；
+//     再抽一份"关于用户的稳定事实"（称呼、作息、工作、最近在烦什么）滚雪球式更新；
 //   · 这些都落在 ~/.data/qq/ 下，跟微信/B站记忆物理分开，以后做"自我迭代"也在这块地里长。
 import fs from 'node:fs'
 import path from 'node:path'
@@ -103,7 +103,7 @@ export function loadSummary(chatId) {
   return String(readJson(summaryFile(chatId), {})?.summary ?? '')
 }
 
-/** 主人画像（跨会话共用一份）。 */
+/** 用户画像（跨会话共用一份）。 */
 export function loadProfile() {
   try { return fs.readFileSync(PROFILE_FILE, 'utf8').trim() } catch { return '' }
 }
@@ -129,7 +129,7 @@ export function due(chatId, every = DEFAULT_EVERY) {
 }
 
 /**
- * 压缩记忆：把最近一段对话压成摘要，同时更新主人画像。
+ * 压缩记忆：把最近一段对话压成摘要，同时更新用户画像。
  * @param {{chatId:string, owner?:object, chat:Function}} o chat = (messages)=>Promise<string>
  */
 export async function refresh({ chatId, owner = {}, chat }) {
@@ -140,22 +140,22 @@ export async function refresh({ chatId, owner = {}, chat }) {
   if (turns.length < 4) return false
 
   const transcript = turns
-    .map((m) => `${m.role === 'assistant' ? '她' : '主人'}：${String(m.content).slice(0, 200)}`)
+    .map((m) => `${m.role === 'assistant' ? '她' : '用户'}：${String(m.content).slice(0, 200)}`)
     .join('\n')
 
   const name = owner.name || ''
   const msgs = [
     {
       role: 'system',
-      content: '你在整理"大肥鱼"和主人的聊天记忆。只根据给出的对话写，不要编。输出严格 JSON，两个字段：\n'
+      content: '你在整理"理想的机械人"和用户的聊天记忆。只根据给出的对话写，不要编。输出严格 JSON，两个字段：\n'
         + '{"summary": "最近聊了什么、他的状态和情绪、你答应过什么（不超过 180 字）",'
-        + '"profile": "关于主人的稳定事实：怎么称呼他、作息、工作、在意的人和事、最近在烦什么；'
+        + '"profile": "关于用户的稳定事实：怎么称呼他、作息、工作、在意的人和事、最近在烦什么；'
         + '外加你在外面（B站/抖音）养成的一点偏好（不超过 300 字，只写有依据的，别把人设写成另一个人）"}',
     },
     {
       role: 'user',
       content: `【旧摘要】${oldSummary || '（无）'}\n【旧画像】${oldProfile || '（无）'}\n`
-        + `【主人称呼】${name || '（未知）'}\n`
+        + `【用户称呼】${name || '（未知）'}\n`
         + `【她最近在外面看到的】\n${worldBlock() || '（无）'}\n`
         + `【最近对话】\n${transcript}`,
     },

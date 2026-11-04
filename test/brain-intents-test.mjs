@@ -35,7 +35,7 @@ ok('提示词里能看到 wish', /海/.test(intents.promptBlock({ now })))
 // ③ 补做分级：2 小时前 → doing；8 小时前 → debt；26 小时前 → missed
 const late2 = mk({ object: '把这周的账算一下', verify: 'ledger', dueAt: now - 2 * 3600_000, now })
 const late8 = mk({ object: '看《可塑性记忆》第1集', verify: 'ledger', dueAt: now - 8 * 3600_000, now })
-const late26 = mk({ object: '给主人剪那条视频', verify: 'file', dueAt: now - 26 * 3600_000, now })
+const late26 = mk({ object: '给用户剪那条视频', verify: 'file', dueAt: now - 26 * 3600_000, now })
 const cu = intents.catchUp(now)
 ok('2 小时前的事进了补做队列', cu.doing.some((x) => x.id === late2.id), JSON.stringify(cu.doing.map((x) => x.object)))
 ok('8 小时前的事记成欠着（6~24 小时）', cu.debt.some((x) => x.id === late8.id) || intents.debts(now).some((x) => x.id === late8.id), JSON.stringify(cu.debt.map((x) => x.object)))

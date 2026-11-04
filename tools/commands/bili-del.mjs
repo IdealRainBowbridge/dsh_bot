@@ -1,4 +1,4 @@
-// bili-del —— 删除她自己的投稿（B站稿件）。归属：糖鲸大肥鱼的号，她管自己的稿。
+// bili-del —— 删除她自己的投稿（B站稿件）。归属：糖鲸理想的机械人的号，她管自己的稿。
 // 用法：node bot.mjs bili-del <BV号或aid> [--go]（默认干跑，--go 真删）
 import { loadCred } from '../lib/cred.mjs'
 import { makeHeaders } from '../lib/bili-api.mjs'
@@ -19,8 +19,8 @@ async function delArchive(cred, aid) {
 
 export async function run(argv) {
   // 10-31 实测：删除操作被 B站 Gaia 人机验证锁死（网页走到验证弹窗，headless 过不去）。
-  // 所以这个命令的作用 = 查稿 + 生成给笨蛋老爸的删除请求文案（他手动删）。
-  console.log('[info] Delete needs B站 human verification. Copy the request below and send it to 笨蛋老爸 via QQ.')
+  // 所以这个命令的作用 = 查稿 + 生成给笨蛋管理员的删除请求文案（他手动删）。
+  console.log('[info] Delete needs B站 human verification. Copy the request below and send it to 笨蛋管理员 via QQ.')
   const target = argv.find((a) => !a.startsWith('--'))
   if (!target) { console.error('用法：bili-del <BV号|aid> [--go]'); process.exit(2) }
   let aid = Number(target)
@@ -37,7 +37,7 @@ export async function run(argv) {
     console.log('✓ 已删除 aid=' + aid)
     try {
       const { default: memory } = await import('../lib/memory.mjs')
-      memory.remember('bilibili', 'bilibili:self', '40048138', 'assistant', `删除了稿件 aid=${aid}（笨蛋老爸手动执行的验证）`, { kind: 'post' })
+      memory.remember('bilibili', 'bilibili:self', '40048138', 'assistant', `删除了稿件 aid=${aid}（笨蛋管理员手动执行的验证）`, { kind: 'post' })
     } catch (e) { swallow(e, 'bili-del:run') }
   }
   else console.error('✗ 删除失败 code=' + j?.code + ': ' + (j?.message || ''))

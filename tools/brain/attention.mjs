@@ -19,7 +19,7 @@ export function policy() {
   return readJson(attentionPath(), empty())?.policy || empty().policy
 }
 
-/** 紧迫度（0..1）：主人 > 私聊/@ > 连续消息 > 正事 > 等待 > 情绪。 */
+/** 紧迫度（0..1）：用户 > 私聊/@ > 连续消息 > 正事 > 等待 > 情绪。 */
 export function urgencyOf({ isOwner = false, isPrivate = false, atMe = false, streak = 1, important = false, waitedMin = 0, emotion = 0 }) {
   const s = 0.35 * (isOwner ? 1 : isPrivate ? 0.5 : 0.2)
     + 0.20 * (isPrivate || atMe ? 1 : 0.3)

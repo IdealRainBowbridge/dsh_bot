@@ -1,6 +1,6 @@
 // bond v2 回归测试（2026-11-03）—— 钉「关系器官」的生理规则（快慢两相版）。
 // 钉的是**形状**（对照 v2 设计）：
-//   化学  ①主人不入册 ②warm 慢涨 ③快相严重负面→临时警戒（不落疤）
+//   化学  ①用户不入册 ②warm 慢涨 ③快相严重负面→临时警戒（不落疤）
 //   神经  ④习惯化 ⑤不应期 ⑥慢相确认才固化（疤在慢相落）+ 误报撤销
 //   精神  ⑦信任不对称（慢相严重负面→直冲高位+疤+oxy 打折）⑧修复通道（道歉降 cort 不降疤、循环递减）
 //   生物  ⑨惰性衰减+创伤后基线 ⑩曝光效应 ⑪爱轰炸 ⑫旁观 ⑬情绪耦合
@@ -16,7 +16,7 @@ process.env.HOME = TMP
 process.env.DSH_HOME = path.join(TMP, '.dsh')
 process.env.BOT_CONFIG = path.join(TMP, '.dsh', 'bot.config.json')
 fs.mkdirSync(path.join(TMP, '.dsh'), { recursive: true })
-fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({ owner: { qq: '111', name: '笨蛋老爸' } }))
+fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({ owner: { qq: '111', name: '笨蛋管理员' } }))
 
 let bad = 0
 const ok = (name, pass, detail = '') => {
@@ -30,8 +30,8 @@ const M = 60_000
 const B = await import('../tools/lib/bond.mjs')
 const MOOD = await import('../tools/lib/mood.mjs')
 
-// ① 主人不入册
-ok('主人 taste 不产生记录', B.taste({ platform: 'qq', userId: '111', text: '谢谢宝贝' }) === 0)
+// ① 用户不入册
+ok('用户 taste 不产生记录', B.taste({ platform: 'qq', userId: '111', text: '谢谢宝贝' }) === 0)
 
 // ② warm 慢涨
 B.taste({ platform: 'qq', userId: 'a1', text: '谢谢你帮我看', now: NOW })

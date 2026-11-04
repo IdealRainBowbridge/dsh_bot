@@ -265,8 +265,8 @@ export async function run(argv = []) {
         ? bad('记忆卫生', rows.length + ' 条里 ' + dups + ' 条重复（' + (rate * 100).toFixed(0) + '%）—— 会污染召回并白烧 token')
         : ok('记忆卫生', rows.length + ' 条 · 重复 ' + dups + ' 条'))
       items.push(ownerBad
-        ? bad('认人错误', ownerBad + ' 条外部事件被标成「主人」（平台名不匹配的老 bug 残留）')
-        : ok('认人正确', '外部事件没有被误标成主人'))
+        ? bad('认人错误', ownerBad + ' 条外部事件被标成「用户」（平台名不匹配的老 bug 残留）')
+        : ok('认人正确', '外部事件没有被误标成用户'))
     }
   } catch (e) { items.push(warn('记忆卫生', '检查失败：' + e.message)) }
 

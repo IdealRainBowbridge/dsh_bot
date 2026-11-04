@@ -1,7 +1,7 @@
 // roster 回归测试（2026-11-03）—— 钉「人物名册」的接线与语义。
 // 隔离同 presence-test：env 先指沙箱，再动态 import。
 // 钉的是**形状**：
-//   ① 主人绝不入册（owner 是身份不是联系人）
+//   ① 用户绝不入册（owner 是身份不是联系人）
 //   ② 陌生人照面建卡 / 幂等累计 / 昵称更新留第一眼
 //   ③ audienceHint：没照面 → 空；照面 → 有名字有句数；owner → 永远空
 //   ④ rename/note：先建卡允许、印象必须先认识人；hint 里用称呼不用号码
@@ -17,7 +17,7 @@ process.env.HOME = TMP
 process.env.DSH_HOME = path.join(TMP, '.dsh')
 process.env.BOT_CONFIG = path.join(TMP, '.dsh', 'bot.config.json')
 fs.mkdirSync(path.join(TMP, '.dsh'), { recursive: true })
-fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({ owner: { qq: '111', name: '笨蛋老爸' } }))
+fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({ owner: { qq: '111', name: '笨蛋管理员' } }))
 
 let bad = 0
 const ok = (name, pass, detail = '') => {
@@ -27,9 +27,9 @@ const ok = (name, pass, detail = '') => {
 
 const R = await import('../tools/lib/roster.mjs')
 
-// ① 主人不入册
-ok('主人 observe 返回 null', R.observe({ platform: 'qq', userId: '111', name: '笨蛋老爸' }) === null)
-ok('主人在册中不存在（文件都还没建也是对的）', (() => { const f = path.join(TMP, 'roster.json'); return !fs.existsSync(f) || !fs.readFileSync(f, 'utf8').includes('"qq:111"') })())
+// ① 用户不入册
+ok('用户 observe 返回 null', R.observe({ platform: 'qq', userId: '111', name: '笨蛋管理员' }) === null)
+ok('用户在册中不存在（文件都还没建也是对的）', (() => { const f = path.join(TMP, 'roster.json'); return !fs.existsSync(f) || !fs.readFileSync(f, 'utf8').includes('"qq:111"') })())
 
 // ② 陌生人建卡 + 幂等累计
 const p1 = R.observe({ platform: 'qq', userId: '222', name: '路人甲' })

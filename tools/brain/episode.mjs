@@ -110,7 +110,7 @@ export function gistOf(ev) {
   const body = firstSentence(ev.text, 60)
   if (!body) return ev.meta?.vision ? `（看到：${String(ev.meta.vision).slice(0, 40)}）` : '（一条没有文字的消息）'
   if (ev.who.kind === 'group_member') return `${ev.who.name}：${body}`
-  if (ev.who.kind === 'owner') return `主人：${body}`
+  if (ev.who.kind === 'owner') return `用户：${body}`
   if (ev.who.kind === 'self') return body
   return body
 }
@@ -143,7 +143,7 @@ function noveltyOf(gist, recentGists) {
  */
 export function salienceOf({ text = '', who = {}, act = 'say', feel = {}, entities = [], novelty = 0.5 }) {
   const t = String(text || '')
-  const selfRef = /你|您|主人/.test(t) ? 1 : (who.kind === 'owner' ? 0.8 : 0.3)
+  const selfRef = /你|您|用户/.test(t) ? 1 : (who.kind === 'owner' ? 0.8 : 0.3)
   const val = Math.abs(Number(feel.valence) || 0)
   const aro = Number(feel.arousal) || 0.3
   const unresolved = UNRESOLVED.test(t) || act === 'promise' ? 1 : 0
@@ -307,7 +307,7 @@ export function appendAction({ text, at = Date.now(), platform = 'tools', scope 
     at, atIso: isoOf(at),
     src: { proc: 'tools', platform, msgId: '' },
     where: { platform, chat: chatId, group: scope === 'group' ? chatId : null },
-    who: { kind: who === 'self' ? 'self' : 'owner', id: '', name: who === 'self' ? '我' : '主人' },
+    who: { kind: who === 'self' ? 'self' : 'owner', id: '', name: who === 'self' ? '我' : '用户' },
     act: 'action', text, quote: '', scope,
     meta: { isGroup: scope === 'group', atMe: false, emotion: '', vision: '', replyTo: '' },
   }

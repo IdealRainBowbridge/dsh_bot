@@ -211,7 +211,7 @@ export async function beat(now = Date.now()) {
     } catch (e) { swallow(e, 'beat:vitals') }
     // 能量与消化（2026-11-03 · B3）：按睡眠分期驱动——REM 消化积压、N3 修复、清醒基础代谢。
     try { metabolism.tick(now) } catch (e) { swallow(e, 'beat:metabolism') }
-    // C4 社交节律牵引（2026-11-03）：主人的作息是她的光 —— 每拍按 dt 拖拽相位。
+    // C4 社交节律牵引（2026-11-03）：用户的作息是她的光 —— 每拍按 dt 拖拽相位。
     try { rhythm.zeitgeberTick(now) } catch (e) { swallow(e, 'beat:zeitgeber') }
     // 睡眠看门狗（2026-11-04）：她卡在"睡着"里没人叫醒时，只有这里能救。
     // 排在 accrueSleepDebt 之后：这一拍若刚被判卡死，欠觉会从下一拍开始正常累积。

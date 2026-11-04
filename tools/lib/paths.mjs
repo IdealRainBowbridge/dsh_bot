@@ -1,4 +1,4 @@
-// 统一路径解析 —— dabot 私享版。
+// 统一路径解析 —— dabot 。
 // 设计来自 dsh-bili-whale 的 tools/lib/paths.mjs（MIT），路径前缀改为 bot。
 //
 // 两个 home 的语义（与 bili-whale 一致，避免分叉）：

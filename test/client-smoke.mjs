@@ -81,13 +81,13 @@ const { spec, Component } = registered[0]
 assert.equal(spec.name, 'settings.section')
 assert.equal(spec.id, 'dsh_bot', '二建插件的槽位 id 必须全局唯一')
 assert.equal(typeof spec.label, 'function')
-assert.equal(spec.label(), '大肥鱼')
+assert.equal(spec.label(), '理想的机械人')
 assert.equal(typeof spec.order, 'number')
 
 // —— 首次渲染（loading 态，不发请求）——
 const tree = Component({ close: () => {} })
 assert.ok(tree && tree.type === 'div', '首渲染应返回一个 div')
-assert.ok(JSON.stringify(tree).includes('读取大肥鱼配置'), '首渲染应显示读取提示')
+assert.ok(JSON.stringify(tree).includes('读取理想的机械人配置'), '首渲染应显示读取提示')
 
 // —— 包清单契约：dsh-client-modules 只认 exports["./client"] + dsh.client ——
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))

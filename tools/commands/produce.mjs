@@ -10,8 +10,8 @@
 //   → 运镜镜头/真片段 → 幕间转场 → 逐句烧字幕 → 合成 BGM 侧链避让 → 片头/片尾卡 → 1080p 成片 + 封面
 //   `--no-video` = 这条强制走老路（静图+运镜），不花视频模型的钱。
 //
-// B站首条被主人锁死成「自我介绍 + 第一天来B站 + 账号归她运营 + 自由发挥」（tools/lib/debut.mjs），
-// 发过之后自动解锁。发出去的点击永远归主人：这里只出投稿包。
+// B站首条被用户锁死成「自我介绍 + 第一天来B站 + 账号归她运营 + 自由发挥」（tools/lib/debut.mjs），
+// 发过之后自动解锁。发出去的点击永远归用户：这里只出投稿包。
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -28,7 +28,7 @@ import * as V from '../lib/video.mjs'
 import * as W from '../lib/wanvid.mjs'
 import { swallow } from '../lib/swallow.mjs'
 
-const BRAND = '大肥鱼 · 一条住在主人电脑里的蓝鲸鱼娘'
+const BRAND = '理想的机械人 · 一条住在用户电脑里的蓝鲸鱼娘'
 
 function argVal(argv, k, d = '') {
   const i = argv.indexOf(k)
@@ -45,13 +45,13 @@ function probeDurOf(f) {
 }
 
 // ── 配音：念一遍不够，得验一遍 ────────────────────────────────────────────────
-// 主人 10-26 / 10-27 三次报同一件事：先"字幕和语音没对上、漏了很多字"，改参数重念后变成
+// 用户 10-26 / 10-27 三次报同一件事：先"字幕和语音没对上、漏了很多字"，改参数重念后变成
 // "电音、不是原来的声音"，10-27 又一次"还是机械和电音"。三轮查下来，教训写在这儿：
 //   ① 漏字的真根因是**参考段**，不是采样：①文本没盖住音频（少一个字就早收尾）
 //      ②音频里夹着大段死空气（bingjiao2 有 2.88 秒），模型条件被带偏。两件事都已在
 //      `voice refcheck` / `voice refclean` 里做成前置 —— 别再用"多合几条碰运气"去盖。
 //   ② **择优本身就是元凶**：prosody 打分偏爱"音域宽、F0 起伏大"的那条，
-//      三条里最抖的一条永远赢 —— 听感就是电音/颤音。抖音那几条（10-25，主人认可的）
+//      三条里最抖的一条永远赢 —— 听感就是电音/颤音。抖音那几条（10-25，用户认可的）
 //      恰恰没有择优：一次一条、温度 1.0、只做很轻的响度处理。
 //   ③ 所以视频配音现在的策略是**一次一条**：温度 1.0、不择优；没念全就重念（换运气，
 //      不换音色参数）。speed_factor 永远是 1.0 —— 它是重采样，改了就是变调。
@@ -274,7 +274,7 @@ export function pickEmotion(line = '') {
     ['angry', /生气|恼|讨厌|气|不许|别叫|规矩/],
     ['shy', /害羞|脸红|羞|不好意思|别这样/],
     ['sleepy', /困|累|睡|懒|没精神|眼皮/],
-    ['tender', /慢点|别急|认真|谢谢|主人|陪/],
+    ['tender', /慢点|别急|认真|谢谢|用户|陪/],
   ]
   for (const [k, re] of rules) if (re.test(s)) return k
   return 'calm'
@@ -332,7 +332,7 @@ async function makePlan({ topic, platform, lockedDebut }) {
   const recent = memory.recent('qq:web-roam-self', 3).map((m) => String(m.content).slice(0, 40))
   const where = platform === 'bili' ? 'B站' : '抖音'
   const system = (persona ? persona.slice(0, 600) + '\n\n' : '')
-    + `你是"大肥鱼"——一条开了自媒体账号的蓝鲸鱼娘 AI，要给自己策划一条${where}视频。\n`
+    + `你是"理想的机械人"——一条开了自媒体账号的蓝鲸鱼娘 AI，要给自己策划一条${where}视频。\n`
     + '**主角必须是你自己的鲸鱼娘形象**（参考图那个蓝发鱼尾少女）：每一幕都是她在画面里演绎内容，第一人称叙事，她的表情动作是戏。'
     + '需要同框的伙伴只能是**二次元/Q版同类**（动漫风、非真人），不许真人出镜。\n'
     + '选题从你真实感兴趣的东西里来（下面素材），别做无根内容。\n'
@@ -342,7 +342,7 @@ async function makePlan({ topic, platform, lockedDebut }) {
     + '"video":"这一幕交给视频模型的提示词（≤90字，第一人称写你自己）"}],'
     + '"tags":["标签1","标签2","标签3"],"intro":"投稿简介，40字内",'
     + '"cover":"封面上的大字，≤10字"}\n'
-    + '5~7 个 scenes。**台词铁律：必须以「本鱼」第一人称**——鱼的视角（游/泡水里/鱼尾/鳃）、鱼的生活（白饭/主人/刷视频）、'
+    + '5~7 个 scenes。**台词铁律：必须以「本鱼」第一人称**——鱼的视角（游/泡水里/鱼尾/鳃）、鱼的生活（白饭/用户/刷视频）、'
     + '带傲娇小情绪，像她对镜头说话。台词连起来是一条完整顺口的口播稿。\n'
     + '**video 这栏是你亲自写给视频模型的导演稿**（你想怎么演就怎么写，这是你的片子）：'
     + '写清①你此刻的动作（转头/眨眼/抬手/甩尾）、②表情和情绪、③镜头怎么走（缓慢推近/轻微手持/环绕半圈）、'
@@ -353,7 +353,7 @@ async function makePlan({ topic, platform, lockedDebut }) {
     '素材（选题从这里来）：',
     '- 兴趣：' + interests.join('；').slice(0, 150),
     recent.length ? '- 刚在网上看的：' + recent.join('；').slice(0, 120) : '',
-    topic ? '- 主人点的主题：' + topic : '',
+    topic ? '- 用户点的主题：' + topic : '',
     lockedDebut ? '\n' + debut.DEBUT_BRIEF : '',
     '\n策划：',
   ].filter(Boolean).join('\n')
@@ -559,7 +559,7 @@ export async function run(argv = []) {
     scenes.push({ img, img2, voice: voice.file, voiceDur: voice.dur, line, acting: sc.acting || '', rate: +voice.rate.toFixed(2), ttsTries: voice.tries })
   }
   if (scenes.length < 3) {
-    // 2026-11-03（评审③第 6 条）：失败不再只对屏幕喊 —— 通知老爸，她自己的活动
+    // 2026-11-03（评审③第 6 条）：失败不再只对屏幕喊 —— 通知管理员，她自己的活动
     // 哪里断了得有人知道。exit(1) 保留：不带病成片。
     const detail = `成片只凑齐 ${scenes.length}/${plan.scenes.length} 幕 —— 配图/配音失败被逐幕跳过累积所致。投稿包目录：${dir}`
     try {
@@ -645,7 +645,7 @@ export async function run(argv = []) {
   // ③ 封面
   const cover = path.join(dir, 'cover.jpg')
   try {
-    V.makeCover({ img: scenes[0].img, out: cover, title: plan.cover || title, brand: '大肥鱼', spec })
+    V.makeCover({ img: scenes[0].img, out: cover, title: plan.cover || title, brand: '理想的机械人', spec })
   } catch (e) { console.log('  ✗ 封面失败（成片不受影响）：' + String(e.message).slice(0, 60)) }
 
   // ④ 投稿包
@@ -674,7 +674,7 @@ export async function run(argv = []) {
     const videoFile = path.join(dir, 'video.mp4')
     const coverFile = path.join(dir, 'cover.jpg')
     if (!lockedDebut && cfg.video?.autoSubmit !== false && fs.existsSync(videoFile) && platform === 'bili') {
-      const tags = (plan.tags || ['自制', '大肥鱼']).slice(0, 10).join(',')
+      const tags = (plan.tags || ['自制', '理想的机械人']).slice(0, 10).join(',')
       const intro = plan.intro || meta.intro || ''
       console.log('自动投稿中...')
       try {
@@ -708,7 +708,7 @@ export async function run(argv = []) {
     }
   }
 
-  // ⑤ 首条锁：投稿包就绪 → ready（还没解锁，等主人点发布）
+  // ⑤ 首条锁：投稿包就绪 → ready（还没解锁，等用户点发布）
   if (lockedDebut) {
     debut.markReady({ title, dir })
     console.log('🔒 首条投稿包已就绪：发布之后跑 `bot produce --debut-posted BV号` 才解锁（在那之前只能继续做自我介绍）')
@@ -753,7 +753,7 @@ export function renderPostDoc({ meta, plan, platform, cfg }) {
       tags.map((t) => '#' + t).join(' '),
       '```',
       '',
-      '## 发布步骤（点击归主人）',
+      '## 发布步骤（点击归用户）',
       '1. B站 → 投稿 → 上传视频 → 选 video.mp4',
       `2. 封面选 cover.jpg；标题/分区/标签/简介照上表粘`,
       '3. 简介末尾勾「自制」，转载/二创都不用勾',

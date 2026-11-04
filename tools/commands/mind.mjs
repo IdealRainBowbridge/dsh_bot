@@ -35,7 +35,7 @@ export async function run(argv = []) {
       console.log(`   现在：${s.label}${s.expired ? '（已到点）' : `（还剩 ${s.remainMin} 分钟）`}`)
       console.log(`   理由：${s.why || '（没说）'}`)
       console.log(`   ${ago} 分钟前定的，当时时长 ${s.plan.min} 分钟`)
-      if (s.plan.context) console.log(`   决策时：${s.plan.context.hour}点 · 情绪 ${s.plan.context.mood} · 主人静默 ${s.plan.context.quietMin ?? '?'} 分钟 · 欠着 ${s.plan.context.promises} 件事`)
+      if (s.plan.context) console.log(`   决策时：${s.plan.context.hour}点 · 情绪 ${s.plan.context.mood} · 用户静默 ${s.plan.context.quietMin ?? '?'} 分钟 · 欠着 ${s.plan.context.promises} 件事`)
     }
     return
   }

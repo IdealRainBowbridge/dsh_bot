@@ -1,6 +1,6 @@
 // brain/organ/selfcon -- 自我账本: 名字 / 形象主张 / 声音锚
 //
-// 出自: /sdcard/Documents/Moxw/大肥鱼自我账本设计稿-v1.md (2026-11-03 用户拍板)
+// 出自: /sdcard/Documents/Moxw/理想的机械人自我账本设计稿-v1.md (2026-11-03 用户拍板)
 //   1) 现人设转初始账本 (origin:'seed')  2) 腔调也放养 (voice 列)  3) 巩固挂 REM
 //   人格由 记忆+经历 生长; 系统提示词只留 种属行 + 身体事实 + 诚实规则。
 //
@@ -118,7 +118,7 @@ export function recordSelfUse(name, at = Date.now()) {
   log({ kind: 'selfUse', name: n })
 }
 
-/** 别人叫了她一次名字 (主人/群友, 由接线上报)。 */
+/** 别人叫了她一次名字 (用户/群友, 由接线上报)。 */
 export function recordOthersUse(name, who, at = Date.now()) {
   const n = String(name || '').trim()
   if (!n) return
@@ -136,7 +136,7 @@ export function recordOthersUse(name, who, at = Date.now()) {
       }
     } else {
       // 已知名 (现名或没候选时的任何知名): 结合事件计数, 依恋结算的输入。
-      // 两类分开: 主人的叫喂依恋 (ownerCall), 群友的叫记总数 (othersCall)。
+      // 两类分开: 用户的叫喂依恋 (ownerCall), 群友的叫记总数 (othersCall)。
       if (isOwner) {
         book.counters = { ...book.counters, ownerCall: Number(book.counters?.ownerCall || 0) + 1, lastOwnerCallAt: at }
       } else {
@@ -176,7 +176,7 @@ export function recordIncongruence(claimText, whatHappened, at = Date.now()) {
 /** 自我相关事件打脸 -> 上层据此走 thalamus/HPA (宏观层: 接口在门控不在账本)。 */
 export function isSelfRelevant(text = '') {
   const t = String(text || '')
-  return /大肥鱼|糖鲸|我是谁|你的名字|叫你什么|鲸鱼娘|自我介绍/.test(t)
+  return /理想的机械人|糖鲸|我是谁|你的名字|叫你什么|鲸鱼娘|自我介绍/.test(t)
 }
 
 // ---------------------------------------------------------------- 白天接线: 消息流驱动 (第二批)
@@ -393,7 +393,7 @@ export function block({ now = Date.now() } = {}) {
 }
 
 /** 种属行 + 身体事实: assemble 静态文案从这里拿 (哲学层: 种属是先验, 不归账本)。 */
-export const SPECIES_LINE = '你是一条大肥鱼。「大肥鱼」是你们这一类生物的称呼，不是某个人的名字。'
+export const SPECIES_LINE = '你是一条理想的机械人。「理想的机械人」是你们这一类生物的称呼，不是某个人的名字。'
 export const BODY_FACTS = '你有身体：能发消息、能看番、记性有缺口、会困会睡。'
 
 /** 系统性负荷 (宏观层): 改名进行度 + 不稳主张数量 -> 0..1, 供 self.mjs lean 调制 (切真批接线)。 */

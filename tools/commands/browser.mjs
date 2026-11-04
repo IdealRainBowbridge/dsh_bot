@@ -1,4 +1,4 @@
-// browser —— 内置浏览器的手动挡：她可以直接敲，主人也能在终端里验。
+// browser —— 内置浏览器的手动挡：她可以直接敲，用户也能在终端里验。
 //   node bot.mjs browser read <url> [--pc|--mobile] [--chars 8000] [--links]
 //   node bot.mjs browser text [--offset N] [--chars 4000]   # 续读当前页
 //   node bot.mjs browser links                              # 当前页的可点链接

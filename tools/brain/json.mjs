@@ -175,7 +175,7 @@ function acquireSameDirLock(file) {
 function releaseSameDirLock(lock, token) {
   try {
     const raw = fs.readFileSync(lock, 'utf8')
-    if (!token || !raw.includes(token)) return   // 不是我的锁：让真正的主人去释放
+    if (!token || !raw.includes(token)) return   // 不是我的锁：让真正的用户去释放
     fs.rmSync(lock, { force: true })
   } catch { /* 锁已不在（被别人清了）：正常，无副作用 */ }
 }

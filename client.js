@@ -5,7 +5,7 @@
  *   · 本文件由 dsh-client-modules 通过 package.json 的 exports["./client"] +
  *     dsh.client 声明发现，用 window.__ModuleLoader__ 包装成客户端模块；
  *   · inject: ["slots"] —— 等 slots 服务就绪再 apply；
- *   · 只注册一个槽位 settings.section，于是「设置」左栏多出一行「大肥鱼」。
+ *   · 只注册一个槽位 settings.section，于是「设置」左栏多出一行「理想的机械人」。
  *
  * 所有请求走同源 /dsh_bot/api/*，凭据由宿主会话自带，不需要任何 token。
  */
@@ -331,7 +331,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				setLoading(false);
 				// 记忆库/状态/服务是"软数据"：读失败不该挡住面板，但也不能静默 ——
 				// 以前是 .catch(() => {})，宿主刚重启时这一下读失败，记忆库就永远显示"还没读到"，
-				// 主人只能猜她到底在干嘛（10-25 实锤）。现在失败重试一次，还失败就亮出来。
+				// 用户只能猜她到底在干嘛（10-25 实锤）。现在失败重试一次，还失败就亮出来。
 				const soft = (path, set, label) => {
 					const once = (left) => api(path).then(set).catch((e) => {
 						if (left > 0) { setTimeout(() => once(left - 1), 1500); return; }
@@ -413,7 +413,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				try {
 					const r = await api("/services", { method: "POST", body: JSON.stringify({ target: "free-roam", platform: platform, action: on ? "start" : "stop" }) });
 					setSvc(r.services || null);
-					if (r.ok) flash(on ? "B站自由刷已启动（大肥鱼自己去逛了）" : "自由刷已停止");
+					if (r.ok) flash(on ? "B站自由刷已启动（理想的机械人自己去逛了）" : "自由刷已停止");
 					else flash((r.errors || []).join("；") || "操作失败", true);
 				} catch (e) {
 					flash("自由刷操作失败：" + ((e && e.message) || e), true);
@@ -508,7 +508,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			}, [persona, flash]);
 
 			if (loading && !cfg) {
-				return h("div", { className: "fy-panel" }, h("div", { className: "fy-hint" }, "读取大肥鱼配置…"));
+				return h("div", { className: "fy-panel" }, h("div", { className: "fy-hint" }, "读取理想的机械人配置…"));
 			}
 
 			if (error && !cfg) {
@@ -540,7 +540,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h("div", { className: "fy-hero" },
 					h("div", { className: "fy-avatar" }, "🐟"),
 					h("div", null,
-						h("div", { className: "fy-h1" }, "大肥鱼 · 私享版"),
+						h("div", { className: "fy-h1" }, "理想的机械人 · "),
 						h("div", { className: "fy-sub" }, "她按作息自己醒：B站/抖音定时，QQ/微信随时回你"))),
 
 				notice ? h("div", { className: "fy-notice" + (notice.err ? " err" : "") }, notice.msg) : null,
@@ -588,7 +588,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							label: "takeover",
 							onChange: async (v) => {
 								const ok = await save({ agent: { takeover: { enabled: v } } },
-									v ? "已接管：DSH 新会话都用大肥鱼人格（下一轮生效）" : "已回退：DSH 会话恢复原生提示词（下一轮生效）");
+									v ? "已接管：DSH 新会话都用理想的机械人人格（下一轮生效）" : "已回退：DSH 会话恢复原生提示词（下一轮生效）");
 								if (ok) setCfg((prev) => Object.assign({}, prev || {}, { agent: { takeover: { enabled: v } } }));
 							},
 						}),
@@ -658,16 +658,16 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								onChange: (v) => togglePlatform(p[0], v, p[3] === "restart"),
 							}))))),
 
-				// 主人
+				// 用户
 				h(Card, {
-					title: "主人",
-					hint: "QQ 号填上后，她能认出「这个人是我主人」；对网友保持距离、不泄隐私。",
+					title: "用户",
+					hint: "QQ 号填上后，她能认出「这个人是我用户」；对网友保持距离、不泄隐私。",
 				},
 					h(Row, { label: "QQ 号" },
 						h("input", {
 							className: "fy-input fy-w-md", value: draft.ownerQQ, placeholder: "3082864371",
 							onChange: (e) => setDraft(Object.assign({}, draft, { ownerQQ: e.target.value })),
-							onBlur: () => save({ owner: { qq: draft.ownerQQ.trim() } }, "主人 QQ 已保存"),
+							onBlur: () => save({ owner: { qq: draft.ownerQQ.trim() } }, "用户 QQ 已保存"),
 						})),
 					h(Row, { label: "称呼" },
 						h("input", {
@@ -897,7 +897,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("button", { className: "fy-btn", disabled: busy === "biliwatch", onClick: startBiliWatch },
 							busy === "biliwatch" ? "启动中…" : "静默刷一轮"),
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "feed→深读→@评论（干跑/真发看 guard.dryRun）")),
-					h("div", { className: "fy-sub", style: { marginTop: 10 } }, "自由刷 · 大肥鱼自己逛"),
+					h("div", { className: "fy-sub", style: { marginTop: 10 } }, "自由刷 · 理想的机械人自己逛"),
 					h(Row, { label: "自由刷" },
 						h(Switch, {
 							on: draft.biliFreeRoam,
@@ -1005,7 +1005,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h(Switch, {
 							on: draft.dykFish,
 							label: "dykFish",
-							onChange: (v) => { setDraft(Object.assign({}, draft, { dykFish: v })); save({ bilibili: { fishCircle: { enabled: v } } }, v ? "鱼圈已开（选题混入大肥鱼相关视频）" : "鱼圈已关"); },
+							onChange: (v) => { setDraft(Object.assign({}, draft, { dykFish: v })); save({ bilibili: { fishCircle: { enabled: v } } }, v ? "鱼圈已开（选题混入理想的机械人相关视频）" : "鱼圈已关"); },
 						}),
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "去同类鱼聚集地刷存在感")),
 					h(Row, { label: "关注UP" },
@@ -1111,7 +1111,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					extra: h("div", { className: "fy-row", style: { margin: 0 } },
 						h("span", { className: "fy-hint", style: { marginTop: 0 } },
 							mem && mem.stats
-								? "对话 " + mem.stats.episodes + " · 世界设定 " + mem.stats.lore + " · 主人事实 " + mem.stats.facts
+								? "对话 " + mem.stats.episodes + " · 世界设定 " + mem.stats.lore + " · 用户事实 " + mem.stats.facts
 								+ (mem.stats.byPlatform ? " · 上网 " + (mem.stats.byPlatform.web || 0) + " · QQ " + (mem.stats.byPlatform.qq || 0) + " · B站 " + (mem.stats.byPlatform.bilibili || 0) : "")
 								: "还没读到"),
 						h("button", {
@@ -1137,7 +1137,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				name: "settings.section",
 				id: "dsh_bot",
 				order: 460,
-				label: () => "大肥鱼",
+				label: () => "理想的机械人",
 			}, FeiyuSection));
 		}
 

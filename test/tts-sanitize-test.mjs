@@ -15,14 +15,14 @@ const ok = (name, cond, extra = '') => {
   else { fail++; console.log(`  ✗ ${name}${extra ? ' — ' + extra : ''}`) }
 }
 
-const KAOMOJI = '主人，你说人看见好看的东西就挪不开眼，是不是跟饿的时候看见吃的差不多？我这算饿急了乱想吧 (・_・;)'
-const EMOJI = '主人，都五点半了，我肚子一直在叫……你是不是又打王者忘了吃饭啊 🐟'
+const KAOMOJI = '用户，你说人看见好看的东西就挪不开眼，是不是跟饿的时候看见吃的差不多？我这算饿急了乱想吧 (・_・;)'
+const EMOJI = '用户，都五点半了，我肚子一直在叫……你是不是又打王者忘了吃饭啊 🐟'
 
 // ① 元凶字符必须洗掉
 const k = sanitizeForTts(KAOMOJI)
 ok('洗掉颜文字里的 ・(U+30FB)', !k.includes('\u30FB'), k)
 ok('颜文字括号残骸整段丢掉', !k.includes('(_;)') && !k.includes('(_'), k)
-ok('正文一个字不少', k.startsWith('主人，你说人看见好看的东西'), k)
+ok('正文一个字不少', k.startsWith('用户，你说人看见好看的东西'), k)
 ok('洗掉 emoji 🐟', !sanitizeForTts(EMOJI).includes('🐟'))
 ok('emoji 版正文完整', sanitizeForTts(EMOJI).endsWith('忘了吃饭啊'), sanitizeForTts(EMOJI))
 

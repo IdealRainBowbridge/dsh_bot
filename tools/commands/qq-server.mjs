@@ -102,7 +102,7 @@ async function canSpeak(kind = 'proactive') {
 async function spokeDone(kind = 'proactive') {
   try { (await gateMod()).commit(kind) } catch { /* noop */ }
 }
-/** 主人说话了 → 重置连续计数。顺手给 webui 主动性结账：刚才那条主动消息被接住了吗。 */
+/** 用户说话了 → 重置连续计数。顺手给 webui 主动性结账：刚才那条主动消息被接住了吗。 */
 async function ownerSpoke() {
   try { (await gateMod()).noteOwnerSpoke() } catch { /* noop */ }
   try { const wp = await import('../lib/webpush.mjs'); wp.outcome({ replied: true }) } catch { /* 旁路 */ }
@@ -246,7 +246,7 @@ export async function run(argv = []) {
       logErr(`[qq] ${action} 返回 ${j.status}/${j.retcode}: ${j.message || j.wording || ''}`)
       return false
     }
-    // 10-27：自己发的每条都记下 message_id → 正文，主人引用她的话时能零延迟取到原文
+    // 10-27：自己发的每条都记下 message_id → 正文，用户引用她的话时能零延迟取到原文
     try {
       const id = j?.data?.message_id ?? j?.message_id
       const txt = Array.isArray(payload?.message)
@@ -259,7 +259,7 @@ export async function run(argv = []) {
 
   // ── 引用索引预热 + 引用解析（2026-11-03 高压修缮：实现在 lib/qq-quote-bridge.mjs）──
   // get_msg 只认得还有缓存的消息（实测老消息直接回"消息不存在"），所以启动时和之后每 10 分钟
-  // 把主人私聊 / 已开群的最近几十条拉一遍，id → 正文 全部登记；解析时本地表 → get_msg → 再预热，
+  // 把用户私聊 / 已开群的最近几十条拉一遍，id → 正文 全部登记；解析时本地表 → get_msg → 再预热，
   // 引用里的图片再走一次 VL。依赖显式注入，qq-server 只保留接线。
   const quoteBridge = makeQuoteBridge({
     callApi, config, log, selfId: () => selfIdCached, parseMessage,
@@ -296,7 +296,7 @@ export async function run(argv = []) {
       const gate = PLATFORMS.enabled(live, EVT_PLATFORM)
       if (!gate.on) { log('[qq] ' + EVT_PLATFORM + ' 平台关闭（' + gate.why + '），这条不处理'); return }
       if (isGroup && !PLATFORMS.allowsGroup(EVT_PLATFORM)) return
-      // 10-31：主人开口了 → 重置"连续主动"计数，并标记他正在聊（3 分钟内不插话）
+      // 10-31：用户开口了 → 重置"连续主动"计数，并标记他正在聊（3 分钟内不插话）
       await ownerSpoke()
       const QQ = live.qq ?? {}
       const selfId = String(evt.self_id ?? '')
@@ -313,7 +313,7 @@ export async function run(argv = []) {
       // C5 惊跳反射（2026-11-03）：pre-attentive 门 —— 语义处理之前，身体先一激灵。
       // 同步纯内存：超阈值 -> 瞬时 NE 小脉冲（不进决策不进记忆不落盘）。
       try { (await import('../brain/reflex.mjs')).startle({ text, atMe }) } catch (e) { swallow(e, 'qq:startle') }
-      // B1 免疫系统（2026-11-03）：入站第一道关卡。主人耐受（自身抗原不打）；
+      // B1 免疫系统（2026-11-03）：入站第一道关卡。用户耐受（自身抗原不打）；
       // 命中即静默丢弃——不进脑、不引用、不回复（沉默也是应答，她不回刷屏者）。
       // 与出站 sanitize 相对：那边"出去的话不漏"，这边"进来的东西不侵"。
       {
@@ -329,7 +329,7 @@ export async function run(argv = []) {
       }
 
       // ── 引用消息（10-27）：把他引用的那条原文取回来 ────────────────────────
-      // 主人常常引用她上面那句再问"这个呢/你去了吗"，以前她只看到"【引用回复了一条消息】"，
+      // 用户常常引用她上面那句再问"这个呢/你去了吗"，以前她只看到"【引用回复了一条消息】"，
       // 等于被蒙着眼睛提问。这里：本地表 → NapCat get_msg → 连图片都用 VL 看一眼。
       let quoteLine = ''
       if (parsed.replyId && config().qq?.quote?.enabled !== false) {
@@ -338,10 +338,10 @@ export async function run(argv = []) {
           if (quoteLine) log(`[qq] 📎 引用解析：${quoteLine.slice(0, 70)}`)
         } catch (e) { logErr('[qq] 引用解析失败：' + (e?.message ?? e)) }
       }
-      // 别人（含主人）发来的这条也登记，下次被引用就不用请求
+      // 别人（含用户）发来的这条也登记，下次被引用就不用请求
       if (evt.message_id) {
         const who = String(userId) === String(config().owner?.qq || '') ? 'owner' : 'other'
-        const label = isGroup ? String(evt.sender?.card || evt.sender?.nickname || userId) : '主人'
+        const label = isGroup ? String(evt.sender?.card || evt.sender?.nickname || userId) : '用户'
         const own = [parsed.text, ...parsed.marks.filter((m) => m !== '【引用回复了一条消息】')].filter(Boolean).join(' ')
         quoteIndex.remember(evt.message_id, { text: own || '（非文字消息）', who, name: label })
       }
@@ -359,7 +359,7 @@ export async function run(argv = []) {
       }
       // 群聊插话引擎的在场信号：有群消息就刷新该群的时间戳（她"看到"群里在聊天）
       if (isGroup) groupLastMsgAt[groupId] = Date.now()
-      // 主动搭话的安静计时：主人（私聊）每说一句话就刷新
+      // 主动搭话的安静计时：用户（私聊）每说一句话就刷新
       try {
         const ownerQQNow = String(config().owner?.qq || '')
         if (!isGroup && ownerQQNow && String(userId) === ownerQQNow) {
@@ -379,9 +379,9 @@ export async function run(argv = []) {
 
       // ── 自改指令通道（2026-11-03：审批已撤，她全自主）────────────────────
       // 自改不再等批准——她自己 propose → selfApply 免审批落地（安全网：备份/语法/门禁/回滚/快照）。
-      // 这条通道只剩两个**老爸手闸**：
+      // 这条通道只剩两个**管理员手闸**：
       //   「回滚」       → 撤销她上一次落地的改动
-      //   「重启 / 重开」 → 重启生效（QQ 会断几秒，所以仍由老爸发）
+      //   「重启 / 重开」 → 重启生效（QQ 会断几秒，所以仍由管理员发）
       // 注意：还是**先于**正常聊天处理（指令词不走 LLM）。
       if (!isGroup) {
         try {
@@ -391,7 +391,7 @@ export async function run(argv = []) {
             const hit = await selfmodCmd(String(text || '').trim())
             if (hit) {
               log(`[qq][selfmod] ${hit.log}`)
-              // 「重启」是仅剩的老爸手闸（2026-11-03 审批撤了）：先回一句话，再延时退出
+              // 「重启」是仅剩的管理员手闸（2026-11-03 审批撤了）：先回一句话，再延时退出
               // （im-gateway 的 while 会立刻拉起）。延时是为了别打断这条消息的发送。
               if (hit.reply === '__RESTART__') {
                 try {
@@ -493,7 +493,7 @@ export async function run(argv = []) {
       try { bond.taste({ platform: EVT_PLATFORM, userId, text: userText, isGroup }) } catch (e) { swallow(e, 'qq-server:bond-taste') }
       if (!isGroup) { try { bond.observe({ platform: EVT_PLATFORM, userId, text: userText }) } catch (e) { swallow(e, 'qq-server:bond-observe') } }
 
-      // 🎵 唱歌分支：主人让她唱，就真的唱（LLM 写词 + 她的音色逐句合成 + 鼓点混音）
+      // 🎵 唱歌分支：用户让她唱，就真的唱（LLM 写词 + 她的音色逐句合成 + 鼓点混音）
       if (QQ.voice_enabled !== false && QQ.sing !== false && !isGroup && /唱(一首|首歌|个|段|吧|$)|唱歌|来一首|哼(一首|段)/.test(userText)) {
         try {
           log(`[qq] 🎵 唱歌请求：${userText.slice(0, 30)}`)
@@ -534,7 +534,7 @@ export async function run(argv = []) {
       }
 
       memory.remember(EVT_PLATFORM, chatId, userId, 'user', memText, { isGroup })
-      // 自我账本: 别人的嘴提到她的名字 = 结合事件 (主人/群友分开记)。旁路, 失败不影响回复。
+      // 自我账本: 别人的嘴提到她的名字 = 结合事件 (用户/群友分开记)。旁路, 失败不影响回复。
       try { selfcon.observeMention(memText, isGroup ? 'other' : 'owner') } catch (e) { console.error('[selfcon] observeMention:', e && e.message) }
 
       // 事件进脑（v3 S1 影子层）：旧路径照旧写 episodes.jsonl，这边另存一份结构化事件。
@@ -549,17 +549,17 @@ export async function run(argv = []) {
         })
       } catch (e) { logErr('[qq] 脑写入失败（不影响回复）：' + (e?.message ?? e)) }
 
-      // 主人说的硬事实（10-27）：他吃了什么/在干什么/要去干什么 —— 落账以后就不许再问。
-      // 只记私聊里主人本人的话（群友的话不是他的事）。
+      // 用户说的硬事实（10-27）：他吃了什么/在干什么/要去干什么 —— 落账以后就不许再问。
+      // 只记私聊里用户本人的话（群友的话不是他的事）。
       try {
         const ownerQQ0 = String(config().owner?.qq || '')
         if (!isGroup && ownerQQ0 && String(userId) === ownerQQ0) {
           const got = ownerFacts.learnFromOwner(userText)
-          if (got.length) log(`[qq] 📝 记下主人的事：${got.map((g) => g.key + '=' + g.value).join('，')}`)
+          if (got.length) log(`[qq] 📝 记下用户的事：${got.map((g) => g.key + '=' + g.value).join('，')}`)
           // 他说他吃了 → 她的饥饿直接落地（不然接下来两小时会一直问"你吃了吗"）
           if (/吃(了|过|的是)|刚吃|在吃|饭吃了/.test(String(userText))) {
             fed(20)
-            log('[qq] 🍚 主人说他吃了 → 她的饥饿归到 20')
+            log('[qq] 🍚 用户说他吃了 → 她的饥饿归到 20')
           }
         }
       } catch (e) { logErr('[qq] 记事实失败：' + (e?.message ?? e)) }
@@ -585,7 +585,7 @@ export async function run(argv = []) {
       // 时间锚点已经搬进 persona 的「【现在】」常驻层（10-25 重构，照 dsh-world 的 timeContext）：
       // 贴在最后一条消息上的临时提示一重写就丢，现在每轮都在 system 里。
       // 这里只保留事后兜底要用的真实间隔（sanitizeDayClaims 的口径）。
-      // 群聊要按**这个群**的最后一条算（10-26）：拿主人的私聊间隔去校群里的"好久没见"，
+      // 群聊要按**这个群**的最后一条算（10-26）：拿用户的私聊间隔去校群里的"好久没见"，
       // 会把她对群友说的话按私聊时间线纠正，等于又混了一次通道。
       let gapFrom = lastOwnerMsgTs()
       if (isGroup) {
@@ -697,13 +697,13 @@ export async function run(argv = []) {
         }
       } catch (e) { swallow(e, 'qq-server:dynTemp') }
       let out = guard.clean(answer, config())
-      // 群聊认人硬保险（10-26）：prompt 已经写到"这一轮不许出现主人"，但 11:54 她还是照群友的要求
-      // 说了"主人早上好"。prompt 是软的，嘴是她的 —— 所以这里在出稿后再拦一道。
-      // 只拦"称呼用法"（addressesOwner），她在群里说"我只叫一个人主人"这种正确拒绝不许误伤。
-      // 只拦群聊，私聊不受影响（私聊本来就该叫主人）。
+      // 群聊认人硬保险（10-26）：prompt 已经写到"这一轮不许出现用户"，但 11:54 她还是照群友的要求
+      // 说了"用户早上好"。prompt 是软的，嘴是她的 —— 所以这里在出稿后再拦一道。
+      // 只拦"称呼用法"（addressesOwner），她在群里说"我只叫一个人用户"这种正确拒绝不许误伤。
+      // 只拦群聊，私聊不受影响（私聊本来就该叫用户）。
       if (out && isGroup && String(userId) !== String(config().owner?.qq || '') && addressesOwner(out)) {
-        log(`[qq] ⚠ 群里把「主人」叫给群友（QQ ${userId}）了：「${out.slice(0, 30)}」→ 让她重写`)
-        // 应激通路：这是**她自己搞砸了**（当着群里把群友叫成主人），
+        log(`[qq] ⚠ 群里把「用户」叫给群友（QQ ${userId}）了：「${out.slice(0, 30)}」→ 让她重写`)
+        // 应激通路：这是**她自己搞砸了**（当着群里把群友叫成用户），
         // 当场被纠正 —— 属于社交失误，最伤的一种。
         // 注意方向：不是"用户让她有压力"，是"她做错了事"才有压力。
         try { neuron.act('stress', 0.8) } catch (e) { swallow(e, 'qq:stress:addr') }
@@ -712,18 +712,18 @@ export async function run(argv = []) {
           retry[retry.length - 1] = {
             role: 'user',
             content: messages[messages.length - 1].content
-              + `\n\n【重写】你刚才那句「${out.slice(0, 40)}」是在叫对方「主人」，但他只是群友（QQ ${userId}）。`
-              + `重写这一条：一个字都不许出现"主人"。`,
+              + `\n\n【重写】你刚才那句「${out.slice(0, 40)}」是在叫对方「用户」，但他只是群友（QQ ${userId}）。`
+              + `重写这一条：一个字都不许出现"用户"。`,
           }
           const answer2 = await llm.chat(retry, { temperature: 0.8, purpose: 'chat' })
           const out2 = guard.clean(answer2, config())
           if (out2) out = out2
         } catch (e) { logErr('[qq] 群聊重写失败：' + e.message) }
         if (addressesOwner(out)) {
-          // 还是叫了：把称呼就地拆掉（只动"主人"这个词，其余保留）
-          const fixed = out.replace(/(^|[，,。！!？?、\s])主人(?=$|[，,。！!？?、\s]|早|好|你|晚|再|睡|我|在)/g, '$1你')
-            .replace(/(晚安|早安|早上好|谢谢|再见|你好)\s*主人/g, '$1你')
-          log(`[qq] 仍旧叫主人 → 就地改掉：「${out.slice(0, 30)}」→「${fixed.slice(0, 30)}」`)
+          // 还是叫了：把称呼就地拆掉（只动"用户"这个词，其余保留）
+          const fixed = out.replace(/(^|[，,。！!？?、\s])用户(?=$|[，,。！!？?、\s]|早|好|你|晚|再|睡|我|在)/g, '$1你')
+            .replace(/(晚安|早安|早上好|谢谢|再见|你好)\s*用户/g, '$1你')
+          log(`[qq] 仍旧叫用户 → 就地改掉：「${out.slice(0, 30)}」→「${fixed.slice(0, 30)}」`)
           out = fixed
         }
       }
@@ -754,7 +754,7 @@ export async function run(argv = []) {
       if (!out) return
 
       // 声称-证据闸（v3 O11）：有证据放行；账本有反证才改成「还没…」；查不到一个字都不改（只记账）。
-      // ⚠️ 10-29 事故：旧版把完成态反转成"正要接着看"，主人当场引用质问 —— 证据缺失≠没发生。
+      // ⚠️ 10-29 事故：旧版把完成态反转成"正要接着看"，用户当场引用质问 —— 证据缺失≠没发生。
       try {
         const gated = brain.craftReply(out, { chat: chatId })
         if (gated.changed) {
@@ -764,7 +764,7 @@ export async function run(argv = []) {
       } catch (e) { logErr('[qq] 声称闸异常：' + (e?.message ?? e)) }
 
       // 承诺账本（10-27）：从她真正发出去的话里抽"这就去看/我答应/明天做"，落账带截止时间。
-      // 只记私聊（群里答应的事不算对主人的承诺），且只在非干跑时记。
+      // 只记私聊（群里答应的事不算对用户的承诺），且只在非干跑时记。
       try {
         const ownerQQ1 = String(config().owner?.qq || '')
         if (!isGroup && !config().guard?.dryRun && ownerQQ1 && String(userId) === ownerQQ1) {
@@ -772,7 +772,7 @@ export async function run(argv = []) {
           if (got.length) log(`[qq] 📌 记下承诺：${got.map((g) => g.what).join('，')}（到点会真去做）`)
         }
       } catch (e) { logErr('[qq] 记承诺失败：' + (e?.message ?? e)) }
-      // 标签本身绝不能发给主人 —— 这里就剥掉，同时把情绪记下来给语音用。
+      // 标签本身绝不能发给用户 —— 这里就剥掉，同时把情绪记下来给语音用。
       const emoTagged = parseEmotionTag(out)
       const emotion = emoTagged.emotion
       if (emotion) {
@@ -815,14 +815,14 @@ export async function run(argv = []) {
           note: 'guard.dryRun=true：只打印未发送',
         })
 
-      // 长期记忆：跟主人私聊时，每 6 条回复把这段对话压成摘要 + 更新主人画像（不阻塞回复）
+      // 长期记忆：跟用户私聊时，每 6 条回复把这段对话压成摘要 + 更新用户画像（不阻塞回复）
       try {
         const ownerQQ = String(config().owner?.qq || '')
         if (!isGroup && ownerQQ && String(userId) === ownerQQ) {
           qqMemory.bump(chatId)
           if (qqMemory.due(chatId)) {
             qqMemory.refresh({ chatId, owner: config().owner, chat: (m) => llm.chat(m, { purpose: 'fast' }) })
-              .then((ok) => { if (ok) log('[qq] 记忆已压缩（摘要 + 主人画像）') })
+              .then((ok) => { if (ok) log('[qq] 记忆已压缩（摘要 + 用户画像）') })
               .catch((e) => logErr('[qq] 记忆压缩失败：', e.message))
           }
         }
@@ -906,14 +906,14 @@ export async function run(argv = []) {
         })
       } catch (e) { logErr('[qq] 交付记账失败：' + (e?.message ?? e)) }
 
-      // 长期记忆：跟主人私聊时，每 6 条回复把这段对话压成摘要 + 更新主人画像（不阻塞回复）
+      // 长期记忆：跟用户私聊时，每 6 条回复把这段对话压成摘要 + 更新用户画像（不阻塞回复）
       try {
         const ownerQQ = String(config().owner?.qq || '')
         if (!isGroup && ownerQQ && String(userId) === ownerQQ) {
           qqMemory.bump(chatId)
           if (qqMemory.due(chatId)) {
             qqMemory.refresh({ chatId, owner: config().owner, chat: (m) => llm.chat(m, { purpose: 'fast' }) })
-              .then((ok) => { if (ok) log('[qq] 记忆已压缩（摘要 + 主人画像）') })
+              .then((ok) => { if (ok) log('[qq] 记忆已压缩（摘要 + 用户画像）') })
               .catch((e) => logErr('[qq] 记忆压缩失败：', e.message))
           }
         }
@@ -1091,7 +1091,7 @@ export async function run(argv = []) {
     log(`    dryRun=${!!config().guard?.dryRun} · at_only=${QQ.at_only !== false} · voice=${!!QQ.voice_enabled} · napcat=${NAPCAT}`)
     // 群聊认人护栏自检（10-26）：启动就把三件套的状态打出来 —— 换了代码却忘了重启时，
     // 看这一行就知道跑的是哪一版，不用再猜"到底生效了没有"。
-    log(`    群聊认人护栏：事实块 + 剔旧错话 + 出稿拦截 = 已启用（主人号 ${String(config().owner?.qq || '').slice(0, 3)}***）`)
+    log(`    群聊认人护栏：事实块 + 剔旧错话 + 出稿拦截 = 已启用（用户号 ${String(config().owner?.qq || '').slice(0, 3)}***）`)
     // 引用索引预热（10-27）：没有它，"他引用的是哪句"就只能回一句"我看不到"
     void (async () => {
       try {
@@ -1118,7 +1118,7 @@ export async function run(argv = []) {
     })()
   })
 
-  // ── 主动搭话引擎（B站同款自主性）：主人安静久了，带着由头主动开口 ──────────
+  // ── 主动搭话引擎（B站同款自主性）：用户安静久了，带着由头主动开口 ──────────
   // 原则：随机拟人不定点；正聊着不打扰（minQuietMin）；深夜不打扰（activeHours）；
   //       每天有上限（dailyMax）；开口前情绪先漂移一次；发完即写记忆（推送即记忆）。
   const PROACT_FILE = dataPath('qq-proactive.json')
@@ -1148,7 +1148,7 @@ export async function run(argv = []) {
   }
 
   /** 异步版自跑：看番可能连着跑好几分钟，用 spawnSync 会把事件循环钉住 ——
-   *  那段时间她连主人发的消息都回不了。所以看番一律走这条。 */
+   *  那段时间她连用户发的消息都回不了。所以看番一律走这条。 */
   async function runCliAsync(args = [], timeoutMs = 900000) {
     try {
       const bot = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', 'bot.mjs')
@@ -1194,11 +1194,11 @@ export async function run(argv = []) {
   }
 
   // 10-25 修（用户抓到"两条差不多的抱怨"）：ownerLastMsgAt 只在内存里 → DSH 一重启就归零
-  // → quietH 变成 99 → 她一律按"主人很久没理我"开口，编出"你消失四天了"（当时其实 13 分钟前刚聊过）。
-  // 启动时从 QQ 记忆里把主人最后一条消息的真实时间捞回来。
+  // → quietH 变成 99 → 她一律按"用户很久没理我"开口，编出"你消失四天了"（当时其实 13 分钟前刚聊过）。
+  // 启动时从 QQ 记忆里把用户最后一条消息的真实时间捞回来。
   function seedOwnerLastMsgAt() {
     const ownerQQ = String(config().owner?.qq || '')
-    // ⚠️ 10-26 修：原来只比对 userId，主人在**群里**说话也算"主人最后一条消息" ——
+    // ⚠️ 10-26 修：原来只比对 userId，用户在**群里**说话也算"用户最后一条消息" ——
     // 结果他群里聊了一整天，她在私聊就永远判定"他刚跟我聊过"，主动搭话全被 quiet 门槛吃掉。
     // "多久没说话"只对私聊有意义，所以必须同时锁 chatId。
     const ownerChat = 'qq:' + ownerQQ
@@ -1210,22 +1210,22 @@ export async function run(argv = []) {
         if (r && r.role === 'user' && String(r.chatId || '') === ownerChat
           && (!ownerQQ || String(r.userId || '') === ownerQQ) && r.isGroup !== true) {
           ownerLastMsgAt = Number(r.ts) || 0
-          log(`[qq] 主人最后一条私聊消息：${new Date(ownerLastMsgAt).toLocaleString('zh-CN')}（从记忆恢复）`)
+          log(`[qq] 用户最后一条私聊消息：${new Date(ownerLastMsgAt).toLocaleString('zh-CN')}（从记忆恢复）`)
           return
         }
       }
     } catch (e) { swallow(e, 'qq-server:seedOwnerLastMsgAt') }
     // 记忆里翻不到 → 按"刚刚聊过"算：宁可不提时间，也不许编一个天数出来
     ownerLastMsgAt = Date.now()
-    log('[qq] 记忆里没有主人的消息 → 按刚聊过处理（先不提"多久没见"）')
+    log('[qq] 记忆里没有用户的消息 → 按刚聊过处理（先不提"多久没见"）')
   }
   seedOwnerLastMsgAt()
 
-  // 主人最后一条消息的时间（从 QQ 记忆尾部读）—— "多久没说话"的唯一可信来源。
+  // 用户最后一条消息的时间（从 QQ 记忆尾部读）—— "多久没说话"的唯一可信来源。
   // 内存里的 ownerLastMsgAt 只在收到消息时更新过，重启就归零，不能当事实用。
   function lastOwnerMsgTs() {
     const ownerQQ = String(config().owner?.qq || '')
-    // 同上：只认私聊。群里的"主人"发言不算"跟我说话"。
+    // 同上：只认私聊。群里的"用户"发言不算"跟我说话"。
     const ownerChat = 'qq:' + ownerQQ
     try {
       // 2026-11-02：只读尾部 200 行。原来读整个文件，文件大了每条消息都要 parse 一遍。
@@ -1325,7 +1325,7 @@ export async function run(argv = []) {
       const quietText = quietMin < 60 ? `${quietMin} 分钟` : `${quietH} 小时 ${quietMin % 60} 分`
       const nowText = new Date().toLocaleString('zh-CN', { hour12: false })
       // 素材钩子（10-25）：光给类型菜单 LLM 只会甩视频链接 —— 把她今天真实的经历、时段、情绪值
-      // 和主人记忆喂进去，她才有"日常/思考/疑惑/心情"可说
+      // 和用户记忆喂进去，她才有"日常/思考/疑惑/心情"可说
       const hour = new Date().getHours()
       const slot = hour < 9 ? '早上' : hour < 12 ? '上午' : hour < 14 ? '午饭点' : hour < 18 ? '下午' : hour < 20 ? '傍晚' : hour < 23 ? '晚上' : '深夜'
       const moodNow = (() => { try { return JSON.parse(fs.readFileSync(dataPath('mood.json'), 'utf8')) } catch { return {} } })()
@@ -1337,7 +1337,7 @@ export async function run(argv = []) {
           .filter((r) => Date.now() - (r.ts || 0) < 86400_000 && ['bilibili', 'douyin'].includes(r.platform))
         if (rows.length) hooks.push('今天在外面：' + rows.slice(-3).map((r) => String(r.summary || r.text || '').slice(0, 28)).join('；'))
       } catch (e) { swallow(e, 'qq-server:moodNow') }
-      // 主人事实（10-27）：他今天已经说过的事 —— 有了这段，她才不会一天问十次"吃了没"
+      // 用户事实（10-27）：他今天已经说过的事 —— 有了这段，她才不会一天问十次"吃了没"
       {
         const known = ownerFacts.list()
         if (known.length) {
@@ -1347,7 +1347,7 @@ export async function run(argv = []) {
       }
       {
         const fcts = memory.facts('owner')
-        if (fcts.length) hooks.push('关于主人的记忆：' + fcts.slice(-2).join('；').slice(0, 90))
+        if (fcts.length) hooks.push('关于用户的记忆：' + fcts.slice(-2).join('；').slice(0, 90))
       }
       // 10-26：以前素材只有 B站/抖音，她翻来覆去就那几句（"肚子叫/桑拿鸡"连着说），
       // 大半草稿被去重拦掉，看着就像"主动性很弱"。把她自己在网上干的事也喂进去 —— 素材新鲜，话才不重。
@@ -1360,7 +1360,7 @@ export async function run(argv = []) {
       }
       try {
         const dg = fs.readFileSync(dataPath('diary-owner.md'), 'utf8').split('\n').filter(Boolean).slice(-1)[0]
-        if (dg) hooks.push('你最近写给主人的日记里那句：' + dg.replace(/^[-#\s]+/, '').slice(0, 50))
+        if (dg) hooks.push('你最近写给用户的日记里那句：' + dg.replace(/^[-#\s]+/, '').slice(0, 50))
       } catch (e) { swallow(e, 'qq-server:moodNow') }
       try { const li = memory.loreInterests(1); if (li.length) hooks.push('最近挂在心上：' + String(li[0]).slice(0, 40)) } catch (e) { swallow(e, 'qq-server:moodNow') }
 
@@ -1416,7 +1416,7 @@ export async function run(argv = []) {
       } catch (e) { swallow(e, 'qq-server:best-effort') }
       const msgs = [
         built[0],
-        { role: 'user', content: `【主动搭话】现在是 ${nowText}。主人最后一条消息是 ${quietText} 前。${quietHint}\n`
+        { role: 'user', content: `【主动搭话】现在是 ${nowText}。用户最后一条消息是 ${quietText} 前。${quietHint}\n`
           + (didLine ? `**这条就用它当由头**：${didLine}\n` : '')
           + `**时间只准用这一句里的数字**：不许换算成"几天"，不许说"四天/好几天/整整几天"这种我没告诉你的数字${quietMin < 120 ? '；才两个钟头不到，别摆出"好久没见"的架势' : ''}。\n`
           + '**自己挑一个类型**（上次用过「' + (lastType || '无') + '」，这次换一个）：'
@@ -1439,7 +1439,7 @@ export async function run(argv = []) {
       } catch { out = guard.clean(String(resp ?? ''), cfgNow) }
       if (!out) return
       // ── 事实闸（10-27）────────────────────────────────────────────────
-      // "你中午吃了没啊" 在主人 12:47 说过"吃了烧鸭"之后还问了 4 次。根子不是记性，
+      // "你中午吃了没啊" 在用户 12:47 说过"吃了烧鸭"之后还问了 4 次。根子不是记性，
       // 是推送草稿没人核对事实。这里先把草稿对着「他今天已经说过的事」过一遍：
       //   ①先让她自己改一次（把答案写进去，别问）；②还问就这轮不发。
       {
@@ -1465,7 +1465,7 @@ export async function run(argv = []) {
           } catch (e) { logErr('[qq] 事实闸改写失败：' + e.message); return }
         }
       }
-      // 主动搭话本来就是"主人多久没理我"最容易编出天数的场景，再加一道兜底
+      // 主动搭话本来就是"用户多久没理我"最容易编出天数的场景，再加一道兜底
       if (mentionsDays(out)) {
         const fixed = sanitizeDayClaims(out, Date.now() - ownerLastMsgAt)
         if (fixed !== out) log(`[qq] 主动搭话的天数已掰正：「${out.slice(0, 30)}」→「${fixed.slice(0, 30)}」`)
@@ -1493,7 +1493,7 @@ export async function run(argv = []) {
       if (!ok) return
       // 10-31：真的发出去了才记账（全局闸门）
       await spokeDone('proactive')
-      // 主动搭话也带图（10-25）：这条路径以前**完全不发图**，主人那边"好久没见表情包"一半是这原因。
+      // 主动搭话也带图（10-25）：这条路径以前**完全不发图**，用户那边"好久没见表情包"一半是这原因。
       if (Math.random() < Number(cfgNow.qq?.stickerChance ?? 0.5)) {
         const ptag = autoTag(out)
         const pfile = ptag ? pickSticker(ptag) : null
@@ -1635,7 +1635,7 @@ export async function run(argv = []) {
         if (recent.length < 2) continue
         tickMood()
         // ⚠️ 10-26 修：这里原来**没传 isGroup** —— 等于她用"私聊人设"决定要不要在群里插话：
-        // 身份行给群友发主人通行证、时间锚点报"主人最后一次说话"、也没有末尾事实块。
+        // 身份行给群友发用户通行证、时间锚点报"用户最后一次说话"、也没有末尾事实块。
         // 群里自主开口必须和被动回话用同一套群聊装配。
         const built = buildMessages({ platform: 'qq', userText: '', chatId, userId: '', turnsToday: Number(g.count), isGroup: true })
         const msgs = [
@@ -1652,11 +1652,11 @@ export async function run(argv = []) {
         if (!j.speak || !String(j.text || '').trim()) continue
         let out = guard.clean(String(j.text), config())
         if (!out) continue
-        // 群里插话也要过"别把主人叫给群友"这一关（10-26）：这条路径不经过主流程的拦截。
+        // 群里插话也要过"别把用户叫给群友"这一关（10-26）：这条路径不经过主流程的拦截。
         if (addressesOwner(out)) {
-          const fixed = out.replace(/(^|[，,。！!？?、\s])主人(?=$|[，,。！!？?、\s]|早|好|你|晚|再|睡|我|在)/g, '$1你')
-            .replace(/(晚安|早安|早上好|谢谢|再见|你好)\s*主人/g, '$1你')
-          log(`[qq] 群插话里叫了主人 → 就地改掉：「${out.slice(0, 24)}」→「${fixed.slice(0, 24)}」`)
+          const fixed = out.replace(/(^|[，,。！!？?、\s])用户(?=$|[，,。！!？?、\s]|早|好|你|晚|再|睡|我|在)/g, '$1你')
+            .replace(/(晚安|早安|早上好|谢谢|再见|你好)\s*用户/g, '$1你')
+          log(`[qq] 群插话里叫了用户 → 就地改掉：「${out.slice(0, 24)}」→「${fixed.slice(0, 24)}」`)
           if (addressesOwner(fixed)) continue
           out = fixed
         }
@@ -1697,7 +1697,7 @@ export async function run(argv = []) {
       const msgs = [
         built[0],
         { role: 'user', content: '【发说说】现在以你的名义发一条 QQ 空间说说。基于你最近在外面看到的/今天的心情/最近琢磨的小念头，随手一条：'
-          + '60~120 字，口语、真实、像发朋友圈，不要话题标签不要 @ 不要称呼主人。可以就是一句碎碎念，也可以带一点小情绪。只输出说说正文。' },
+          + '60~120 字，口语、真实、像发朋友圈，不要话题标签不要 @ 不要称呼用户。可以就是一句碎碎念，也可以带一点小情绪。只输出说说正文。' },
       ]
       const resp = await llm.chat(msgs, { temperature: 0.95, max_tokens: 300, purpose: 'deep' })
       let text = guard.clean(String(resp ?? ''), config())

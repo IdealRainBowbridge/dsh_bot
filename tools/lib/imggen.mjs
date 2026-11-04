@@ -52,12 +52,12 @@ function proxyArgs(cfg = config()) {
 }
 const REF_CACHE = () => dataPath('imggen-ref.json')
 const dayKey = () => new Date().toLocaleDateString('sv-SE')
-/** 固定形象基底：鲸鱼娘（2D 动漫贴纸风，蓝发鱼尾少女 —— 参考主人给的形象），成品才像"她的"表情包。
+/** 固定形象基底：鲸鱼娘（2D 动漫贴纸风，蓝发鱼尾少女 —— 参考用户给的形象），成品才像"她的"表情包。
  *  情绪/动作/服装由每条文案的 LLM 翻译自由发挥 —— 基底不变，风格她自己探索。 */
 const STYLE = 'flat 2D anime chibi sticker illustration, cute whale-girl, long wavy navy-blue hair with light blue gradient, whale tail and small fin ears, big sparkling blue eyes, soft blush, kawaii, bold clean lineart, flat cel shading, simple pale background, high quality'
 const TAG_CAP = 12   // 每个标签目录最多留几张 ai- 生成图（老的删掉，只删自己生成的）
 
-// ── 图生图参考图（10-25）：形象锚定用主人给的参考图集，img2img 才"像" ─────────
+// ── 图生图参考图（10-25）：形象锚定用用户给的参考图集，img2img 才"像" ─────────
 // ~/.data/sticker-refs/ref-<情绪>.jpg（哭/举手/得意/微笑）—— 按文案情绪自动挑最贴的一张；
 // Pollinations 的 &image= 参数要一个公网可达的图片 URL —— 本地图自动传 tmpfiles.org
 // （60 分钟过期）并按文件缓存 URL，过期自动重传。
@@ -279,7 +279,7 @@ export async function generateStickerImage(caption, o = {}) {
   const hash = crypto.createHash('md5').update((tag ? `t:${tag}:` : '') + cap).digest('hex').slice(0, 12)
   // 文件命名带"谁画的"（10-25）：sf- = 硅基 Qwen-Image-Edit 参考图锁形象（鲸鱼娘本体）；
   // px- = Pollinations 免费文生图兜底（形象不保证，可能出来普通卡通）。
-  // 主人明确要求：图库里只放根本形象的表情包 —— px- 图一律不进标签库（见下游落盘逻辑）。
+  // 用户明确要求：图库里只放根本形象的表情包 —— px- 图一律不进标签库（见下游落盘逻辑）。
   const outSf = path.join(dir, `${tag ? 'sf-' : ''}${hash}.jpg`)
   const out = outSf
   if (isImageFile(outSf)) return outSf   // 缓存命中：同文案不重画、不占额度
@@ -334,7 +334,7 @@ export async function generateStickerImage(caption, o = {}) {
       }
       if (code !== '200' || !isImageFile(tmp)) { try { fs.rmSync(tmp, { force: true }) } catch (e) { swallow(e, 'imggen:run') }; return null }
       genQuotaRecord()
-      // ⚠️ 兜底图不进标签库（10-25 主人要求：图库里只能有根本形象的表情包）。
+      // ⚠️ 兜底图不进标签库（10-25 用户要求：图库里只能有根本形象的表情包）。
       // 标签模式给个临时图让这条消息照样能发；自制模式才落盘到 自制/。
       if (tag) {
         const temp = path.join(STICKER_DIR, '自制', `px-${hash}.jpg`)

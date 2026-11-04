@@ -1,13 +1,13 @@
 # 交接书：给下一个对话（2026-10-29 定稿）
 
-> **怎么用这份文件**：新对话开场先读这里（事实、约束、现状），再读 `FEIYU-BRAIN-PLAN.md`（唯一执行依据）。
+> **怎么用这份文件**：新对话开场先读这里（事实、约束、现状），再读 `BRAIN-PLAN.md`（唯一执行依据）。
 > 这两份读完之后，不需要再翻别的文档就能继续工作；其余四份是历史论证材料，只在对某个判断有疑问时回查。
 
 ---
 
 ## 1. 一句话背景
 
-`dsh-feiyu` 是一个跑在本机的 **DSH 插件**，它塑造了一个"她"——有名字、有人格、有账号、会自己上网、会发视频、会和主人聊天的数字存在。
+`dsh_bot` 是一个跑在本机的 **DSH 插件**，它塑造了一个"她"——有名字、有人格、有账号、会自己上网、会发视频、会和用户聊天的数字存在。
 她已经能跑（各端在线、测试 25 套全绿），但**记忆和行为是坏的**：会忘、会错、会胡诌、答应的事不做。
 现在的工作是：**按人脑结构重做她的记忆与行为**（记忆 + 行为 = 七器官四回路，见 PLAN）。
 
@@ -19,10 +19,10 @@
 
 | 角色 | 事实 |
 |---|---|
-| **她** | 名字 `友利奈绪的大肥鱼`；自称"我"；对外人设是鲸鱼（怕猫）；B站账号昵称 `御坂美琴Rosie`；抖音号 `朴昌范`（douyin_id `30614312689`，uid `3584822243764652`）；微信只做代工、只读 |
-| **主人** | `--友利奈绪-`，QQ `3082864371`；B站 mid 见 config `owner.mid`；抖音即上面那个号 |
+| **她** | 名字 `友利奈绪的理想的机械人`；自称"我"；对外人设是鲸鱼（怕猫）；B站账号昵称 `御坂美琴Rosie`；抖音号 `朴昌范`（douyin_id `30614312689`，uid `3584822243764652`）；微信只做代工、只读 |
+| **用户** | `--友利奈绪-`，QQ `3082864371`；B站 mid 见 config `owner.mid`；抖音即上面那个号 |
 | **QQ 群** | `2161082407`（她会在这个群里和群友聊天，群里另有 `与光同尘`、`IU♥` 等） |
-| **称呼** | 她叫他"主人"；他叫她"大肥鱼" |
+| **称呼** | 她叫他"用户"；他叫她"理想的机械人" |
 
 ---
 
@@ -39,9 +39,9 @@
 |---|---|---|
 | D1 | **看番/看剧不设上限**，节奏她自己定（`binge.dailyMax=0`）。她的话就是指令："连看三集"→`--count 3`、"看到第 6 集"→`--to 6`、"这部今晚看完"→`--count all` | 10-28 |
 | D2 | **痛感记忆不启用**：失败/被骂不加情绪权重、不进长期高显著。但失败仍进 `debts/audit`（问责与诚实需要） | 10-29 |
-| D3 | **人格允许她自己维护**，主人也可以改，**主人优先**；每次改动留版本 + 理由 + 漂移检测 | 10-29 |
+| D3 | **人格允许她自己维护**，用户也可以改，**用户优先**；每次改动留版本 + 理由 + 漂移检测 | 10-29 |
 | D4 | **微信只读**：她知道自己在微信干了什么活，但不进自传体叙事 | 既有 |
-| D5 | **群聊经历必须保留**（`scope` 只影响渲染，不影响能否知道）；群聊里**不许注入主人私事** | 10-29 |
+| D5 | **群聊经历必须保留**（`scope` 只影响渲染，不影响能否知道）；群聊里**不许注入用户私事** | 10-29 |
 | D6 | **不引入 npm/pip 依赖**；先倒排索引，向量检索留后面 | 环境限制 |
 | D7 | 不 commit / 不 push，除非他明确要求 | 家规 |
 
@@ -71,7 +71,7 @@
 
 ```
 DSH (Electron 宿主)
-└── dsh-feiyu 插件（D:\dsh-feiyu）
+└── dsh_bot 插件（D:\dsh_bot）
     ├── lib\           ← 插件层（scheduler.js 的 freedomTick、persona 挂钩等），改完需重启 DSH
     └── tools\
         ├── bot.mjs        CLI 入口
@@ -104,7 +104,7 @@ DSH (Electron 宿主)
 | **没有** | npm / npx / pip（装不了依赖，方案必须纯 JS + 纯文本） |
 | 配置 | `C:\Users\30828\.dsh\feiyu.config.json`（**可能带 BOM**，读取要容错；当前无 BOM） |
 | 数据 | `C:\Users\30828\.feiyu-ai\` |
-| 插件 | `D:\dsh-feiyu`（remote `https://github.com/baishuyue/dsh-feiyu.git`） |
+| 插件 | `D:\dsh_bot`（remote `https://github.com/baishuyue/dsh_bot.git`） |
 | DSH 宿主 | `D:\新建文件夹 (7)\resources\app\dsh\`（当前 checkout，只用于看宿主实现） |
 | LLM | `https://maas.qianwenaiapi.com/compatible-mode/v1` / `deepseek-v4.1-flash-1017`（备用 deepseek-chat） |
 | 语音 | GPT-SoVITS `:9880`，音色 `bingjiao2`（**不要动** `D:\GPT-SoVITS`、`D:\rvc`） |
@@ -122,14 +122,14 @@ DSH (Electron 宿主)
 $node = "C:\Users\30828\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
 
 # 测试
-& $node D:\dsh-feiyu\tools\run-tests.mjs          # 期望：25 套全绿
+& $node D:\dsh_bot\tools\run-tests.mjs          # 期望：25 套全绿
 
 # 健康
 Invoke-WebRequest 'http://127.0.0.1:8080/health' -UseBasicParsing
 
 # 重启 qq-server（先杀旧进程）
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ? { $_.CommandLine -match 'qq-server' } | % { Stop-Process -Id $_.ProcessId -Force }
-cmd /c "start /b "" ""$node"" D:\dsh-feiyu\tools\bot.mjs qq-server 8080 >> %USERPROFILE%\.feiyu-ai\qq-server.log 2>&1"
+cmd /c "start /b "" ""$node"" D:\dsh_bot\tools\bot.mjs qq-server 8080 >> %USERPROFILE%\.feiyu-ai\qq-server.log 2>&1"
 
 # 看状态
 node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.log(JSON.parse(fs.readFileSync(R+'promises.json','utf8')).items.map(x=>x.state+':'+x.what))"
@@ -153,7 +153,7 @@ node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.
 
 1. **时间戳全是毫秒整数**，渲染要转本地时区；历史上有过 UTC/本地混用。
 2. **`spawnSync` 会钉住事件循环**：跑长任务（看番/发视频）必须用 `execFile` 异步，否则她那几分钟不能回话。
-3. **群聊行有 `isGroup:true`**，文本带 "昵称：" 前缀；不做结构化 speaker 就会把群友当主人。
+3. **群聊行有 `isGroup:true`**，文本带 "昵称：" 前缀；不做结构化 speaker 就会把群友当用户。
 4. **`[sad]`/`[[平静]]` 标签**：私聊剥了，群聊漏剥，正文里露出来过。
 5. **BOM**：配置读入要 `replace(/^\uFEFF/,'')`，历史事故。
 6. **测试隔离**：测试要在 `mkdtempSync` 里设 `USERPROFILE/HOME/DSH_HOME/FEIYU_DATA_DIR`，且必须在 import `paths.mjs` **之前**设。
@@ -174,8 +174,8 @@ node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.
 
 | 文件 | 作用 | 新对话是否需要读 |
 |---|---|---|
-| `FEIYU-BRAIN-HANDOFF.md` | **本文**：事实、约束、现状、下一步 | **必读** |
-| `FEIYU-BRAIN-PLAN.md` | **最终方案**：七器官四回路、schema、算法、S1~S4、29 条探针 | **必读** |
+| `BRAIN-HANDOFF.md` | **本文**：事实、约束、现状、下一步 | **必读** |
+| `BRAIN-PLAN.md` | **最终方案**：七器官四回路、schema、算法、S1~S4、29 条探针 | **必读** |
 | `BRAIN-AUDIT.md` | 现状取证（13 记忆缺陷 + 10 行为缺陷，含实测数字与代码行号） | 质疑某个判断时回查 |
 | `BRAIN-DESIGN.md` | 器官设计推演（含人格自维护护栏、痛感记忆决定） | 需要设计理由时回查 |
 | `BRAIN-UNITY.md` | 跨端一致 + 承诺履约的推演 | 同上 |
@@ -216,7 +216,7 @@ node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.
 | `intents.mjs` | 意图三态（intent/blocked/wish）、租约+fencing、**无证据不算完成**、`catchUp` 分级 |
 | `delivery.mjs` | 交付账（她真说出去的每一句） |
 | `claim.mjs` | 声称-证据闸（没证据就把"我看完了"降成"正要接着看"） |
-| `self.mjs` | 自我模型三层（主人层只读 / 自助层要理由 / 每周叙事）+ 历史版本 + 漂移检测 |
+| `self.mjs` | 自我模型三层（用户层只读 / 自助层要理由 / 每周叙事）+ 历史版本 + 漂移检测 |
 | `consolidate.mjs` | 睡眠巩固：聚类→抽事实→日记→情绪衰减→强度衰减→周日叙事；幂等可续跑 |
 | `assemble.mjs` | 8 槽装配 + 硬预算 5650 字 + 三级诚实块 |
 | `doctor.mjs` / `eval.mjs` / `backfill.mjs` / `index.mjs` | 体检 8 条不变量 / 评测台+权重标定 / 历史导入 / 门面（IO 只跟它打交道） |
@@ -230,7 +230,7 @@ node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.
 - `tools/commands/qq-server.mjs`：用户/她自己每条消息 `brain.onEvent`；装配 `brain.assembleFor(...) ?? buildMessages(...)`；出站前过声称闸；发出后 `brain.onSent`；60s 心跳（catchUp + 该巩固时**spawn 子进程**，不钉事件循环）；`/health` 带脑摘要；新增 `POST /event`、`POST /sent`。
 - `tools/commands/douyin-dm-server.mjs`：抖音私信同样进脑（`scope=private`）+ 交付记账。
 - `tools/commands/brain.mjs` + `tools/bot.mjs`：`feiyu brain …` 12 个子命令。
-- `lib/index.js`：只读路由 `GET /dsh-feiyu/api/brain`（面板用，不调模型不写盘）。
+- `lib/index.js`：只读路由 `GET /dsh_bot/api/brain`（面板用，不调模型不写盘）。
 - `tools/run-tests.mjs`：注册 5 套脑测试，30 套全绿。
 
 ### 15.3 实测（真数据，不是估算）
@@ -238,7 +238,7 @@ node -e "const fs=require('fs'),R=process.env.USERPROFILE+'/.feiyu-ai/';console.
 - 历史导入：2 个旧文件 1175 行 → **1045 条情景**，跳过 85 条重复，**拦掉 45 条微信行**（旧记忆里确实混进过微信，这就是 I7 要防的）。
 - 巩固：6 轮把 1045 条吃完 → **29 条结构化事实**（25 新增 / 4 合并 / **0 条无证据**），第 7 轮 `processed=0`（幂等）。
 - 评测台：120 道真实题 → **Recall@6 0.875 / MRR 0.757**（校准前 0.85 / 0.70），权重已写回 `recall.mjs`。
-- 提示词：真主人私聊装配 **5608 字**（旧版实测 7371 字），预算 5650，`dropped=[]`。
+- 提示词：真用户私聊装配 **5608 字**（旧版实测 7371 字），预算 5650，`dropped=[]`。
 - `feiyu brain doctor`：**8 条不变量全绿**。
 
 ### 15.4 开关与回滚

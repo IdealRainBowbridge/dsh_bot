@@ -1,9 +1,9 @@
 // voice —— 音色工坊：list / try / tryall / use / import
 // "她自己学新声音"的入口：从 URL 导入任意参考音频即得新音色（GPT-SoVITS v4 零样本），
-// 逐个试听发到主人 QQ，主人或鱼自己拍板切换。
+// 逐个试听发到用户 QQ，用户或鱼自己拍板切换。
 //
 //   node bot.mjs voice list
-//   node bot.mjs voice try --name <音色名>            # 用该音色合成自我介绍发主人QQ
+//   node bot.mjs voice try --name <音色名>            # 用该音色合成自我介绍发用户QQ
 //   node bot.mjs voice tryall                          # 全部音色逐个试听
 //   node bot.mjs voice use --name <音色名>             # 切换默认音色（写配置）
 //   node bot.mjs voice import --url <wav直链> --name <名字> --text <参考文本>
@@ -19,7 +19,7 @@ import { onebotFileValue } from '../lib/onebot-file.mjs'
 
 // 2026-11-05 跨平台：配置优先（voice.modelsDir），默认按平台给 —— Windows 开发机 D:/，其余用户主目录
 const MODELS_DIR = config().voice?.modelsDir || (process.platform === 'win32' ? 'D:/GPT-SoVITS/models' : (process.env.USERPROFILE || process.env.HOME || '') + '/GPT-SoVITS/models')
-const INTRO = '主人，这是我现在的声音，好听吗？我是大肥鱼，这条声音你觉得适合我就换上吧。'
+const INTRO = '用户，这是我现在的声音，好听吗？我是理想的机械人，这条声音你觉得适合我就换上吧。'
 
 function arg(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? String(argv[i + 1] ?? d) : d }
 
@@ -268,7 +268,7 @@ export async function run(argv = []) {
     const readManifest = () => { try { return JSON.parse(fs.readFileSync(MANIFEST, 'utf8')) } catch { return {} } }
 
     const CARRIERS = {
-      coquettish: '主人～人家等你等了好久嘛，你再不过来陪我，我可要生气了哦。',
+      coquettish: '用户～人家等你等了好久嘛，你再不过来陪我，我可要生气了哦。',
       angry: '你怎么又不吃饭啊！说过多少次了！本鱼是真的生气了，不管你了！',
       wronged: '你都不理我……我等了一下午，饭也没吃，你就回我一句"忙"。',
       happy: '诶！真的吗！那太好了啊，我这就去看看，等我回来跟你讲！',
@@ -294,7 +294,7 @@ export async function run(argv = []) {
 
     if (act === 'test') {
       const j = readManifest()
-      const probe = arg(argv, '--text') || '主人，我回来啦，今天想吃什么呀？'
+      const probe = arg(argv, '--text') || '用户，我回来啦，今天想吃什么呀？'
       const only = arg(argv, '--emotion')
       const keys = Object.keys(j).filter(k => !only || k === only || EMOTIONS[k]?.label === only)
       if (!keys.length) { console.error('没有可试听的情绪音色（先 voice emo build）'); process.exit(1) }

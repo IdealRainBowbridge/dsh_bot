@@ -1,7 +1,7 @@
 // 三层记忆 —— dabot 骨架 brain/memory.py 的 JS 移植（SQLite+FTS5 → JSONL/JSON）。
 //
 //   · 情节 episodes  每次"看视频/分享/评论"的事件流（jsonl，append-only）
-//   · 关系 facts     关于主人/网友的长期事实（去重）
+//   · 关系 facts     关于用户/网友的长期事实（去重）
 //   · 世界 lore      她自己的设定与名场面
 // 检索：2-gram 分词 + 关键词命中（十万条以内够用 —— dabot 的原则：
 // 「别一开始就上向量库，人格才是瓶颈」）。
@@ -24,7 +24,7 @@ const FACT_FILE = dataPath('facts.json')
 // QQ 有自己的记忆空间：单独一个 episodes 文件（跟微信/B站分开，也方便以后单独做"自我迭代"）。
 // 老数据还在主文件里，读取时两个文件一起读，所以换了位置也接得上。
 const QQ_EP_FILE = dataPath('qq', 'episodes.jsonl')
-// 微信也有自己的记忆空间，而且定位不同：那是"替主人干活"的工作记录，
+// 微信也有自己的记忆空间，而且定位不同：那是"替用户干活"的工作记录，
 // 不属于她的人格经历 —— 所以 recall() 默认不读它，绝不串进 QQ/B站/抖音的提示词。
 const WECHAT_EP_FILE = dataPath('wechat', 'episodes.jsonl')
 const LORE_FILE = dataPath('lore.json')
@@ -117,7 +117,7 @@ export function episodeFile(platform) {
  * 明显是"自测/调试话术"的文本 —— 不该进她的记忆库（10-31 事故）。
  * 事故经过：调试时发的「【测试】链路已修复」「打字标识测试」「融合测试：这条应该双写 brain」
  * 全被 remember 记进去，她后来当成真实对话读，回复里冒出"我这边测试都跑完了"——
- * 对主人说开发语言，人格直接破功。
+ * 对用户说开发语言，人格直接破功。
  * 这里挡的是**明确的测试话术**，不是正常聊天（"测试"两个字单独出现不算）。
  */
 const SELFTEST_PATTERNS = [
@@ -148,10 +148,10 @@ export function remember(platform, chatId, userId, role, text, extra = {}) {
   const rec = {
     ts: Date.now(), platform: p, chatId, userId, role,
     text: t, summary: t.slice(0, 120),
-    // isGroup：群聊行。群里的"user"是群友不是主人，混进 recallAll 会被渲染成「主人：…」，
-    // 于是她在私聊里把群友的话当主人的话记（10-26 实锤：把群友"叫爸爸"当成主人说的）。
+    // isGroup：群聊行。群里的"user"是群友不是用户，混进 recallAll 会被渲染成「用户：…」，
+    // 于是她在私聊里把群友的话当用户的话记（10-26 实锤：把群友"叫爸爸"当成用户说的）。
     ...(extra.isGroup ? { isGroup: true } : {}),
-    // kind: 'push' = 她主动推给主人的消息（视频分享/提醒）。仍然要记（不然她不知道自己刚说过），
+    // kind: 'push' = 她主动推给用户的消息（视频分享/提醒）。仍然要记（不然她不知道自己刚说过），
     // 但 recent() 会把它当"广播"而不是"对话"，避免把对话窗口挤满（10-26）。
     ...(extra.kind ? { kind: String(extra.kind) } : {}),
   }
@@ -354,7 +354,7 @@ const LEGACY_PUSH = /^【(?:B站|哔哩|抖音|微信|视频|分享|提醒|QQ)�
  *  实测（生产容器）：`/home/dsh/.data/qq/episodes.jsonl` **不存在**，
  *  而同一段对话完完整整躺在 `brain/ep/2026-11.jsonl`（42 条，带 at/atIso/role）。
  *  于是 `recent()` 返回 0 行 → 她读不到任何历史 → 每轮都像第一次说话，
- *  日志里反复打「记忆里没有主人的消息 → 按刚聊过处理」。
+ *  日志里反复打「记忆里没有用户的消息 → 按刚聊过处理」。
  *
  *  这不是"新功能没做"，是**两套存储的读取端没接上**：
  *  写入侧 `brain.onEvent()` 一直在存（旧路径 memory.remember 也双写），
@@ -369,7 +369,7 @@ const LEGACY_PUSH = /^【(?:B站|哔哩|抖音|微信|视频|分享|提醒|QQ)�
  */
 export function recent(chatId, n = 8) {
   const rows = readRows(chatId).filter(r => r.role === 'user' || r.role === 'assistant')
-  // 10-26 主人报"记忆错乱"：她那边的"最近聊过"里塞满了自己推的视频（她一次能连推 7 条
+  // 10-26 用户报"记忆错乱"：她那边的"最近聊过"里塞满了自己推的视频（她一次能连推 7 条
   // 【B站分享】），真正的对话被挤出窗口 —— 回复起来就像不记得刚才说过什么。
   // 只要对话本身够多，就把推送（kind:'push'，以及打标记之前的老数据）排除在外；
   // 对话太少时仍然全给，别让她失忆。
@@ -432,7 +432,7 @@ function recentFromBrain(chatId, n = 8) {
 }
 
 
-/** 该会话里「主人最后一次说话」「她最后一次说话」的时间戳（给时间常驻层用）。 */
+/** 该会话里「用户最后一次说话」「她最后一次说话」的时间戳（给时间常驻层用）。 */
 export function lastByRole(chatId) {
   const rows = readRows(chatId)
   let lastUser = 0, lastAssistant = 0
@@ -463,8 +463,8 @@ export function recallAll(chatId, opts = {}) {
   const cutoff = now - hours * 3600_000
   const rows = readRows('').filter(r =>
     r.chatId !== chatId
-    && r.isGroup !== true                           // 群聊行不进"最近真实发生的事"：群里说话的是群友，不是主人
-    && r.platform !== 'wechat'                       // 微信是替主人干活的工作记录，不进人格记忆
+    && r.isGroup !== true                           // 群聊行不进"最近真实发生的事"：群里说话的是群友，不是用户
+    && r.platform !== 'wechat'                       // 微信是替用户干活的工作记录，不进人格记忆
     && (r.role === 'user' || r.role === 'assistant')
     && (r.role === 'assistant' || r.userId === String(config().owner?.qq || ''))  // multi-user isolation (10-31)
     // ⚠️ 10-27：她自己的**主动搭话**（kind:'push'）不算"真实发生的事"。
@@ -505,14 +505,14 @@ export function recallAll(chatId, opts = {}) {
   }
   const lines = finalRows.slice().reverse().map(r => {
     const text = String(r.text).replace(/\s+/g, ' ').replace(/^[（(]|[）)]$/g, '').slice(0, perRow)
-    // ⚠️ 10-26 修「认贼作父」的根子就在这一行：以前所有 user 行一律渲染成「主人：」，
-    // 于是群友的话进了私聊记忆就变成"主人说的"，她连"叫爸爸"都当成主人说的。
+    // ⚠️ 10-26 修「认贼作父」的根子就在这一行：以前所有 user 行一律渲染成「用户：」，
+    // 于是群友的话进了私聊记忆就变成"用户说的"，她连"叫爸爸"都当成用户说的。
     // 现在：群聊行的 user 是**群友**，文本自带「昵称：」前缀（qq-server 写入时加的），原样呈现；
-    // 只有真正的一对一私聊行才配得上「主人：」。
+    // 只有真正的一对一私聊行才配得上「用户：」。
     if (r.role === 'assistant') return `${hhmm(r.ts)} [${where(r)}] 我：${text}`
     return r.isGroup
       ? `${hhmm(r.ts)} [${where(r)}] ${text}`
-      : `${hhmm(r.ts)} [${where(r)}] 主人：${text}`
+      : `${hhmm(r.ts)} [${where(r)}] 用户：${text}`
   })
   return { lines, count: lines.length, newest: Number(finalRows.at(-1)?.ts || 0) }
 }
@@ -577,7 +577,7 @@ export function addFact(userId, fact) {
 }
 
 /**
- * 主人事实（owner-facts.mjs 专用）：`key|值|时间|原话`。
+ * 用户事实（owner-facts.mjs 专用）：`key|值|时间|原话`。
  * 同一个 key 只留最新一条 —— "吃了烧鸭"被"吃了面"覆盖，不会两条并列让她自己挑。
  */
 export const OWNER_BUCKET = 'owner'
@@ -747,7 +747,7 @@ export function loreInterests(max = 3, random = Math.random) {
 }
 
 /** 她自己养成的兴趣口味 → 2-gram 池。feed/watch 选题时用它做动态偏好加权，
- *  打通「看到→记住→想再看」的进化闭环（静态 preferences 是主人给的起点，口味自己长）。 */
+ *  打通「看到→记住→想再看」的进化闭环（静态 preferences 是用户给的起点，口味自己长）。 */
 export function interestGrams(n = 24) {
   const grams = new Set()
   for (const item of readJson(LORE_FILE, []).filter(isInterest).slice(-n)) {
@@ -841,16 +841,16 @@ export function stats() {
   }
 }
 
-/** B（10-31）：最近一条主人还没回过的推送（kind:push 的 assistant 行）。
- *  主人回复推送时，把原推送内容带进上下文——不然她只看到回复，不记得自己说过什么。 */
+/** B（10-31）：最近一条用户还没回过的推送（kind:push 的 assistant 行）。
+ *  用户回复推送时，把原推送内容带进上下文——不然她只看到回复，不记得自己说过什么。 */
 export function lastUnansweredPush(chatId, hours = 48) {
   const cutoff = Date.now() - hours * 3600_000
   const rows = readRows(chatId).filter((r) => Number(r.ts) >= cutoff)
-  // 从尾部往前找：最后一条 push 之后如果主人说过话，就算已回复
+  // 从尾部往前找：最后一条 push 之后如果用户说过话，就算已回复
   let lastPush = null
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i]
-    if (r.role === "user") return null   // 主人说话在 push 之后 → 已回复
+    if (r.role === "user") return null   // 用户说话在 push 之后 → 已回复
     if (r.role === "assistant" && r.kind === "push") { lastPush = r; break }
   }
   return lastPush ? { at: lastPush.ts, text: String(lastPush.text || "").slice(0, 120) } : null

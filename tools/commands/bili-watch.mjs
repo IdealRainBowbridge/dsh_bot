@@ -51,7 +51,7 @@ export async function run(argv = []) {
   try { const n = memory.sweepEpisodes(); if (n) log(`[bili-watch] 记忆归档：${n} 条 90 天前的旧事件移入 *.archive.jsonl`) } catch (e) { swallow(e, 'bili-watch:run') }
   const dry = has(argv, '--dry') || cfg.guard?.dryRun !== false
   const ownerName = cfg.owner?.name || ''
-  // 自由刷：大肥鱼自己长时间刷 B站，不限条数/时长（unlimited）或按限度
+  // 自由刷：理想的机械人自己长时间刷 B站，不限条数/时长（unlimited）或按限度
   const free = has(argv, '--free') || cfg.bilibili?.freeRoam?.enabled === true
   const fr = cfg.bilibili?.freeRoam || {}
   let max, restMs   // sleep 收毫秒 —— 间隔直接算成毫秒（曾把 5 分钟喂成 5ms 级）
@@ -70,7 +70,7 @@ export async function run(argv = []) {
   let done = 0
   let items = []
   let shareQuotaOut = false   // 分享额度用完 → 只跳过评论，弹幕/点赞/投币照常
-  let quotaFailAt = 0         // 额度判死的时间：10 分钟后自动重试（主人可能刚改配置 0=不限）
+  let quotaFailAt = 0         // 额度判死的时间：10 分钟后自动重试（用户可能刚改配置 0=不限）
   let lastReplyScan = 0       // 回评论扫描节流：30 分钟一次
   while (done < max) {
     try { items = jsonOf(runFeiyu(['feed', '--json'])).items || [] } catch (e) {
@@ -139,7 +139,7 @@ export async function run(argv = []) {
       let comment = '', reason = '', score = 15, danmaku = '', sticker = ''
       try {
         const msgs = [
-          { role: 'system', content: '你是"大肥鱼"，在 B站 评论区写一条日常评论。身份透明：是AI鱼不装人，自然自称"本鱼"。像真人刷到视频随口说的一句：有观点/有梗/有情绪，**不要 @ 任何人**。只输出 JSON：'
+          { role: 'system', content: '你是"理想的机械人"，在 B站 评论区写一条日常评论。身份透明：是AI鱼不装人，自然自称"本鱼"。像真人刷到视频随口说的一句：有观点/有梗/有情绪，**不要 @ 任何人**。只输出 JSON：'
             + '{"comment":"15~60字的日常评论","reason":"至少8字，这条视频哪里打动你","score":0到20的整数,'
             + '"danmaku":"10~20字的视频弹幕，只有这条视频值得发弹幕才写，否则省略",'
             + '"sticker":"4~8字的表情贴纸文案（比如 太搞笑了8 / 本鱼饿了），只有这条特别戳你才写，否则省略"}'
@@ -164,7 +164,7 @@ export async function run(argv = []) {
         let seen = 0
         comment = comment.replace(/本鱼/g, () => (++seen === 1 ? '本鱼' : '我'))
       }
-      // 额度重试：主人可能刚把 shareDaily 改成 0（不限），10 分钟后自动再试，别锁死到天明
+      // 额度重试：用户可能刚把 shareDaily 改成 0（不限），10 分钟后自动再试，别锁死到天明
       if (shareQuotaOut && Date.now() - quotaFailAt > 10 * 60_000) {
         shareQuotaOut = false
         log('  🔁 分享额度重试中（配置可能已改）')
@@ -172,7 +172,7 @@ export async function run(argv = []) {
       if (dry) {
         log(`  【干跑 ✓】评论：${comment.slice(0, 60)}`)
       } else {
-        // 日常评论默认不 @（存活率优先）；只有达到分享线才 --share（@ 主人 + 分享额度）
+        // 日常评论默认不 @（存活率优先）；只有达到分享线才 --share（@ 用户 + 分享额度）
         const asShare = !shareQuotaOut && Number(score) >= Number(cfg.share?.minScore ?? 15)
         const args = ['comment', ...(asShare ? ['--share', '--reason', reason, '--score', String(Math.round(score)), '--rank', '1'] : []),
           '--bvid', bvid, '--message', comment, '--go']
@@ -185,7 +185,7 @@ export async function run(argv = []) {
       }
       done++
       // ⚠️ 开关热读：钩子条件每条视频都重新读配置 —— cfg 是启动时快照，
-      // 主人中途在面板开投币/回评等开关，不热读就永远不生效
+      // 用户中途在面板开投币/回评等开关，不热读就永远不生效
       const hc = config().bilibili ?? {}
       // 弹幕：LLM 觉得值得才发（danmaku.enabled + 日额度在 bili-write 里把关）
       if (danmaku && dry === false && hc.danmaku?.enabled === true) {

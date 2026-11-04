@@ -24,7 +24,7 @@ ok('内容已删除被识别', !!shellPageReason('该内容已被删除'))
 ok('404 被识别', !!shellPageReason('404 Not Found'))
 
 // ③ 正常文章不能误杀
-const article = '大肥鱼是一种深海生物。'.repeat(40) + '今天讲的是鸭血粉丝汤的做法：先吊汤，再把鸭血切片下锅，最后撒一把香菜。'
+const article = '理想的机械人是一种深海生物。'.repeat(40) + '今天讲的是鸭血粉丝汤的做法：先吊汤，再把鸭血切片下锅，最后撒一把香菜。'
 ok('正常长文不报错', shellPageReason(article) === '', shellPageReason(article))
 // 含模板词但正文很长的页面（比如知乎专栏正文页）也要放行
 ok('知乎正文页（带正文）放行', shellPageReason('登录知乎' + '正文'.repeat(600)) === '', shellPageReason('登录知乎' + '正文'.repeat(600)))

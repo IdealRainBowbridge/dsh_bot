@@ -1,9 +1,9 @@
 // persona-voice —— 人设措辞的单一来源（v5 新增）。
 //
-// 为什么需要：命令里的 system prompt 曾经把"笨蛋老爸""大肥鱼""鲸鱼娘"
+// 为什么需要：命令里的 system prompt 曾经把"笨蛋管理员""理想的机械人""鲸鱼娘"
 // 硬写死在 20 多个文件里。后果：
-//   ① 换一个主人称呼 → 得改十几处，漏一处她就会叫错人（对人格是硬伤）；
-//   ② 她自己的名字也写死（identity.name 改了，prompt 里还是"大肥鱼"）；
+//   ① 换一个用户称呼 → 得改十几处，漏一处她就会叫错人（对人格是硬伤）；
+//   ② 她自己的名字也写死（identity.name 改了，prompt 里还是"理想的机械人"）；
 //   ③ 这些字符串里混着"AI"字样，直接违背 persona.md 里"别自称 AI"的红线。
 //
 // 设计：只做字符串拼装，不碰业务逻辑。所有需要"跟她说话/让她说话"的模块
@@ -12,7 +12,7 @@ import { config } from './config.mjs'
 
 /** 她叫什么（identity.name）。 */
 export function selfName(cfg = config()) {
-  return String(cfg?.identity?.name || '大肥鱼')
+  return String(cfg?.identity?.name || '理想的机械人')
 }
 
 /** 她怎么自称（identity.selfClaim）。 */
@@ -20,9 +20,9 @@ export function selfClaim(cfg = config()) {
   return String(cfg?.identity?.selfClaim || '我')
 }
 
-/** 她怎么称呼主人（identity.ownerTitle，其次 identity.callOwner，最后 owner.name）。 */
+/** 她怎么称呼用户（identity.ownerTitle，其次 identity.callOwner，最后 owner.name）。 */
 export function ownerTitle(cfg = config()) {
-  return String(cfg?.identity?.ownerTitle || cfg?.identity?.callOwner || cfg?.owner?.name || '主人')
+  return String(cfg?.identity?.ownerTitle || cfg?.identity?.callOwner || cfg?.owner?.name || '用户')
 }
 
 /** 一句"你是谁"的开场，供 system prompt 用（不带 AI 字样）。 */
@@ -31,12 +31,12 @@ export function ownerTitle(cfg = config()) {
  *
  * 2026-11-02 用户定的口径：
  *   · 插件/程序改叫 dsh_bot，作者 idealrainbowbridge
- *   · **她还是大肥鱼**，自称鲸鱼娘，identity 一个字段都不改
+ *   · **她还是理想的机械人**，自称鲸鱼娘，identity 一个字段都不改
  *   · 但她**可以知道**"我这套程序叫 dsh_bot"
  *
  * 为什么允许她知道、又要求"不拿它当名字"：
  *   人知道自己用的是一台什么机器，但不会用机器的型号介绍自己。
- *   她说"我是大肥鱼"，不说"我是 dsh_bot" —— 但被问"你这程序叫什么"时，
+ *   她说"我是理想的机械人"，不说"我是 dsh_bot" —— 但被问"你这程序叫什么"时，
  *   她能答得上来，而不是"我不知道"。
  */
 export const PROGRAM_NAME = 'dsh_bot'

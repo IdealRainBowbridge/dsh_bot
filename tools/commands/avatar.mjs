@@ -1,11 +1,11 @@
-// avatar —— 看自己（或老爸）的 QQ 头像（2026-11-02）
+// avatar —— 看自己（或管理员）的 QQ 头像（2026-11-02）
 //
 //   node bot.mjs avatar           # 看自己的头像 → 用视觉模型描述出来
-//   node bot.mjs avatar --owner   # 看主人的头像
+//   node bot.mjs avatar --owner   # 看用户的头像
 //   node bot.mjs avatar --refresh # 强制重新下载（换了头像时用）
 //   node bot.mjs avatar --path    # 只给文件路径，不调模型
 //
-// 她的用法：老爸问"你头像呢/你长什么样"→ 自己真看一眼再答，
+// 她的用法：管理员问"你头像呢/你长什么样"→ 自己真看一眼再答，
 // 不要拿 persona.md 里那段文字描述当答案（那是设定，不一定等于挂出去的脸）。
 import * as A from '../lib/avatar.mjs'
 import { config } from '../lib/config.mjs'
@@ -21,8 +21,8 @@ export async function run(argv) {
 
   if (!qq) {
     console.error(wantOwner
-      ? '不知道主人的QQ号（config.owner.qq 没配）'
-      : '不知道我自己的QQ号（config.qq.selfQQ 没配）—— 跟老爸说一声')
+      ? '不知道用户的QQ号（config.owner.qq 没配）'
+      : '不知道我自己的QQ号（config.qq.selfQQ 没配）—— 跟管理员说一声')
     process.exit(1)
   }
 

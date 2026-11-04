@@ -1,11 +1,11 @@
-// social —— 她今天在 B站 干了什么（主人："除了@我的其它我都不知道发生了什么"）。
+// social —— 她今天在 B站 干了什么（用户："除了@我的其它我都不知道发生了什么"）。
 //
 //   node bot.mjs social                 # 今天：先列"没 @ 你的"，再列"@ 你的"
 //   node bot.mjs social --days 3        # 近三天
 //   node bot.mjs social --kind 回评     # 只看某一类（评论/回评/弹幕/动态/点赞/投币/关注/投稿）
 //   node bot.mjs social --invisible     # 只看她干了但没告诉你的
 //   node bot.mjs social --md            # 另存一份 Markdown 到 ~/.data/bili-social-<day>.md
-//   node bot.mjs social --push          # 摘要推到主人 QQ（每日摘要就是走这条）
+//   node bot.mjs social --push          # 摘要推到用户 QQ（每日摘要就是走这条）
 //   node bot.mjs social --json
 //
 // 数据源：~/.data/bili-social.jsonl（每条都标了 toOwner）
@@ -73,7 +73,7 @@ export async function run(argv = []) {
     const { sendOwnerQQ } = await import('../lib/notify.mjs')
     const head = `📣 我在B站今天干了这些（${recs.length} 条，${invisible.length} 条没 @ 你）\n\n`
     const ok = await sendOwnerQQ(head + text)
-    console.log(ok ? '✓ 摘要已推到主人 QQ' : '✗ 推送失败（看上面日志）')
+    console.log(ok ? '✓ 摘要已推到用户 QQ' : '✗ 推送失败（看上面日志）')
   }
 }
 

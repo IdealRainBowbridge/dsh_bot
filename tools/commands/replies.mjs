@@ -47,7 +47,7 @@ function arg(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? (arg
 /**
  * ⓪ 自己投稿下面别人发的评论 → 回。
  *
- * 10-27 主人报的：抖音那边她只回了他的文字评论，别人发的**表情包**一条没回（纯贴纸评论 text 是空串，
+ * 10-27 用户报的：抖音那边她只回了他的文字评论，别人发的**表情包**一条没回（纯贴纸评论 text 是空串，
  * 被 `if (!c.text)` 丢了）；B站 这边压根没有"自己作品评论区"这条路。两边现在统一走
  * comment-kind 判类型：文字 / 只有表情 / 图片评论 都算评论，都要有反应。
  * 真好几句回不上（LLM 憋不出话）时用轮换的兜底话术，不让任何一条评论石沉大海。
@@ -89,7 +89,7 @@ async function ownWorks(maxLeft, go, log = console.log) {
   // （真实配置 dailyMax:0 = 不限额，但当时理解反了）所有评论被标成看过，之后再也回不了。
   // 现在 seen 只在"真回过 / 她主动决定不接"时写（见下面的循环），失败一律回滚。
   const ownerMid = String(config().owner?.biliMid || config().owner?.mid || '')
-  // 主人的评论排最前（跟私聊一样，他说话永远优先）
+  // 用户的评论排最前（跟私聊一样，他说话永远优先）
   const isOwnerRow = (n) => Boolean(ownerMid) && String(n.mid) === ownerMid
   news.sort((a, b) => Number(isOwnerRow(b)) - Number(isOwnerRow(a)) || Number(a.ctime) - Number(b.ctime))
   if (!news.length) { log('  自己作品下面没有新评论。'); return 0 }
@@ -136,7 +136,7 @@ async function ownWorks(maxLeft, go, log = console.log) {
     text = line
     log(`  ↩ 回 ${n.uname}（${n.kind}）：${text}${kind !== 'text' ? ` 〔${kind}〕` : ''}`)
     const own = isOwnerRow(n)
-    if (own) log('  👑 主人的评论——免额度、优先回')
+    if (own) log('  👑 用户的评论——免额度、优先回')
     const r = await postReply(n.bvid, n.rootRpid, n.rpid, text, { go, inReplyTo: `${n.uname}：${n.label || n.text}`, aid: n.aid, title: n.vtitle, image: kind === 'image' || kind === 'sticker' ? lastPickedImage : '', bypassCap: own, capKind: 'ownReply', capMax: Number(ownCfg.ownDailyMax ?? 20) })
     log('  ' + (r.why || '?'))
     // 发出去了 ≠ 别人看得见（10-27）：B站 会给低等级号挂"仅自己可见"。
@@ -252,7 +252,7 @@ export async function run(argv = []) {
   if (go && cfg.enabled !== true) { console.log('bilibili.replies.enabled 是关的（面板 B站卡片），不社交'); return }
 
   // 自刹车（10-27）：先看最近几条评论在别人眼里到底看不看得见。
-  // 真实情况是 27 条全被挂成"仅自己可见"。但**一律停手也不对** —— 主人要的是"有新评论就去回"，
+  // 真实情况是 27 条全被挂成"仅自己可见"。但**一律停手也不对** —— 用户要的是"有新评论就去回"，
   // 所以默认 holdMode='limit'：照发，但每轮只发 1 条，并在日志里喊清楚"这条别人暂时看不见"。
   // 想彻底停就 holdMode:'block'；想无视就 --force。
   if (go && !argv.includes('--force') && cfg.holdCheck !== false) {
@@ -273,7 +273,7 @@ export async function run(argv = []) {
       }
       holdLimit = 1
       console.log('⚠ 最近 ' + checked + ' 条评论里 ' + hid + ' 条「仅自己可见」（B站 在审核这个号）——')
-      console.log('  照主人要求继续回，但这一轮只发 ' + holdLimit + ' 条，且会盯一眼别人到底看不看得见。')
+      console.log('  照用户要求继续回，但这一轮只发 ' + holdLimit + ' 条，且会盯一眼别人到底看不看得见。')
     }
   }
   const dailyMax = Number(cfg.dailyMax ?? 10)
@@ -292,7 +292,7 @@ export async function run(argv = []) {
     if (ownOnly) { console.log(`处理了 ${done} 条。今日动作账本：${JSON.stringify(actStats())}`); return { own: done, done } }
   }
 
-  // ① 被动：有人回我的评论 → 接话。排序：主人的回复永远最优先，疑似同类 agent 其次（10-25 用户拍板）
+  // ① 被动：有人回我的评论 → 接话。排序：用户的回复永远最优先，疑似同类 agent 其次（10-25 用户拍板）
   const items = await scanReplies({ sinceMs: state.lastTs })
   let left = maxOnce
   if (items.length) {
@@ -301,11 +301,11 @@ export async function run(argv = []) {
       const rank = (x) => (String(x.reply.uname) && x.reply.uname === config().owner?.name ? 0 : isFishy(x.reply.uname) ? 1 : 2)
       return rank(a) - rank(b)
     })
-    console.log(`发现 ${items.length} 条别人对我评论的新回复（主人优先），处理最多 ${left} 条：`)
+    console.log(`发现 ${items.length} 条别人对我评论的新回复（用户优先），处理最多 ${left} 条：`)
     for (const it of items.slice(0, left)) {
       const ownerReply = String(it.reply.uname) === String(config().owner?.name || '')
-      if (go && !ownerReply && !capOk('reply', dailyMax)) { console.log('  ⏭ 今日回评额度已用完（主人的回复不受限）'); break }
-      if (ownerReply) console.log('  👑 主人的回复——优先处理、免额度')
+      if (go && !ownerReply && !capOk('reply', dailyMax)) { console.log('  ⏭ 今日回评额度已用完（用户的回复不受限）'); break }
+      if (ownerReply) console.log('  👑 用户的回复——优先处理、免额度')
       console.log(`  「${it.reply.uname}」：${it.reply.text.slice(0, 60)}`)
       let replyText = ''
       try {

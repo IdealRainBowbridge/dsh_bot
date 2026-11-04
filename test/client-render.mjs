@@ -1,6 +1,6 @@
 ﻿/**
  * client.js 渲染测试 —— 用一个极小的 hooks 运行时 + 假 fetch，
- * 把「大肥鱼」设置页真正渲染一遍（含数据回来后的一次重渲染），
+ * 把「理想的机械人」设置页真正渲染一遍（含数据回来后的一次重渲染），
  * 目的是在没起 DSH 的情况下抓出 TypeError / 白屏这类问题。
  *
  * 跑法：node test/client-render.mjs
@@ -29,13 +29,13 @@ const VOICES = [
 ]
 const RESPONSES = {
   '/dsh_bot/api/config': { ok: true, config: CONFIG, voices: VOICES, configPath: 'C:/Users/x/.dsh/bot.config.json' },
-  '/dsh_bot/api/persona': { ok: true, text: '我是大肥鱼。' },
+  '/dsh_bot/api/persona': { ok: true, text: '我是理想的机械人。' },
   '/dsh_bot/api/memory': {
     ok: true,
     stats: { episodes: 12, lore: 3, facts: 4 },
     recent: [
       { role: 'user', text: '在吗', chatId: 'qq:3082864371', platform: 'qq' },
-      { role: 'assistant', text: '在的，主人。', chatId: 'qq:3082864371', platform: 'qq' },
+      { role: 'assistant', text: '在的，用户。', chatId: 'qq:3082864371', platform: 'qq' },
     ],
   },
   '/dsh_bot/api/status': {
@@ -162,10 +162,10 @@ const allText = (node) => {
 
 assert.ok(!dump.includes('载入失败'), '不该走到错误态：' + allText(tree).slice(0, 200))
 const text = allText(tree)
-for (const must of ['大肥鱼', '运行状态', '平台开关', '主人', '音色', '微信', '作息与限额', '角色设定', '记忆库']) {
+for (const must of ['理想的机械人', '运行状态', '平台开关', '用户', '音色', '微信', '作息与限额', '角色设定', '记忆库']) {
   assert.ok(text.includes(must), '缺少区块：' + must)
 }
-for (const must of ['3082864371', 'sunshine_girl', '20:00', '在的，主人。', '运行中']) {
+for (const must of ['3082864371', 'sunshine_girl', '20:00', '在的，用户。', '运行中']) {
   assert.ok(text.includes(must), '缺少数据：' + must)
 }
 // 三个平台开关（B站/QQ/微信，在 .fy-grid 里），另外微信卡片还有一个「自己判断该不该接」的开关

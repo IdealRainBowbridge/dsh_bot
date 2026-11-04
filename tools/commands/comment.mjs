@@ -55,7 +55,7 @@ export async function run(argv = []) {
     } catch (e) { console.error('✗ ' + e.message); process.exit(1) }
   }
 
-  // 真 @ 主人只在分享评论（--share）时带：日常评论不 @（存活率优先，10-25 用户拍板——
+  // 真 @ 用户只在分享评论（--share）时带：日常评论不 @（存活率优先，10-25 用户拍板——
   // 每条都 @ 又是软删除重灾区，且 @ 通知走 QQ 推送兜底）
   const ownerName = cfg.owner?.name
   const ownerMid = cfg.owner?.mid
@@ -106,12 +106,12 @@ export async function run(argv = []) {
   if (parent) body.set('parent', parent)
   // ⑤ 真 @：at_name_to_mid 携带 昵称→mid 映射（不带 @ 的昵称作为 key）
   if (ownerName && ownerMid) body.set('at_name_to_mid', JSON.stringify({ [ownerName]: ownerMid }))
-  // 防呆：凭据若是主人自己的号，@ 主人 = 自己 @ 自己，B站不会发通知（10-24 实锤）。
-  // 不拦发送（QQ 推送会兜底通知），但必须喊出来让主人知道该换鱼的凭据。
+  // 防呆：凭据若是用户自己的号，@ 用户 = 自己 @ 自己，B站不会发通知（10-24 实锤）。
+  // 不拦发送（QQ 推送会兜底通知），但必须喊出来让用户知道该换鱼的凭据。
   try {
     const nav = await apiGet('https://api.bilibili.com/x/web-interface/nav', H)
     if (String(nav?.data?.mid ?? '') === String(ownerMid)) {
-      console.error(`⚠️ 当前凭据是主人自己的号（${nav.data.uname}）：这条评论会以主人身份发出、@ 不会弹任何通知。`)
+      console.error(`⚠️ 当前凭据是用户自己的号（${nav.data.uname}）：这条评论会以用户身份发出、@ 不会弹任何通知。`)
       console.error('   请在浏览器登录鱼的号（御坂美琴Rosie）后重新提交凭据 —— 面板「凭据」或 POST /api/cookie。')
     }
   } catch { /* nav 挂了不拦发送 */ }
@@ -159,14 +159,14 @@ export async function run(argv = []) {
   console.log(`✓ 已发送（rpid=${j?.data?.rpid ?? '?'}）${isShare ? ' · 分享额度已扣' : ''}`)
   console.log(`  ${title} → ${message.slice(0, 60)}`)
 
-  // 分享还要让主人真的"收到"：B站凭据是主人自己的账号（鱼没有独立小号），
-  // "@主人" 实际是自己的号 @ 自己 —— B站永远不给这种 @ 发通知。
-  // 所以真发成功后用 QQ 私信把链接推过去，这才是主人能收到的那条通知。
+  // 分享还要让用户真的"收到"：B站凭据是用户自己的账号（鱼没有独立小号），
+  // "@用户" 实际是自己的号 @ 自己 —— B站永远不给这种 @ 发通知。
+  // 所以真发成功后用 QQ 私信把链接推过去，这才是用户能收到的那条通知。
   if (isShare) {
     try {
       const { sendOwnerQQ } = await import('../lib/notify.mjs')
       const ok = await sendOwnerQQ(`【B站分享】《${title.slice(0, 40)}》\n${message.slice(0, 80)}\nhttps://www.bilibili.com/video/${bvid}`)
-      console.log(ok ? '  📨 已推送到主人 QQ（评论区 @ 自己账号不会弹通知）' : '  ⚠️ QQ 推送失败（NapCat 没起？主人可能注意不到这条分享）')
+      console.log(ok ? '  📨 已推送到用户 QQ（评论区 @ 自己账号不会弹通知）' : '  ⚠️ QQ 推送失败（NapCat 没起？用户可能注意不到这条分享）')
     } catch (e) { swallow(e, 'tools/commands/comment.mjs:167') }
   }
 }

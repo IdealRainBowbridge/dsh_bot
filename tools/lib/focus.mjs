@@ -1,4 +1,4 @@
-// focus —— 她「此刻在做的那一件事」（10-26 主人拍板）
+// focus —— 她「此刻在做的那一件事」（10-26 用户拍板）
 //
 // 背景：完全自由原本的设计是"给她很高权限，让她自己决定干什么"。
 // 我第一版把它做成了三条常驻循环一起开 —— 那不是自主，那是三条流水线并行；
@@ -64,7 +64,7 @@ export function readFocus() {
  * 写下"我现在在干什么"。
  * @param {string} activity web|bilibili|rest|off
  * @param {number} min 打算干多久（分钟，0 = 不设时限，靠她自己收工）
- * @param {string} note 一句话（写给自己/给主人看的由头）
+ * @param {string} note 一句话（写给自己/给用户看的由头）
  */
 export function writeFocus(activity, min = 0, note = '') {
   const now = Date.now()

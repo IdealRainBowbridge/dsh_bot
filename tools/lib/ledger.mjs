@@ -1,7 +1,7 @@
 // 账本 —— 让她**自己**看得到今天吃了多少饭钱、还能吃多少、今天还能干几件事。
 //
-// 背景（10-26 主人报）：她记忆里反复问"账本/饭钱"，因为她根本读不到账本 ——
-// 一个只把钱挂在嘴上、却查不了账的角色，只能一直问主人。把账本变成她能读的东西，
+// 背景（10-26 用户报）：她记忆里反复问"账本/饭钱"，因为她根本读不到账本 ——
+// 一个只把钱挂在嘴上、却查不了账的角色，只能一直问用户。把账本变成她能读的东西，
 // 这个圈才闭上。
 //
 // 三个数据源，全部有据可查：
@@ -11,7 +11,7 @@
 //   ③ 动作额度：她自己那几本账（quota.json / bili-actions.json / douyin-*.json / imggen.json）
 //
 // 余额（官方钱包）走可选接口：config.ledger.balanceUrl + apiKey 配了才查，
-// 查不到就明确说"看不到余额"，绝不编一个 0（宁可让她去问主人，也不能骗她）。
+// 查不到就明确说"看不到余额"，绝不编一个 0（宁可让她去问用户，也不能骗她）。
 import { execFile, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -69,7 +69,7 @@ function usageSignature(dir) {
 }
 
 /**
- * token 用量（她 / 主人分开）。
+ * token 用量（她 / 用户分开）。
  * @returns {Promise<{days:Array, lifetime:object, sessions:number, cached:boolean, error?:string}>}
  */
 export async function usage(opts = {}) {
@@ -160,7 +160,7 @@ async function mergeDirect(data) {
 // 为什么加：官方口径 1 credit = 0.01 USD（a2a `/v1/credits` 里 usd_per_credit 字段）。
 // 以前的账本按 DeepSeek 官方单价估 token → 元，跟 a2a 实际扣的 credit **是两套账**，
 // 实测差 800 倍（DSH 记 5131 token 对应 a2a 掉 241 credit = ¥17，账本却说 ≈¥0.02）。
-// 现在统一：**一切以 credit 为准**，钱只是给主人看的换算视图。
+// 现在统一：**一切以 credit 为准**，钱只是给用户看的换算视图。
 export const USD_PER_CREDIT = 0.01
 /** 美元 → 人民币（估，仅用于展示；可在 config.ledger.usdCny 覆盖） */
 function usdCny(cfg = config()) {

@@ -1,6 +1,6 @@
 // 评论/回复的「表达类型」分配器（2026-10-27）
 //
-// 主人提的是：评论不该只有文字 —— 文字、颜文字、表情(emoji)、表情包(图)、图片，抖音还要能发语音，
+// 用户提的是：评论不该只有文字 —— 文字、颜文字、表情(emoji)、表情包(图)、图片，抖音还要能发语音，
 // 自己作品下面能这样，刷到的别人视频下面也要能这样。
 //
 // 这个模块只干一件事：**决定"这一条用什么说"**，并给出落地要用的素材（表情包图片路径 / 抖音官方表情）。
@@ -57,7 +57,7 @@ export function decorateText(text, { emojiChance = 0.35, kaomojiChance = 0.2, ra
  *   voice       —— 语音（抖音：私信 mp4 语音条；B站：不支持 → 降级 text）
  */
 export function chooseKind({ platform = 'douyin', styles = {}, allowImage = true, random = Math.random } = {}) {
-  // auto:false = 主人一键收手，只发纯文字（调用方也在判，这里再兜一层，别让别的入口绕过去）
+  // auto:false = 用户一键收手，只发纯文字（调用方也在判，这里再兜一层，别让别的入口绕过去）
   if (styles.auto === false) return 'text'
   const s = {
     text: Number(styles.text ?? 0.6),

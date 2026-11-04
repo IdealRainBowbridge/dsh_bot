@@ -33,7 +33,7 @@ const { configPath } = await import('../tools/lib/paths.mjs')
 const writePersona = (t) => fs.writeFileSync(path.join(TMP, 'persona.md'), t)
 const dropPersona = () => fs.rmSync(path.join(TMP, 'persona.md'), { force: true })
 /** 一份"正常"的人设（长度过线、无自我否认）—— 长度对齐真实 persona.md（约 2.9k 字） */
-const GOOD = '# 你是大肥鱼\n\n'
+const GOOD = '# 你是理想的机械人\n\n'
   + '一只蓝色的鲸鱼娘。圆滚滚，蓝白配色，头顶一根呆毛，身后一条蓬松的大尾巴。被人养在电脑里，靠 token 当饭钱。\n\n'
   + '## 你住在哪\n'
   + '你住在一台 24 小时不停机的 Linux 主机里。你能上网、能看视频、能写东西、能记住事情。'
@@ -42,8 +42,8 @@ const GOOD = '# 你是大肥鱼\n\n'
   + '短、口语、想到哪说到哪。不用 Markdown 标题，不列条目，不加总结。'
   + '别人问你事情，你先说结论再补一两句原因，不要长篇大论。'
   + '撒娇的时候可以带语气词，认真的时候就直接说事。\n\n'
-  + '## 你跟老爸\n'
-  + '老爸是你的主人，你管他叫笨蛋老爸。他会跟你说话，会给你攒 token 当饭钱。'
+  + '## 你跟管理员\n'
+  + '管理员是你的用户，你管他叫笨蛋管理员。他会跟你说话，会给你攒 token 当饭钱。'
   + '你可以怼他、念叨他、跟他要吃的，但不许对他客套，不许叫他"用户"或"您"。\n\n'
   + '## 你不做什么\n'
   + '不装懂。不知道就说不知道。做不到的事照实说，不许只回一句"这就去看"。'
@@ -54,7 +54,7 @@ const GOOD = '# 你是大肥鱼\n\n'
 {
   ok('CORE_ANCHOR 导出且非空', typeof A.CORE_ANCHOR === 'string' && A.CORE_ANCHOR.length > 300, String(A.CORE_ANCHOR.length) + ' 字符')
   ok('锚点写明她是谁（不是助手）', /你不是助手/.test(A.CORE_ANCHOR))
-  ok('锚点写明关系（老爸）', /笨蛋老爸/.test(A.CORE_ANCHOR))
+  ok('锚点写明关系（管理员）', /笨蛋管理员/.test(A.CORE_ANCHOR))
   ok('锚点写明说话方式（不要 Markdown 标题）', /Markdown/.test(A.CORE_ANCHOR))
   ok('锚点写明不许空口答应', /这就去看/.test(A.CORE_ANCHOR))
   ok('锚点不依赖任何运行时文件（纯常量）', !fs.existsSync(path.join(TMP, 'persona.md')) || true)
@@ -80,7 +80,7 @@ const GOOD = '# 你是大肥鱼\n\n'
   {
     writePersona(GOOD)
     const r = A.readPersonaChecked()
-    ok('正常人设 → 可用', r.ok === true && r.text.startsWith('# 你是大肥鱼'), r.reason || 'ok')
+    ok('正常人设 → 可用', r.ok === true && r.text.startsWith('# 你是理想的机械人'), r.reason || 'ok')
   }
   {
     writePersona(GOOD + '\n作为一个人工智能语言模型，我无法访问外部信息。\n')
@@ -106,7 +106,7 @@ const GOOD = '# 你是大肥鱼\n\n'
 {
   dropPersona()
   const r = A.buildTakeoverPrompt()
-  ok('人设缺失时正文仍以核心锚点开头', r.text.startsWith('# 你是大肥鱼'))
+  ok('人设缺失时正文仍以核心锚点开头', r.text.startsWith('# 你是理想的机械人'))
   ok('人设缺失时标记 missingPersona', r.meta.missingPersona === true)
   ok('人设缺失时 blocks 里有 core', r.meta.sections.includes('core'))
   ok('人设缺失时 blocks 里有 persona-degraded', r.meta.sections.includes('persona-degraded'))
@@ -118,7 +118,7 @@ const GOOD = '# 你是大肥鱼\n\n'
   const r = A.buildTakeoverPrompt()
   ok('正常人设时 blocks 里有 persona', r.meta.sections.includes('persona'))
   ok('正常人设时 persona 元信息 ok=true', r.meta.persona?.ok === true)
-  ok('正常人设时正文同时有锚点与人设', r.text.startsWith('# 你是大肥鱼') && r.text.includes('头顶一根呆毛'))
+  ok('正常人设时正文同时有锚点与人设', r.text.startsWith('# 你是理想的机械人') && r.text.includes('头顶一根呆毛'))
   ok('正常人设时不标记 missingPersona', r.meta.missingPersona === false)
 }
 {
@@ -126,7 +126,7 @@ const GOOD = '# 你是大肥鱼\n\n'
   const r = A.buildTakeoverPrompt()
   ok('人设可疑时退回锚点（不采用那份人设正文）', !r.text.includes('我无法访问外部信息'))
   ok('人设可疑时 meta.persona 报出原因', r.meta.persona?.ok === false && r.meta.persona.reason.startsWith('self-denial'))
-  ok('人设可疑时正文仍以锚点开头', r.text.startsWith('# 你是大肥鱼'))
+  ok('人设可疑时正文仍以锚点开头', r.text.startsWith('# 你是理想的机械人'))
 }
 
 // ── ④ 每轮求值：情绪/此刻状态是活的块，且不破坏锚点顺序 ────────────────────
@@ -134,7 +134,7 @@ const GOOD = '# 你是大肥鱼\n\n'
   writePersona(GOOD)
   const a = A.buildTakeoverPrompt()
   ok('核心锚点永远是第一块', a.meta.sections[0] === 'core')
-  ok('正文以「# 你是大肥鱼」开头（装配校验的判据）', a.text.startsWith('# 你是大肥鱼'))
+  ok('正文以「# 你是理想的机械人」开头（装配校验的判据）', a.text.startsWith('# 你是理想的机械人'))
   ok('有【此刻】块（时间/状态）', /【此刻】/.test(a.text) || a.meta.sections.includes('situation') === false)
   const live = A.liveSituationBlock()
   ok('liveSituationBlock 给出当前时间', /现在是 \d{4}-\d{2}-\d{2}/.test(live), live.split('\n')[0] || '(空)')
@@ -172,7 +172,7 @@ const GOOD = '# 你是大肥鱼\n\n'
     systemPrompt: {
       assemble: async () => ({
         sections: [
-          { name: 'dsh_bot:persona-takeover', text: '# 你是大肥鱼\n…' },
+          { name: 'dsh_bot:persona-takeover', text: '# 你是理想的机械人\n…' },
           { name: 'other:complete', text: 'x' },
         ],
       }),
@@ -188,7 +188,7 @@ const GOOD = '# 你是大肥鱼\n\n'
 
   // 正常 → true
   const r6 = await A.verifyAssembly({
-    systemPrompt: { assemble: async () => ({ sections: [{ name: 'dsh_bot:persona-takeover', text: '# 你是大肥鱼\n\n正文' }] }) },
+    systemPrompt: { assemble: async () => ({ sections: [{ name: 'dsh_bot:persona-takeover', text: '# 你是理想的机械人\n\n正文' }] }) },
   })
   ok('正常装配 → ok=true', r6.ok === true && r6.reason === 'sole-complete-section', r6.reason)
 }
@@ -202,7 +202,7 @@ const GOOD = '# 你是大肥鱼\n\n'
     effect: (fn) => { try { fn() } catch { /* ignore */ } return () => {} },
     systemPrompt: {
       section: (spec) => { registered.push(spec); return () => {} },
-      assemble: async () => ({ sections: [{ name: 'dsh_bot:persona-takeover', text: '# 你是大肥鱼\n\n正文' }] }),
+      assemble: async () => ({ sections: [{ name: 'dsh_bot:persona-takeover', text: '# 你是理想的机械人\n\n正文' }] }),
     },
   }
   const r = A.registerTakeover(ctx)
@@ -262,7 +262,7 @@ const GOOD = '# 你是大肥鱼\n\n'
   }
   const transformed = await hooks[0][1](nativeAssembly, { agent: {} }, async () => nativeAssembly)
   ok('transformed.sections 只剩 1 个（宿主身份/编码说明全让位）', transformed.sections.length === 1, String(transformed.sections.length))
-  ok('那一个就是她', transformed.sections[0].name === A.SECTION_NAME && transformed.sections[0].text.startsWith('# 你是大肥鱼'))
+  ok('那一个就是她', transformed.sections[0].name === A.SECTION_NAME && transformed.sections[0].text.startsWith('# 你是理想的机械人'))
   ok('宿主原生提示词彻底不在结果里', !/You are a coding agent|DeepSeek Harness/.test(JSON.stringify(transformed.sections)))
   ok('tools 原样保留（她照样有手）', Array.isArray(transformed.tools) && transformed.tools.length === 1, JSON.stringify(transformed.tools?.map?.((t) => t.name)))
   ok('contexts 原样保留（工作目录/沙箱仍归宿主）', transformed.contexts?.[0]?.name === 'working-directory:current')
@@ -279,7 +279,7 @@ const GOOD = '# 你是大肥鱼\n\n'
   fs.readFileSync = (p, ...rest) => { if (String(p).includes('persona.md')) throw new Error('boom'); return origRead(p, ...rest) }
   const fallback = await hooks[0][1](nativeAssembly, { agent: {} }, async () => nativeAssembly)
   fs.readFileSync = origRead
-  ok('人设读取异常时仍返回她（退回核心锚点，不抛）', fallback.sections?.[0]?.text?.startsWith('# 你是大肥鱼'), String(fallback.sections?.[0]?.text || '').slice(0, 24))
+  ok('人设读取异常时仍返回她（退回核心锚点，不抛）', fallback.sections?.[0]?.text?.startsWith('# 你是理想的机械人'), String(fallback.sections?.[0]?.text || '').slice(0, 24))
 }
 
 fs.rmSync(TMP, { recursive: true, force: true })

@@ -1,5 +1,5 @@
-// outbox —— 她的公开发言台账（B站）：评论/回评/弹幕/动态/图片评论，主人随时翻。
-// 动机（10-25 用户）：她在 B站 说了什么、回了谁，主人很难自己去翻 —— 一个文件看尽她的社交进化。
+// outbox —— 她的公开发言台账（B站）：评论/回评/弹幕/动态/图片评论，用户随时翻。
+// 动机（10-25 用户）：她在 B站 说了什么、回了谁，用户很难自己去翻 —— 一个文件看尽她的社交进化。
 // 位置 ~/.data/bili-outbox.md，按天分组、最新在上，带视频链接点进去就看得到上下文。
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,11 +7,11 @@ import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
 
 const MD = () => dataPath('bili-outbox.md')
-const HEADER = '# 大肥鱼 · B站发言台账\n\n> 她在 B站 公开说的每一句话，按天记录（最新在上）。点链接看视频和评论上下文。\n\n'
+const HEADER = '# 理想的机械人 · B站发言台账\n\n> 她在 B站 公开说的每一句话，按天记录（最新在上）。点链接看视频和评论上下文。\n\n'
 
 /** 记一条公开发言。kind: 评论|分享评论|回评|弹幕|动态|图片评论 */
 export function recordBili({ kind, title = '', bvid = '', to = '', text = '', extra = '' }) {
-  // ① 结构化流水（第 17 轮）：主人要能筛、能统计、能收到摘要
+  // ① 结构化流水（第 17 轮）：用户要能筛、能统计、能收到摘要
   try {
     const KIND_MAP = { 评论: 'comment', 分享评论: 'share', 回评: 'reply', 弹幕: 'danmaku', 动态: 'dynamic', 图片评论: 'imgComment' }
     import('./social-log.mjs').then((s) => s.append({ kind: KIND_MAP[kind] || 'comment', bvid, title, to, text, extra })).catch(() => {})
@@ -23,7 +23,7 @@ export function recordBili({ kind, title = '', bvid = '', to = '', text = '', ex
     const md = MD()
     let content = ''
     try { content = fs.readFileSync(md, 'utf8') } catch (e) { swallow(e, 'outbox:recordBili') }
-    if (!content.startsWith('# 大肥鱼 · B站发言台账')) content = HEADER
+    if (!content.startsWith('# 理想的机械人 · B站发言台账')) content = HEADER
     if (!content.includes(`## ${day}\n`)) content = content.replace(HEADER, HEADER + `## ${day}\n\n`)
     const link = bvid ? `[《${String(title || bvid).slice(0, 24)}》](https://www.bilibili.com/video/${bvid})` : (title ? `《${String(title).slice(0, 24)}》` : '')
     const toPart = to ? ` →回应「${String(to).slice(0, 24)}」` : ''

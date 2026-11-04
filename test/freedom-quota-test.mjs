@@ -1,6 +1,6 @@
 // 完全自由 / 额度渲染回归测试（10-26）
 //
-// 主人原话：「为什么我打开完全自由他活动的频率反而变少了很多，大部分时间都是空置状态，
+// 用户原话：「为什么我打开完全自由他活动的频率反而变少了很多，大部分时间都是空置状态，
 //            没有上网刷抖音刷b站和发作品等等动作」
 //
 // 取证结论（三条都实测）：
@@ -26,7 +26,7 @@ const ok = (name, cond, extra = '') => {
 }
 
 const base = {
-  identity: { name: '大肥鱼' }, owner: { qq: '3082864371' }, guard: { dryRun: false },
+  identity: { name: '理想的机械人' }, owner: { qq: '3082864371' }, guard: { dryRun: false },
   night: { maxVideos: 5 }, share: { minScore: 15 },
 }
 const st = { atText: '22:00', window: '17:00-24:00', withinWindow: '第2次', maxVideos: 5 }
@@ -54,7 +54,7 @@ ok('唤醒语不再鼓励躺平', !sched.includes('也可以选择歇着什么�
 ok('唤醒语要求至少跑一个真命令', sched.includes('至少跑一个真命令'))
 ok('唤醒语带上真实额度数字', sched.includes('今天的额度（真实数字，别自己猜）'))
 
-// ⑥ 完全自由的语义（10-26 主人纠正后定稿）：只摇人 + 只放行她挑的那一件事，
+// ⑥ 完全自由的语义（10-26 用户纠正后定稿）：只摇人 + 只放行她挑的那一件事，
 //    **不再**连带点亮三个循环（那会让自主性消失、也不像活人）。
 //    单件放行的不变量在 focus-one-thing-test.mjs 里测，这里只守住"不许回退成三开"。
 const idx = fs.readFileSync(path.join(REPO, 'lib', 'index.js'), 'utf8')

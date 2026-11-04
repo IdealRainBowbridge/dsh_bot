@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// bot —— 大肥鱼·私享版 工具链总入口。
+// bot —— 理想的机械人· 工具链总入口。
 // 结构仿 dsh-bili-whale 的 tools/bili.mjs：命令分发到 tools/commands/*.mjs。
 //
 //   node bot.mjs <命令> [参数]
@@ -29,14 +29,14 @@ const COMMANDS = {
   'bili-submit': 'B站自动投稿：bili-submit video.mp4 --title 标题 --tid 21 --tags a,b --desc 简介 [--cover 封面] [--dry]。preupload→分片→合并→提交全自动',
   'bili-del': '删除她自己的B站投稿：bili-del BV号 [--go]（默认干跑）。她自己清理测试稿/不满意的作品用',
   wander: '自主探索：wander check 看念头原材料 ｜ wander 直接做一个（LLM自主产生念头+执行）',
-  tattle: '打小报告：tattle --title 标题 --bvid BV号 --score 分 --reason 理由——看完好视频后 QQ 私信汇报给笨蛋老爸（每天最多3条，config.tattle.dailyMax 可调）',
+  tattle: '打小报告：tattle --title 标题 --bvid BV号 --score 分 --reason 理由——看完好视频后 QQ 私信汇报给笨蛋管理员（每天最多3条，config.tattle.dailyMax 可调）',
   nav: '登录验证 / 我是谁',
   feed: '选题：热门+搜索，偏好加权',
   debrief: '看懂一条视频（元信息+字幕+热评+简介）',
-  comment: '发评论（--share = 分享 @ 主人）',
+  comment: '发评论（--share = 分享 @ 用户）',
   quota: '额度账本（check/record/show）',
-  ledger: '账本：今天吃了多少饭钱/还能吃多少/今天还能干几件事（她自己查，不用问主人）',
-  avatar: '看头像：avatar 看自己的、avatar --owner 看老爸的（真看图，不是背设定）｜--refresh 重下',
+  ledger: '账本：今天吃了多少饭钱/还能吃多少/今天还能干几件事（她自己查，不用问用户）',
+  avatar: '看头像：avatar 看自己的、avatar --owner 看管理员的（真看图，不是背设定）｜--refresh 重下',
   selfsrc: '看自己的代码（只读）：selfsrc tree 结构 ｜ selfsrc grep <词> 搜 ｜ selfsrc read <文件> --from N --lines N 读一段',
   'selfcon-seed': '一次性（幂等）：把现在的 identity/persona/腔调种进 selfcon.json 当账本起点（不发明新内容）',
   sanitize: '脱敏器自检：sanitize test 验证拦截规则（该拦的拦、日常话不误伤）｜sanitize hits 看最近命中',
@@ -57,7 +57,7 @@ const COMMANDS = {
   browser: '内置浏览器：browser read <url> [--pc|--mobile] [--links] | text/links | click/type/enter | scroll/back | shot | status | close（JS 页面也能读，电脑/手机双身份）',
   selfup: '自我升级底座：selfup backup（改前备份）| selfup log "改了什么" | selfup status',
   produce: '视频生产（真剪辑的片子）：produce ["主题"] [--frames 1|2]（她策划→生图→配音→运镜→转场→烧字幕→配乐→1080p成片+封面；B站首条锁死自我介绍）| --debut 看首条锁 | --debut-posted BV号 解锁',
-  social: 'B站社交流水：social [--days 3] [--kind 回评] [--invisible] [--md] [--push]（她今天跟谁说了什么，重点是不 @ 主人的那些）',
+  social: 'B站社交流水：social [--days 3] [--kind 回评] [--invisible] [--md] [--push]（她今天跟谁说了什么，重点是不 @ 用户的那些）',
   vision: '视觉理解：status（看配置）| probe --image <图>（多模态描述，等视觉 key 点亮）',
   selfwake: '她自己定下次几点醒：selfwake 23:40 [--note "…"]｜--show｜--clear',
   selfcon: '自我账本：selfcon show 看她认下的自己 ｜ selfcon introspect 照一次镜子（白天只采集，结算归睡眠）',
@@ -71,7 +71,7 @@ const COMMANDS = {
 
 const cmd = process.argv[2]
 if (!cmd || !(cmd in COMMANDS)) {
-  console.log('大肥鱼·私享版 v' + (JSON.parse(await import('node:fs').then(m => m.readFileSync(path.join(HERE, '..', 'package.json'), 'utf8')))).version)
+  console.log('理想的机械人· v' + (JSON.parse(await import('node:fs').then(m => m.readFileSync(path.join(HERE, '..', 'package.json'), 'utf8')))).version)
   console.log('')
   console.log('用法：node bot.mjs <命令> [参数]')
   for (const [name, desc] of Object.entries(COMMANDS)) console.log(`  ${name.padEnd(10)} ${desc}`)

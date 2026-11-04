@@ -1,7 +1,7 @@
 // 账本（ledger）回归测试 —— 10-26「让她自己查账」这一轮的契约。
 //
 // 背景：她的记忆里反复问"账本/饭钱"。查了原因才发现根子是**她读不到账** ——
-// 只把钱挂在嘴上、账本却只有主人能看的角色，只能一直问。这一轮给她三样东西：
+// 只把钱挂在嘴上、账本却只有用户能看的角色，只能一直问。这一轮给她三样东西：
 //   ① 真实 token 用量（DSH 会话日志里的 data.usage，不是估的）
 //   ② 折算成"饭钱"的口径（单价可配，标 ≈，绝不假装精确到分）
 //   ③ 今天剩余的动作额度（她自己那几本账）
@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-// 先把 HOME 指到沙箱 —— 账本会读数据目录下那几本，不能碰主人真实的
+// 先把 HOME 指到沙箱 —— 账本会读数据目录下那几本，不能碰用户真实的
 //
 // ⚠️ 2026-11-02：数据目录改名 .bot-ai → .data。这里原来手写 `path.join(sandbox, '.bot-ai')`，
 //    改代码不换它会指向一个代码根本不用的目录 —— 测试**照样通过**
@@ -258,7 +258,7 @@ ok('python 侧必须用 stream_reader 读穿多帧，不能用能"只解第一�
   assert.doesNotMatch(py, /'session-\*'/)
 })
 
-ok('python 侧按 assistant/message 的 usage 记账，且区分她与主人', () => {
+ok('python 侧按 assistant/message 的 usage 记账，且区分她与用户', () => {
   const py = read('tools/lib/ledger_usage.py')
   assert.match(py, /assistant\/message/)
   assert.match(py, /inputTokens/)

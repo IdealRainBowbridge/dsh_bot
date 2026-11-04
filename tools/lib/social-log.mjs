@@ -1,14 +1,14 @@
-// 她在 B站 干了什么 —— 结构化流水（10-26 第 17 轮，主人："除了@我的其它我都不知道发生了什么"）。
+// 她在 B站 干了什么 —— 结构化流水（10-26 第 17 轮，用户："除了@我的其它我都不知道发生了什么"）。
 //
 // 以前只有两处痕迹：bili-outbox.md（人读的散文台账）和 quota.json（只有计数）。
-// 主人要看"她今天到底跟谁说了什么、点了谁、转了什么"，散文不好筛，计数更不够。
+// 用户要看"她今天到底跟谁说了什么、点了谁、转了什么"，散文不好筛，计数更不够。
 // 所以这里再记一份 append-only 的 JSONL（机器可查、可统计、可生成摘要推给他）：
 //   ~/.data/bili-social.jsonl
 //
 // 记录两类：
 //   说话 —— 评论 / 分享评论 / 回评 / 弹幕 / 动态 / 图片评论（带正文、视频标题、回给谁）
 //   动作 —— 点赞 / 投币 / 关注 / 投稿（谁、哪条视频）
-// 并且每条都标出**是不是 @ 主人**：主人最想知道的就是"没 @ 我的那部分"。
+// 并且每条都标出**是不是 @ 用户**：用户最想知道的就是"没 @ 我的那部分"。
 import fs from 'node:fs'
 import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'
@@ -29,12 +29,12 @@ export const KIND_LABEL = {
 }
 const SPEAK_KINDS = new Set(['comment', 'share', 'reply', 'danmaku', 'dynamic', 'imgComment'])
 
-/** 这条是不是 @ 了主人？（主人在 B站 可能被叫"主人"，也可能被他自己的昵称 @） */
+/** 这条是不是 @ 了用户？（用户在 B站 可能被叫"用户"，也可能被他自己的昵称 @） */
 export function mentionsOwner(rec = {}, cfg = {}) {
   const to = String(rec.to || '')
-  if (/主人/.test(to)) return true                       // 回给主人的（to 里写着主人）
+  if (/用户/.test(to)) return true                       // 回给用户的（to 里写着用户）
   const s = `${rec.text || ''} ${rec.extra || ''}`
-  if (/(@|＠)\s*主人/.test(s)) return true
+  if (/(@|＠)\s*用户/.test(s)) return true
   const nick = String(cfg.owner?.biliName || cfg.owner?.nickname || '').trim()
   if (nick && (s.includes('@' + nick) || s.includes('＠' + nick))) return true
   return false
@@ -139,7 +139,7 @@ export function countLine(d) {
 }
 
 /**
- * 给主人看的摘要（推 QQ 用）：重点是「没 @ 你的那些」。
+ * 给用户看的摘要（推 QQ 用）：重点是「没 @ 你的那些」。
  * @param {Array} recs
  * @param {{title?:string, limit?:number}} o
  */
@@ -166,15 +166,15 @@ export function digestText(recs = [], o = {}) {
 /** 完整 Markdown（存文件 / 面板看）。 */
 export function markdown(recs = [], o = {}) {
   const days = stats(recs)
-  const head = [`# 大肥鱼 · B站社交流水 ${o.title || ''}`.trim(), '']
+  const head = [`# 理想的机械人 · B站社交流水 ${o.title || ''}`.trim(), '']
   if (!days.length) return head.concat(['（这段时间她没在 B站 动过）']).join('\n')
-  head.push(`共 ${recs.length} 条 · ${days.length} 天 · 没 @ 主人的 ${recs.filter((r) => !r.toOwner).length} 条`)
+  head.push(`共 ${recs.length} 条 · ${days.length} 天 · 没 @ 用户的 ${recs.filter((r) => !r.toOwner).length} 条`)
   head.push('')
   for (const d of days) {
     head.push(`## ${d.day}（${countLine(d)}）`)
     head.push('')
     const rows = recs.filter((r) => r.day === d.day).sort((a, b) => Number(new Date(b.ts)) - Number(new Date(a.ts)))
-    head.push('| 时间 | 做了什么 | 在哪 | 说了什么 | @主人 |')
+    head.push('| 时间 | 做了什么 | 在哪 | 说了什么 | @用户 |')
     head.push('|---|---|---|---|---|')
     for (const r of rows) {
       const where = r.bvid
@@ -198,7 +198,7 @@ export function writeMarkdown(recs = [], day = new Date().toLocaleDateString('sv
 
 // ── 补录历史：bili-outbox.md 是老的散文台账，里面有几天的真事 ────────────────
 /**
- * 把 bili-outbox.md 里已有的发言灌进 JSONL（主人第一次打开就能看到前几天的）。
+ * 把 bili-outbox.md 里已有的发言灌进 JSONL（用户第一次打开就能看到前几天的）。
  * 行格式：`- 20:29 **分享评论** [《标题》](链接)：正文` / `- 20:17 **回评** […] →回应「人：…」：正文`
  * 幂等：同一天同一时刻同一段正文已在流水里就跳过。
  */
@@ -233,7 +233,7 @@ export function backfillFromOutbox(file = dataPath('bili-outbox.md')) {
       ts, day, kind: KIND_MAP[kindLabel] || 'comment', label: kindLabel,
       speak: true, bvid, title, to, text: text.slice(0, 400), extra: '',
       url: bvid ? `https://www.bilibili.com/video/${bvid}` : (link ? link[2] : ''),
-      toOwner: /(@|＠)\s*主人/.test(`${to} ${text}`),
+      toOwner: /(@|＠)\s*用户/.test(`${to} ${text}`),
       backfilled: true,
     })
     n++

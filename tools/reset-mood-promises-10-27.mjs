@@ -3,7 +3,7 @@
 // 事故同 restore-memory：有测试没隔离，把这两份也写成了假数据。
 //   · mood.json    → 测试值（心情 40 / 饥饿 90 之类，跟今天真实情况不符）
 //   · promises.json→ 测试造出来的"别的事：没有字幕"之类的假承诺
-// 真实情况：主人 16:4x 说她看了《可塑性记忆》第一集（弹幕材料真读进去了），
+// 真实情况：用户 16:4x 说她看了《可塑性记忆》第一集（弹幕材料真读进去了），
 // 中午他说自己吃了烧鸭 → 她的饥饿应该已经落地。
 //
 //   node tools/reset-mood-promises-10-27.mjs [--go]
@@ -13,7 +13,7 @@ import { dataPath } from './lib/paths.mjs'
 const GO = process.argv.includes('--go')
 const today = new Date().toLocaleDateString('sv-SE')
 
-const mood = { value: 62, hunger: 20, day: today, note: '10-27 复位：主人说中午吃了烧鸭，她的饥饿落地' }
+const mood = { value: 62, hunger: 20, day: today, note: '10-27 复位：用户说中午吃了烧鸭，她的饥饿落地' }
 const promises = {
   items: [{
     id: 'pm-binge-ep1',

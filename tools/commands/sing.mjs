@@ -1,4 +1,4 @@
-// sing —— 唱一首给主人听（命令行入口；QQ 里说"唱一首"也走同一管线）
+// sing —— 唱一首给用户听（命令行入口；QQ 里说"唱一首"也走同一管线）
 //   node bot.mjs sing ["主题"]                        # 原创（说唱/旋律）
 //   node bot.mjs sing cover "孙燕姿 天黑黑"           # 翻唱：搜源歌→分离→换她的声音→混伴奏
 //   node bot.mjs sing cover "天黑黑" --url <音频直链或本地路径>   # 指定源（不搜索）
@@ -58,7 +58,7 @@ export async function run(argv = []) {
     console.log(`✓ 唱好了（${song.cache === 'hit' ? '歌单直接点唱' : Math.round((Date.now() - t0) / 60000) + ' 分钟学会'}）：${song.file}`)
     try {
       const ok = await sendQQ(song.file, `🎵 我学会唱《${song.title}》了——用我自己的声音哦～`)
-      console.log(ok ? '✓ 已唱给主人 QQ' : '✗ 发送失败（NapCat 没起？音频在上面）')
+      console.log(ok ? '✓ 已唱给用户 QQ' : '✗ 发送失败（NapCat 没起？音频在上面）')
     } catch (e) { console.log('✗ 发送失败：' + e.message) }
     return
   }
@@ -74,7 +74,7 @@ export async function run(argv = []) {
   console.log(`《${song.title}》 ${song.bpm}bpm`)
   console.log(song.lyrics.map((l, i) => `  ${i + 1}. ${l}`).join('\n'))
   const ok = await sendQQ(song.file, `🎵《${song.title}》 ${song.bpm}bpm —— ${song.lyrics.join(' / ')}`)
-  console.log(ok ? '✓ 已唱给主人 QQ' : '✗ 发送失败（音频在 ' + song.file + '）')
+  console.log(ok ? '✓ 已唱给用户 QQ' : '✗ 发送失败（音频在 ' + song.file + '）')
 }
 
 if (process.argv[1] && process.argv[1].endsWith('sing.mjs')) {

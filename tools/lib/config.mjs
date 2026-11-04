@@ -14,8 +14,8 @@ export const DEFAULTS = {
   roster: { maxPeople: 500 },
   // 身份三件套（拼成一行注入提示）+ 专属人设文件（~/.data/persona.md，优先级更高）
   identity: {
-    name: '大肥鱼',      // 她叫什么
-    ownerTitle: '主人',  // 她怎么称呼你
+    name: '理想的机械人',      // 她叫什么
+    ownerTitle: '用户',  // 她怎么称呼你
     selfClaim: '我',     // 她怎么自称
   },
   // DSH 会话接管（2026-11-04）：装了这个插件，DSH 里开任何会话都是她 ——
@@ -26,7 +26,7 @@ export const DEFAULTS = {
     takeover: {
       enabled: true,
       // 显示在 /api/status 与面板上的"谁在当值"，纯诊断用
-      label: '大肥鱼',
+      label: '理想的机械人',
     },
   },
   // 你本人（分享型评论要 @ 的人）：mid 用于校验，name 用于正文 @
@@ -48,7 +48,7 @@ export const DEFAULTS = {
   share: { enabled: true, via: 'comment', minScore: 13 },   // via: comment | dm
   // 额度（0 = 不限，随便玩；克制是活下来的前提，但这是你的鱼）
   quota: { shareDaily: 3, sameVideoDays: 7 },
-  // 账本（10-26 新增）：让她自己看得到"饭钱"和额度 —— 以前她只能反复问主人。
+  // 账本（10-26 新增）：让她自己看得到"饭钱"和额度 —— 以前她只能反复问用户。
   // 用量来自 DSH 会话日志（真实数字），折算价可在 price 里按实际账单改。
   // dailyBudget > 0 时她会按"今天超没超预算"说话；0 = 不设预算，只报花了多少。
   ledger: {
@@ -62,7 +62,7 @@ export const DEFAULTS = {
     balanceUrl: '',                     // 填 https://api.deepseek.com/user/balance 且 apiKey 有效才查余额
     apiKey: '',
     balanceTimeoutMs: 8000,
-    promptInQQ: true,                   // 聊天时把账本一行塞进提示语（她用不着问主人）
+    promptInQQ: true,                   // 聊天时把账本一行塞进提示语（她用不着问用户）
   },
   // 平台开关（**用户意图**，持久）。语义见 tools/lib/platforms.mjs：
   //   platforms.<id> === false → 该平台彻底关；与 <svc>.enabled 取"与"。
@@ -86,7 +86,7 @@ export const DEFAULTS = {
     proxy: 'http://172.17.0.1:7890',    // 容器里走宿主 Clash；不需要就置空
     allowPrivate: [],                   // SSRF 防护例外名单：允许访问的内网主机名
   },
-  // 打小报告（看完好视频 → QQ 汇报给主人）。bili-watch / share-queue / tattle 都会读。
+  // 打小报告（看完好视频 → QQ 汇报给用户）。bili-watch / share-queue / tattle 都会读。
   tattle: { enabled: true, dailyMax: 3, minScore: 15 },
   // 自主探索（wander）：自己产生念头并执行。v5 补进 DEFAULTS。
   wander: { enabled: true, dailyMax: 2, minGapMin: 240 },
@@ -191,12 +191,12 @@ export const DEFAULTS = {
     stickerChance: 0.5,                      // 回复带图片表情的概率（摇中强制带一个，10-25）
     sing: true,                              // 唱歌开关（"唱一首"触发：LLM 写词+她的音色逐句+鼓点混音）
     qzone_enabled: false,                    // 发空间说说开关
-    // 主动搭话（B站同款自主性）：主人安静久了她会带着由头主动开口。
+    // 主动搭话（B站同款自主性）：用户安静久了她会带着由头主动开口。
     // 随机拟人不定点；正聊着不打扰；每天有上限 —— 宁可少说不刷屏。
     proactive: {
       enabled: false,
-      dailyMax: 3,          // 每天最多主动找主人几次（0 = 不限）
-      minQuietMin: 90,      // 主人安静至少这么久才开口（最近在聊就别插话）
+      dailyMax: 3,          // 每天最多主动找用户几次（0 = 不限）
+      minQuietMin: 90,      // 用户安静至少这么久才开口（最近在聊就别插话）
       minGapMin: 150,       // 两次主动之间的最小间隔
       startupGraceMin: 10,  // 进程起来头 N 分钟不发（10-25：重启就"你消失四天"的根在这）
       typeCooldownMin: 180, // 同一类型（心情/日常/疑惑…）N 分钟内不重复
@@ -208,8 +208,8 @@ export const DEFAULTS = {
       // proactive-gate.mjs 的注释里，DEFAULTS 没有 → diagnose 天天报配置缺项。
       globalGapMin: 45,     // 任意两条主动消息的最小间隔（分钟）
       globalDailyMax: 8,    // 全局每天最多主动发几条（0 = 不限）
-      maxStreak: 2,         // 主人没说话时最多连发几条（专治自言自语）
-      ownerActiveMin: 3,    // 主人刚说过话的 N 分钟内不许插嘴
+      maxStreak: 2,         // 用户没说话时最多连发几条（专治自言自语）
+      ownerActiveMin: 3,    // 用户刚说过话的 N 分钟内不许插嘴
     },
     // 统一通道（10-31；v5 补进 DEFAULTS）。语义见 tools/lib/channel.mjs。
     channel: {
@@ -259,7 +259,7 @@ export const DEFAULTS = {
     startWithDsh: false,
     python: 'D:/wechat-bot/.venv/Scripts/python.exe',
     script: 'D:/wechat-bot/wechat_bot.py',
-    owner_nickname: '',                       // 主人在微信里的昵称（认人用）
+    owner_nickname: '',                       // 用户在微信里的昵称（认人用）
     at_only: true,
     voice_enabled: false,
     voice_chance: 0.15,                       // 与 qq.voice_chance / config 默认对齐（面板别自造默认值）
@@ -284,7 +284,7 @@ export const DEFAULTS = {
     autoStartSovits: true,
     sovitsCmd: 'D:/GPT-SoVITS/.venv/Scripts/python.exe',
     sovitsScript: 'D:/GPT-SoVITS/api_v2.py',
-    // ---- 情绪三层（10-26：主人说"语音只有略微的语气变化，没有人类情感"）----
+    // ---- 情绪三层（10-26：用户说"语音只有略微的语气变化，没有人类情感"）----
     // L0 参数 + 择优
     text_split_method: 'cut0',   // 不按标点切碎，保留跨句韵律（实测起伏 3.96 → 4.43）
     candidates: 3,               // 一条语音合成几条候选、按韵律分挑最好的（1 = 关掉择优）
@@ -296,8 +296,8 @@ export const DEFAULTS = {
   },
 
 
-  // ── B站社交日报（第 17 轮，主人："除了@我的其它我都不知道发生了什么"）────────
-  // 每天到点把她"没 @ 主人"的发言/动作摘要推一条 QQ；没动静就不推（不制造噪音）。
+  // ── B站社交日报（第 17 轮，用户："除了@我的其它我都不知道发生了什么"）────────
+  // 每天到点把她"没 @ 用户"的发言/动作摘要推一条 QQ；没动静就不推（不制造噪音）。
   socialDigest: { enabled: true, at: '23:30', min: 3 },
 
   // ── 视频生产（第 17 轮）：真剪辑的片子，不再是"一张图+旁白" ──────────────────
@@ -337,7 +337,7 @@ export const DEFAULTS = {
 
   // B站（生物钟在 night 段；这里放自由刷的限度 + 活人感写通道）
   bilibili: {
-    // 自由刷：评论区 @ 主人那套。unlimited=true 不限条数/时长，刷到每日分享额度用完或手动停。
+    // 自由刷：评论区 @ 用户那套。unlimited=true 不限条数/时长，刷到每日分享额度用完或手动停。
     freeRoam: { enabled: false, unlimited: true, maxVideos: 0, maxMinutes: 0, restMin: 5 },
     // 观看历史上报（debrief 后记入历史）
     reportHistory: true,
@@ -347,7 +347,7 @@ export const DEFAULTS = {
     react: { like: false, coin: false, likeDaily: 10, coinDaily: 1 },// 点赞（debrief 顺手）/投币（评分≥17）
     imageComment: { enabled: false, dailyMax: 2 },                  // 图片评论（贴纸/生图 → B站图床）
     replies: { enabled: false, dailyMax: 10 },                      // 回应别人对我评论的回复（replies 命令）
-    fishCircle: { enabled: false },                                 // 鱼圈社交：选题加入「大肥鱼」相关视频
+    fishCircle: { enabled: false },                                 // 鱼圈社交：选题加入「理想的机械人」相关视频
     follow: { enabled: false },                                     // 关注好 UP（act follow）
   },
 
@@ -361,7 +361,7 @@ export const DEFAULTS = {
     liveChats: [],                  // 空 = livePlatforms 里的私聊全切；填了就只切这几个 chatId
     liveGroups: [],                 // 群聊要逐群切（群里的对照最要紧）：填 chatId 才走新装配
     executor: 'promises',           // promises=旧账本执行 | intents=脑的意图账本执行（S4）
-    ownerIds: [],                   // 主人 QQ/uid（空 = 私聊一律当主人；群友永远不是主人）
+    ownerIds: [],                   // 用户 QQ/uid（空 = 私聊一律当用户；群友永远不是用户）
     consolidateAt: '04:30',         // 每天巩固时刻（睡过头靠 shouldConsolidate + 子进程补）
     budget: { promptChars: 5650, consolidateCalls: 6, consolidateTokens: 40000 },
     recall: { weights: {} },        // 空 = 用 brain/recall.mjs 的校准值（10-29 量过：Recall@6 0.875）

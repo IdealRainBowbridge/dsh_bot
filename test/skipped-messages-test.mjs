@@ -22,7 +22,7 @@ delete process.env.DSH_HOME
 process.env.BOT_DATA_DIR = path.join(TMP, '.bot-ai')
 fs.mkdirSync(process.env.BOT_DATA_DIR, { recursive: true })
 const cfgPath = path.join(TMP, 'bot.config.json')
-fs.writeFileSync(cfgPath, JSON.stringify({ identity: { name: '大肥鱼', ownerTitle: '主人', selfClaim: '我' }, llm: { api_key: 'x' } }))
+fs.writeFileSync(cfgPath, JSON.stringify({ identity: { name: '理想的机械人', ownerTitle: '用户', selfClaim: '我' }, llm: { api_key: 'x' } }))
 process.env.BOT_CONFIG = cfgPath
 
 const SK = await import('../tools/lib/skipped-messages.mjs')

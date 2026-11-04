@@ -1,7 +1,7 @@
 // 她的原生工具集（10-31）—— 让她聊天时真的能动手，而不是嘴上说。
 //
 // 病根（10-27 起反复出现）：她回"好，我记下了""这就去看"，但**没有任何东西真的记**。
-// 于是主人被答应了 5 次、执行 0 次。根因不是她懒，是她**没有手**——
+// 于是用户被答应了 5 次、执行 0 次。根因不是她懒，是她**没有手**——
 // 聊天链路是纯文本，工具能力只写在 system prompt 里（"你可以跑命令"），模型没法真的调。
 //
 // 现在：把最常用的几个动作做成 **OpenAI function calling** 工具，
@@ -29,7 +29,7 @@ export const CHAT_TOOLS = [
     type: 'function',
     function: {
       name: 'remember_promise',
-      description: '记一条你答应主人的事/待办（到点会被提醒）。只在主人明确要你记、或你真的承诺要做某件事时用。',
+      description: '记一条你答应用户的事/待办（到点会被提醒）。只在用户明确要你记、或你真的承诺要做某件事时用。',
       parameters: {
         type: 'object',
         properties: {
@@ -44,7 +44,7 @@ export const CHAT_TOOLS = [
     type: 'function',
     function: {
       name: 'remember_fact',
-      description: '记住关于主人的一件长期事实（他爱吃什么、在做什么工作、家里的事）。只记长期有用的，不记闲聊。',
+      description: '记住关于用户的一件长期事实（他爱吃什么、在做什么工作、家里的事）。只记长期有用的，不记闲聊。',
       parameters: {
         type: 'object',
         properties: {
@@ -59,7 +59,7 @@ export const CHAT_TOOLS = [
     type: 'function',
     function: {
       name: 'check_memory',
-      description: '查你自己的记忆：以前说过什么、答应过什么、关于主人记得什么。不确定的时候先查，别瞎编。',
+      description: '查你自己的记忆：以前说过什么、答应过什么、关于用户记得什么。不确定的时候先查，别瞎编。',
       parameters: {
         type: 'object',
         properties: {
@@ -174,7 +174,7 @@ export async function runTool(name, args = {}) {
         // 走 owner-facts，让她下次真的"记得"
         const oaf = await import('./owner-facts.mjs')
         const got = oaf.learnFromOwner ? oaf.learnFromOwner(text) : []
-        memory.remember('qq', 'qq:owner-notes', 'owner', 'system', `（关于主人：${text}）`, { allowSelfTest: true })
+        memory.remember('qq', 'qq:owner-notes', 'owner', 'system', `（关于用户：${text}）`, { allowSelfTest: true })
         return { ok: true, result: `记住了：${text}` + (got?.length ? `（${got.map((g) => g.key).join('/')}）` : '') }
       }
 

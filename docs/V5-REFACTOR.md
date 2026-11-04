@@ -151,7 +151,7 @@ cfg.guard.dryRun = false
 ## 五、人设措辞单一来源
 
 `tools/lib/persona-voice.mjs`：`selfName()` / `selfClaim()` / `ownerTitle()` / `selfIntro()` / `fill()`。
-替掉了 20+ 处写死的「大肥鱼」「笨蛋老爹」「鲸鱼娘AI」，顺带清掉 prompt 里的 AI 字样
+替掉了 20+ 处写死的「理想的机械人」「笨蛋老爹」「鲸鱼娘AI」，顺带清掉 prompt 里的 AI 字样
 （persona.md 的红线是"别自称 AI"）。
 
 ## 六、质量护栏升级

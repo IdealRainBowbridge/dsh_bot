@@ -282,7 +282,7 @@ async function composeAndWrite({ deps, d, book }) {
     : '想写多长写多长，累了就短一点。别交代"我在写日记"这件事。'
   const ask = [{
     role: 'system',
-    content: '你是大肥鱼本人，正在往自己的私人日记里写一段。\n'
+    content: '你是理想的机械人本人，正在往自己的私人日记里写一段。\n'
       + '现在是 ' + nowLine() + '。\n'
       + '下面这些是你此刻真实的状态和最近心里的事 —— 用它，但**别复述、别罗列**。\n'
       + '不许编造上面没给的细节（没发生的事不写、没说过的话不引）。\n'
@@ -319,7 +319,7 @@ async function composeThought({ deps, d }) {
   const LLM = await import('./llm.mjs')
   const ask = [{
     role: 'system',
-    content: '你是大肥鱼本人。现在你坐着，把一件事在心里想明白。\n'
+    content: '你是理想的机械人本人。现在你坐着，把一件事在心里想明白。\n'
       + '只输出**一句话**：你想通的那个点。\n'
       + '不要旁白、不要"我想"这种前缀、不要解释你为什么在想、不要总结心情。\n'
       + '可以碎，可以不完整，可以只是一个决定。',

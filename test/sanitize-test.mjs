@@ -15,7 +15,7 @@ const noLeak = (name, out, ...secrets) => {
 }
 
 /* ─── 应拦（正例）─── */
-noLeak('QQ号(前缀锚)', sanitizeText('t', '我主人的QQ 3682285116 人超好'), '3682285116')
+noLeak('QQ号(前缀锚)', sanitizeText('t', '我用户的QQ 3682285116 人超好'), '3682285116')
 noLeak('QQ号(紧贴)', sanitizeText('t', '他QQ号3682285116'), '3682285116')
 noLeak('账号是', sanitizeText('t', '我的账号是3682285116'), '3682285116')
 noLeak('裸QQ号(兜底)', sanitizeText('t', '他号 3682285116'), '3682285116')
@@ -39,7 +39,7 @@ ok('13位时间戳', sanitizeText('t', '那条记录 ts=1793640479000') === '那
 ok('普通聊天', sanitizeText('t', '困死了，明天再说吧') === '困死了，明天再说吧')
 
 /* ─── payload 形状（OneBot 出站）─── */
-const p1 = { message: [{ type: 'text', data: { text: '主人QQ 3682285116' } }, { type: 'image', data: { file: 'x.jpg' } }] }
+const p1 = { message: [{ type: 'text', data: { text: '用户QQ 3682285116' } }, { type: 'image', data: { file: 'x.jpg' } }] }
 const q1 = sanitizeOutbound('test', p1)
 noLeak('payload文本段', q1.message[0].data.text, '3682285116')
 ok('payload图片段不动', q1.message[1].data.file === 'x.jpg')

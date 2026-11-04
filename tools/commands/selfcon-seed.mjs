@@ -57,7 +57,7 @@ async function main() {
     return
   }
   console.log('[selfcon-seed] 完成:')
-  console.log('  名字: ' + name + ' (自称=' + claim + ', 称呼主人=' + owner + ')' + (firstEvent ? ' firstEvent=' + firstEvent : ' firstEvent 未找到, 留空'))
+  console.log('  名字: ' + name + ' (自称=' + claim + ', 称呼用户=' + owner + ')' + (firstEvent ? ' firstEvent=' + firstEvent : ' firstEvent 未找到, 留空'))
   console.log('  形象主张: ' + claims.length + ' 条 (origin=seed)')
   console.log('  声音锚: ' + voice.length + ' 条 (origin=seed)')
   console.log('  persona.md 原文存为出生记录 (' + personaMd.length + ' 字) -> ' + dataPath('selfcon.json'))

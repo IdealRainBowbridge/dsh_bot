@@ -41,7 +41,7 @@ export const P_LABEL = {
   note: '杂项',
 }
 
-/** 来源权重：主人亲口 > 群友 > 她自己推断 > 网上。 */
+/** 来源权重：用户亲口 > 群友 > 她自己推断 > 网上。 */
 const SOURCE_W = { owner: 1.0, owner_facts: 0.9, group: 0.6, self: 0.5, web: 0.3, import: 0.4 }
 
 const norm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim()

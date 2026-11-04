@@ -285,6 +285,6 @@ export async function run(argv = []) {
     console.log('  ' + pack.visionDesc)
     console.log('')
   }
-  console.log('—— 基于以上材料打分（0–20），不足 share.minScore 就是「这条不值得占主人一次注意力」，合法结果 ✓')
-  console.log('—— 可回复热评：node bot.mjs comment --bvid <bvid> --root <rpid> --parent <rpid> --message "回复内容" --go（会自动 @主人）')
+  console.log('—— 基于以上材料打分（0–20），不足 share.minScore 就是「这条不值得占用户一次注意力」，合法结果 ✓')
+  console.log('—— 可回复热评：node bot.mjs comment --bvid <bvid> --root <rpid> --parent <rpid> --message "回复内容" --go（会自动 @用户）')
 }

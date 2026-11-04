@@ -41,7 +41,7 @@ export { event, episode, working, attention, intents, facts, affect, delivery, c
 
 const OWNER_KEY_MAP = { food: 'food.eat', doing: 'activity.do', plan: 'plan.go', mood: 'mood.state', media: 'media.like' }
 
-/** 启动时调一次：注入主人身份 + 确保自我文件在。 */
+/** 启动时调一次：注入用户身份 + 确保自我文件在。 */
 export function configure(cfg = config()) {
   try {
     const b = cfg.brain || {}
@@ -202,7 +202,7 @@ export function onEvent(input = {}) {
   }
 }
 
-/** 主人一句话里的事实 → 结构化事实（带 ep 证据）。 */
+/** 用户一句话里的事实 → 结构化事实（带 ep 证据）。 */
 export function learnOwnerFacts(ev, epId) {
   const got = extractOwnerFacts(ev.text)
   for (const g of got) {

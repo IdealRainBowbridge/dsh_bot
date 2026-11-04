@@ -8,7 +8,7 @@ import * as memory from './lib/memory.mjs'
 
 const planOnly = process.argv.includes('--plan')
 
-// ① 主人说他在干什么 + 吃了什么（这两条原本压根没记，所以她一直问）
+// ① 用户说他在干什么 + 吃了什么（这两条原本压根没记，所以她一直问）
 const said = [
   '我中午吃了烧鸭，撑死了',
   '我在改插件呢，晚饭再说',
@@ -16,7 +16,7 @@ const said = [
 ]
 for (const s of said) {
   const got = ownerFacts.learnFromOwner(s)
-  console.log(`主人：${s}\n  → 记下 ${got.map((g) => g.key + '=' + g.value).join('、') || '(无)'}`)
+  console.log(`用户：${s}\n  → 记下 ${got.map((g) => g.key + '=' + g.value).join('、') || '(无)'}`)
 }
 console.log('\n【今天已经知道的事】实际注入的样子：')
 console.log(ownerFacts.promptBlock().split('\n').map((l) => '  ' + l).join('\n'))

@@ -20,15 +20,15 @@ const freshFile = () => { fs.rmSync(path.join(TMP, 'selfcon.json'), { force: tru
 // ---------------------------------------------------------------- 1. seed 迁移
 {
   const r = sc.seedFrom({
-    name: '大肥鱼', nameGivenBy: 'owner', nameFirstEvent: 'ep-2026-10-30',
+    name: '理想的机械人', nameGivenBy: 'owner', nameFirstEvent: 'ep-2026-10-30',
     claims: [{ text: '爱吃白饭，饭点必到', strength: 0.6 }, { text: '聪明但懒', strength: 0.6 }],
     voice: [{ quote: '呜', strength: 0.6 }],
-    personaMd: '# 你是大肥鱼\n（出生记录）',
+    personaMd: '# 你是理想的机械人\n（出生记录）',
     at: T0,
   })
   assert.ok(r.ok, 'seed 应成功')
   const b = sc.readBook()
-  assert.equal(b.name.value, '大肥鱼')
+  assert.equal(b.name.value, '理想的机械人')
   assert.equal(b.name.givenBy, 'owner')
   assert.equal(b.name.firstEvent, 'ep-2026-10-30')
   assert.equal(b.selfImage.length, 2)
@@ -41,13 +41,13 @@ const freshFile = () => { fs.rmSync(path.join(TMP, 'selfcon.json'), { force: tru
 {
   const r = sc.seedFrom({ name: '别的', claims: [], voice: [], personaMd: '', at: T0 + 1 })
   assert.ok(!r.ok, '二次 seed 必须被拒')
-  assert.equal(sc.readBook().name.value, '大肥鱼')
+  assert.equal(sc.readBook().name.value, '理想的机械人')
 }
 
 // ---------------------------------------------------------------- 2. rebuild: 档位由数据产生
 {
   const t = sc.rebuild({ now: T0 })
-  assert.ok(t.includes('大肥鱼'), 'rebuild 要有名字')
+  assert.ok(t.includes('理想的机械人'), 'rebuild 要有名字')
   assert.ok(t.includes('旧毛衣'), '依恋 0.9 -> 旧毛衣档位')
   assert.ok(t.includes('爱吃白饭'), 'rebuild 要有形象主张')
   assert.ok(sc.block({ now: T0 }).includes('我自己认下的'), 'block 带标头')
@@ -58,11 +58,11 @@ const freshFile = () => { fs.rmSync(path.join(TMP, 'selfcon.json'), { force: tru
   const t = sc.rebuild({ now: T0 })
   assert.ok(t.includes('还没认下'), '空账本 rebuild 是留白版')
   assert.ok(sc.block({ now: T0 }).length > 0, '留白版也要注入 (名字栏空着本身是状态)')
-  assert.ok(!sc.block({ now: T0 }).includes('你是大肥鱼'), '留白版不许替她断言名字')
+  assert.ok(!sc.block({ now: T0 }).includes('你是理想的机械人'), '留白版不许替她断言名字')
 }
 // 重新 seed 供后面用
 {
-  const r = sc.seedFrom({ name: '大肥鱼', nameGivenBy: 'owner', claims: [{ text: '懒', strength: 0.6 }], voice: [], personaMd: '', at: T0 })
+  const r = sc.seedFrom({ name: '理想的机械人', nameGivenBy: 'owner', claims: [{ text: '懒', strength: 0.6 }], voice: [], personaMd: '', at: T0 })
   assert.ok(r.ok)
 }
 
@@ -71,11 +71,11 @@ const freshFile = () => { fs.rmSync(path.join(TMP, 'selfcon.json'), { force: tru
   sc.proposeName('小蓝', T0)
   // 太年轻 -> 不结算
   let out = sc.consolidateSelf({ now: T0 + DAY, shadow: false })
-  assert.equal(sc.readBook().name.value, '大肥鱼', '观察期没满不许换名')
+  assert.equal(sc.readBook().name.value, '理想的机械人', '观察期没满不许换名')
   assert.ok(out.notes.some((n) => n.includes('观察期')), '要有观察期提示: ' + out.notes.join(';'))
   // 观察期满了但使用事实不够 -> 不结算
   out = sc.consolidateSelf({ now: T0 + 4 * DAY, shadow: false })
-  assert.equal(sc.readBook().name.value, '大肥鱼', '阈值不够不许换名')
+  assert.equal(sc.readBook().name.value, '理想的机械人', '阈值不够不许换名')
   // 使用事实补齐: 自称 3 次 + 有人跟着叫 1 次 (哲学层: 账本不改名, 只结算已发生的使用)
   sc.recordSelfUse('小蓝', T0 + 4 * DAY)
   sc.recordSelfUse('小蓝', T0 + 4 * DAY + 1)
@@ -85,9 +85,9 @@ const freshFile = () => { fs.rmSync(path.join(TMP, 'selfcon.json'), { force: tru
   const b = sc.readBook()
   assert.equal(b.name.value, '小蓝', '阈值+观察期都过 -> 结算换名')
   assert.equal(b.name.givenBy, 'self')
-  assert.equal(b.nameTransition.from, '大肥鱼', '换名留旧名 -> 别扭期')
+  assert.equal(b.nameTransition.from, '理想的机械人', '换名留旧名 -> 别扭期')
   assert.ok(b.name.attachment >= 0.1, '新名继承部分依恋')
-  assert.ok(b.name.history.some((h) => h.name === '大肥鱼'), '旧名进 history 留痕')
+  assert.ok(b.name.history.some((h) => h.name === '理想的机械人'), '旧名进 history 留痕')
   assert.equal(b.candidates.name, null, '结算后候选区清空')
   // 重复候选: 现名不进候选区
   sc.proposeName('小蓝', T0 + 5 * DAY)
@@ -98,7 +98,7 @@ const freshFile = () => { fs.rmSync(path.join(TMP, 'selfcon.json'), { force: tru
   const p = sc.nameTransitionProgress(T0 + 5 * DAY)
   assert.ok(p >= 0 && p < 0.95, '刚换名 -> 别扭期进行中')
   const t = sc.rebuild({ now: T0 + 5 * DAY })
-  assert.ok(t.includes('大肥鱼'), '别扭期 rebuild 提旧名')
+  assert.ok(t.includes('理想的机械人'), '别扭期 rebuild 提旧名')
   assert.ok(t.includes('适应') || t.includes('回头'), '别扭期有适应措辞')
 }
 // ---------------------------------------------------------------- 6. 影子模式: 主值一根毛都不动
@@ -142,7 +142,7 @@ const freshFile = () => { fs.rmSync(path.join(TMP, 'selfcon.json'), { force: tru
   assert.ok(sc.load({ now: T0 + 9 * DAY }) >= 0 && sc.load({ now: T0 + 9 * DAY }) <= 1)
   assert.ok(sc.statusLine().includes('小蓝'))
   assert.ok(sc.SPECIES_LINE.includes('一类生物'))
-  assert.ok(!sc.SPECIES_LINE.includes('你是大肥鱼，一只'), '种属行不许再是断言句')
+  assert.ok(!sc.SPECIES_LINE.includes('你是理想的机械人，一只'), '种属行不许再是断言句')
   assert.ok(sc.CHEM.CANDIDATE_MIN_AGE_MS >= 3 * DAY, '临床防呆: 观察期 >= 3 天')
 }
 

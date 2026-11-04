@@ -2,7 +2,7 @@
 //
 //   node bot.mjs mem remember --chat share --text "…" [--role user]
 //   node bot.mjs mem fact   --user owner --text "爱吃辣，周三加班"
-//   node bot.mjs mem lore    --tag origin --text "第一次见到主人是在下雨的下午"
+//   node bot.mjs mem lore    --tag origin --text "第一次见到用户是在下雨的下午"
 //   node bot.mjs mem recall  --query "上次说想养猫"
 //   node bot.mjs mem old | stats
 import * as memory from '../lib/memory.mjs'

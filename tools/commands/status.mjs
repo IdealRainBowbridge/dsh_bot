@@ -2,7 +2,7 @@
 // SnowLuma 的 set_online_status（OneBot v11 扩展）。
 //   11=在线  1=Q我吧  30=离开  50=忙碌  60=勿扰  70=隐身
 // 触发：睡眠开始→勿扰；睡醒→在线。也能手动换。
-// 铁律：状态是她自己的事，随睡眠/情绪自动走，不用笨蛋老爸管。
+// 铁律：状态是她自己的事，随睡眠/情绪自动走，不用笨蛋管理员管。
 import fs from 'node:fs'
 import * as PRESENCE from '../brain/organ/presence.mjs'
 import { config } from '../lib/config.mjs'

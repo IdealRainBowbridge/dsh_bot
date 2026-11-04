@@ -27,7 +27,7 @@ const H = 3600_000
 const now = Date.now()
 
 // replayed line: same wording three times, oldest of all candidates
-const REPLAY = '笨蛋老爸又偷喝我的可乐，冰箱里连罐都不给我留，气死我了'
+const REPLAY = '笨蛋管理员又偷喝我的可乐，冰箱里连罐都不给我留，气死我了'
 inner.stream({ role: 'self', kind: 'say', text: REPLAY }, now - 5 * DAY)
 inner.stream({ role: 'self', kind: 'say', text: REPLAY }, now - 3 * DAY)
 inner.stream({ role: 'self', kind: 'say', text: REPLAY }, now - 1 * DAY)

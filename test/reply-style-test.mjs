@@ -1,4 +1,4 @@
-// 评论区「发什么都行」（10-27 主人的第二条要求）——
+// 评论区「发什么都行」（10-27 用户的第二条要求）——
 //   文字 / 颜文字 / emoji / 表情包 / 图片（抖音再加语音），
 //   而且**自己作品下**和**刷到的别人视频下**都要能发。
 //
@@ -38,7 +38,7 @@ await ok('B站：没有官方表情、没有语音', () => {
   assert.ok(!seen.has('voice'), 'B站 评论没有语音')
 })
 
-await ok('关掉 auto 就只发文字（主人可以一键收手）', () => {
+await ok('关掉 auto 就只发文字（用户可以一键收手）', () => {
   for (let i = 0; i < 200; i++) assert.equal(chooseKind({ platform: 'douyin', styles: { auto: false, sticker: 1 } }), 'text')
 })
 

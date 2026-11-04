@@ -135,7 +135,7 @@ export function expose(kind, minutes = 10, now = Date.now()) {
 // Identity: chat qq:<ownerQQ> IS the owner conversation (real rows mark the
 // owner by chat id, not who.others), so lastActiveAt follows that chat.
 // 光强 EMA 非对称：亮起得快（真实光感是秒级适应，这里给 10min），
-// 熄得慢（主人走开不会让「他在」的感觉立刻消失，1h；再慢余光会漏进晨间提前窗）。
+// 熄得慢（用户走开不会让「他在」的感觉立刻消失，1h；再慢余光会漏进晨间提前窗）。
 const ZTG_EMA_RISE = 10 * 60_000
 const ZTG_EMA_FALL = 1 * 3600_000
 const ZTG_ACTIVE_WINDOW = 30 * 60_000
@@ -168,7 +168,7 @@ function _ownerActiveAt(now) {
 export function zeitgeberTick(now = Date.now()) {
   const st = state()
   const hod = new Date(now).getHours() + new Date(now).getMinutes() / 60
-  // EMA 光强：主人最近 30min 内有动静 -> 1，否则 -> 0
+  // EMA 光强：用户最近 30min 内有动静 -> 1，否则 -> 0
   const target = _ownerActiveAt(now) ? 1 : 0
   const last = Number(st.ztgAt || 0)
   const dt = last ? Math.max(0, Math.min(now - last, 3600_000)) : 0

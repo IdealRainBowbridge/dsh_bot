@@ -7,7 +7,7 @@
 //
 // 设计红线：
 //   · 每条入站消息都会过 observe() —— 必须幂等、廉价、绝不抛（旁路，失败不影响回复）
-//   · 主人绝不入册（owner 是身份不是联系人）；号码永远不当称呼（ownerLine 踩过的坑）
+//   · 用户绝不入册（owner 是身份不是联系人）；号码永远不当称呼（ownerLine 踩过的坑）
 //   · 上限 500 人，满员淘汰最久没见的 —— 这是聊天名册，不是通讯录备份
 import fs from 'node:fs'
 import path from 'node:path'
@@ -19,7 +19,7 @@ import { config } from './config.mjs'
 /** 名册容量（config.roster.maxPeople 可调，硬上限 2000 防呆）。 */
 const maxPeople = () => Math.min(2000, Math.max(50, Number(config().roster?.maxPeople ?? 500) || 500))
 
-/** 主人判定（不 export：只有名册自己用，避免双端口径分叉）。 */
+/** 用户判定（不 export：只有名册自己用，避免双端口径分叉）。 */
 function isOwner(platform, userId) {
   const o = config().owner ?? {}
   if (String(platform) === 'qq') return !!o.qq && String(userId) === String(o.qq)
@@ -45,7 +45,7 @@ function save(j) {
   } catch (e) { swallow(e, 'roster:save') }
 }
 
-/** 登记照面：每条入站消息都过这里。返回这张卡片（主人返回 null）。 */
+/** 登记照面：每条入站消息都过这里。返回这张卡片（用户返回 null）。 */
 export function observe({ platform = 'qq', userId = '', name = '', isGroup = false } = {}) {
   const id = String(userId || '').trim()
   if (!id || isOwner(platform, id)) return null
@@ -110,7 +110,7 @@ export function note(platform, userId, text) {
   return { ok: true, person: p }
 }
 
-/** 关系嵌入：身体学语言的一段话，给记忆排序与签名展示用。主人/陌生人返回 0（无从加权）。 */
+/** 关系嵌入：身体学语言的一段话，给记忆排序与签名展示用。用户/陌生人返回 0（无从加权）。 */
 export function affinity(platform, userId) {
   const id = String(userId || '').trim()
   if (!id || isOwner(platform, id)) return 0
@@ -119,7 +119,7 @@ export function affinity(platform, userId) {
   return Math.max(0, Math.min(1, Number(bond.bio(platform, id).oxy ?? 0)))
 }
 
-/** ownerLine 的「这是谁」注入行。空串 = 没有可说的（主人 / 从没打过照面）。 */
+/** ownerLine 的「这是谁」注入行。空串 = 没有可说的（用户 / 从没打过照面）。 */
 export function audienceHint(platform, userId) {
   const id = String(userId || '').trim()
   if (!id || isOwner(platform, id)) return ''

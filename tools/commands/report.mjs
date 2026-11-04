@@ -36,7 +36,7 @@ export async function run(argv = []) {
   const date = new Date().toLocaleDateString('sv-SE')
   const sec = (id) => String(id).replace(/[^\w-]/g, '')
   const out = []
-  out.push(`# 大肥鱼 · 观看日报 ${date}`)
+  out.push(`# 理想的机械人 · 观看日报 ${date}`)
   out.push('')
 
   if (!rows.length) {

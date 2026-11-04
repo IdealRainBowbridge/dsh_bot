@@ -58,7 +58,7 @@ const now = Date.now()
 const forGroup = recall.search({ cues: '秘密', audience: 'group', now })
 ok('群聊检索不含私聊情景', !forGroup.items.some((x) => /私聊暗号ZZZ/.test(x.ep.quote)), JSON.stringify(forGroup.items.map((x) => x.ep.scope)))
 const forOwner = recall.search({ cues: '私聊暗号', audience: 'private', now })
-ok('主人私聊能检索到', forOwner.items.some((x) => /私聊暗号ZZZ/.test(x.ep.quote)))
+ok('用户私聊能检索到', forOwner.items.some((x) => /私聊暗号ZZZ/.test(x.ep.quote)))
 
 // ③ 存储口径：本地 +08:00
 const iso = clock.isoOf(now)

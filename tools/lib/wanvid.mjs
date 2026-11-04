@@ -6,7 +6,7 @@
 //   ② base64 直传：图在本地，不用买 OSS、不用开图床；
 //   ③ 竖屏 1080×1920 / 30fps 原生支持，抖音那条线不用二次裁切。
 //
-// 走的是主人 LLM 那条中转站的 DashScope 原生路径（同一个 key，不用另开账号）：
+// 走的是用户 LLM 那条中转站的 DashScope 原生路径（同一个 key，不用另开账号）：
 //   POST {host}/api/v1/services/aigc/video-generation/video-synthesis   （提交，异步）
 //   GET  {host}/api/v1/tasks/{task_id}                                  （轮询，15s 一次够了）
 //   {host} = llm.base_url 去掉 /compatible-mode/v1 —— 也可以 video.animate.baseUrl 直接指定。
@@ -29,7 +29,7 @@ import { ff, ffmpegBin, probeDur, run, ffprobeBin } from './video.mjs'
 export const DEFAULT_NEGATIVE = [
   '低分辨率', '模糊', '画面抖动', '面部崩坏', '五官扭曲', '肢体扭曲', '多余的手指',
   '水印', '字幕', '文字', 'logo', '画面闪烁',
-  // 10-27 主人拍板：**别的二次元同类可以入镜**（Q版/动漫风），所以不再禁"多人/另一个人"；
+  // 10-27 用户拍板：**别的二次元同类可以入镜**（Q版/动漫风），所以不再禁"多人/另一个人"；
   // 但仍然不许真人 —— 这条片子的世界只有动漫形象。
   '真人', '真人脸部', '写实照片', '3D写实',
 ].join(',')

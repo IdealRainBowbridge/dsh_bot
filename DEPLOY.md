@@ -1,6 +1,6 @@
 # 部署与依赖清单（dsh_bot v0.4.0）
 
-> 这份文档回答一个问题：**要复现这只大肥鱼，需要装什么、什么版本、放在哪、怎么验证**。
+> 这份文档回答一个问题：**要复现这只理想的机械人，需要装什么、什么版本、放在哪、怎么验证**。
 > 版本号取自 2026-10-25 实际跑通的那台机器（Windows 11 / x64 / RTX 显卡）。
 
 > **⚠ 存档说明（2026-11-03）**：本文是 Windows 时代的装机清单，与当前生产环境已不一致——
@@ -91,13 +91,13 @@
 
 ### 换声：whale-rvc（2026-11-04 追加）
 
-`edge-tts` 只有 4 个中文女声，音色天花板在那里。加一层 RVC 把输出换成「大肥鱼」音色。
+`edge-tts` 只有 4 个中文女声，音色天花板在那里。加一层 RVC 把输出换成「理想的机械人」音色。
 
 | 组件 | 位置 / 版本 | 说明 |
 |---|---|---|
 | **whale-rvc** | `/opt/whale-rvc/rvc_server.py`，`whale-rvc.service`（enabled） | 监听 `0.0.0.0:9881`，**常驻**（模型只加载一次，省掉每次 5 秒冷启动） |
 | 引擎 | Applio（`/opt/whale-rvc/Applio`，git clone 上游） | 底模 `rmvpe.pt`(181MB) + `contentvec`(378MB)，来自 `huggingface.co/IAHispano/Applio`，**必须走 7890 代理**（HF 直连 000） |
-| 声库 | `FeiyuVoice-RVC-v1.pth`(52MB) + `.index`(30MB) | 星落落授权的那条 SSR 大肥鱼，sha256 与包内 `manifest.json` 一致 |
+| 声库 | `FeiyuVoice-RVC-v1.pth`(52MB) + `.index`(30MB) | 星落落授权的那条 SSR 理想的机械人，sha256 与包内 `manifest.json` 一致 |
 | 推理 | torch 2.15.0+**cpu** | GTX 1050 是 Pascal sm_61 且只有 2GB，装 CUDA 轮子不划算；CPU 4 线程实测 **8 秒音频 ≈ 13 秒**（1.6× 实时） |
 | 参数 | `index_rate=0.3`、`protect=0.33`、`f0=rmvpe`、`pitch=0` | 取自模型包 manifest；**音高 100% 跟随输入**（实测 381Hz 进 381Hz 出），只改音色 |
 | 访问栅栏 | 与 whale-tts 同一套（回环 + docker 网桥） | LAN `192.168.5.2:9881` 与 tailnet 实测 403 |
@@ -253,7 +253,7 @@ node tools/bot.mjs produce ["主题"]     # 每天有额度（douyin.produce.dai
 
 # 1) 插件
 dsh plugin --profile desktop add "link:D:\dsh_bot"
-#    重启 DSH → 设置里出现「🐟 大肥鱼」
+#    重启 DSH → 设置里出现「🐟 理想的机械人」
 
 # 2) 最小配置 ~/.dsh/feiyu.config.json
 #    identity / owner.qq / llm.api_key  → 面板里填也行
@@ -328,7 +328,7 @@ npm test                                      # 8 套测试全过
 | 翻唱跑一半失败 | yt-dlp 取不到源 / ffmpeg 路径不对 | `feiyu sing cover "歌名" --url <直链>` 绕开搜索 |
 | 生图 502 / 超时 | 硅基额度或网络 | 会回落 Pollinations（只作临时图，不入库） |
 | 抖音评论"发成功"却没内容 | 新号在**别人**视频下回复被审核吞 | 先在自己作品下互动；或等号养起来 |
-| 抖音私信不回 | `failStreak` 上升 / 抓不到新消息 | `curl 8095/health`，看 `douyin-dm.log` 里「主人：」 |
+| 抖音私信不回 | `failStreak` 上升 / 抓不到新消息 | `curl 8095/health`，看 `douyin-dm.log` 里「用户：」 |
 | 完全自由不动 | ① 摇号没中 ② 模型额度 429 | `feiyu-freedom.json` / 会话最后几帧 |
 | QQ 服务在跑却不回 | NapCat 掉了（`napcat.ok=false`） | `schtasks /Run /TN "DSH-Feiyu-NapCat"` |
 

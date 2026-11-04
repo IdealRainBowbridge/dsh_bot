@@ -22,10 +22,10 @@ export function run(argv = []) {
     const text = arg(argv, '--append')
     if (!text) { console.error('✗ --append 后面要有内容'); process.exit(2) }
     fs.mkdirSync(WORK_DIR, { recursive: true })
-    const head = fs.existsSync(file) ? '' : `# ${book === 'private' ? '她自己的日记（不加滤镜）' : '给主人的信（有细节有情绪）'}\n\n`
+    const head = fs.existsSync(file) ? '' : `# ${book === 'private' ? '她自己的日记（不加滤镜）' : '给用户的信（有细节有情绪）'}\n\n`
     const stamp = new Date().toLocaleString('sv-SE', { hour12: false })
     fs.appendFileSync(file, `${head}## ${stamp}\n\n${text}\n\n`)
-    console.log(`✓ 已写进${book === 'private' ? '她自己的' : '给主人的'}日记（${file}）`)
+    console.log(`✓ 已写进${book === 'private' ? '她自己的' : '给用户的'}日记（${file}）`)
     return
   }
 

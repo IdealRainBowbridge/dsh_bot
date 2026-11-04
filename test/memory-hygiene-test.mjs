@@ -1,11 +1,11 @@
-// memory-hygiene-test —— 记忆卫生（10-27 主人报"连问十次吃没吃饭 / 南京执念 / 说看番一直不看"）
+// memory-hygiene-test —— 记忆卫生（10-27 用户报"连问十次吃没吃饭 / 南京执念 / 说看番一直不看"）
 //
 // 这些用例锁的是"病根不复发"，不是"代码能跑"：
 //   ① 饥饿不能只涨不落（旧版非饭点 -0.5 ≈ 永不下降 → 一整天"满脑子都是吃的"）
 //   ② 心情不能每 tick 被砍到底（旧版 -4/tick → 整天 0/100 → 句子压到 15 字）
 //   ③ 他自己的推送不算"真实经历"（recallAll 必须排掉 kind:'push'）
 //   ④ 价值观池不许混进运维笔记/干活流水/同主题刷屏
-//   ⑤ 主人说过的硬事实必须记下来，并且能拦住"再问一遍"
+//   ⑤ 用户说过的硬事实必须记下来，并且能拦住"再问一遍"
 //   ⑥ 承诺要有账、要到点、要能结清
 //   ⑦ 能力清单里的命令必须真存在（写了却不存在 = 她会去调一个不存在的东西然后编）
 import assert from 'node:assert/strict'
@@ -98,18 +98,18 @@ await ok('addLore：带日期前缀的干活流水不进价值观', () => {
 })
 await ok('addLore：同主题刷屏被折叠（不会 25 条南京）', () => {
   fs.rmSync(dataPath('lore.json'), { force: true })
-  for (let i = 0; i < 9; i++) memory.addLore('学习', `替主人探南京小吃第${i}版：盐水鸭、烤鸭、鸭血粉丝三样必吃`)
+  for (let i = 0; i < 9; i++) memory.addLore('学习', `替用户探南京小吃第${i}版：盐水鸭、烤鸭、鸭血粉丝三样必吃`)
   const vals = memory.loreValues(20)
   const nanjing = vals.filter((t) => /南京/.test(t))
   assert.ok(nanjing.length <= 2, `同主题应该只剩 ≤2 条，实际 ${nanjing.length} 条`)
 })
 await ok('真正的价值观照样注入', () => {
   fs.rmSync(dataPath('lore.json'), { force: true })
-  memory.addLore('守规矩', '不许在群里叫别人主人，这是边界')
-  assert.ok(memory.loreValues(8).some((t) => /群里叫别人主人/.test(t)))
+  memory.addLore('守规矩', '不许在群里叫别人用户，这是边界')
+  assert.ok(memory.loreValues(8).some((t) => /群里叫别人用户/.test(t)))
 })
 
-// ④ 主人事实
+// ④ 用户事实
 await ok('从他的话里抽事实：吃了什么/在做什么/心情/作品', () => {
   assert.equal(ownerFacts.extract('我中午吃了烧鸭')[0].value, '烧鸭')
   assert.equal(ownerFacts.extract('我在改插件呢')[0].value, '改插件呢')
@@ -203,7 +203,7 @@ await ok('qq-server 的网志钩子取的是当天段落最上面几条', () => 
   assert.ok(!/web-log\.md'[\s\S]{0,80}slice\(-3\)/.test(src), '不能再 slice(-3) 取文件末尾')
 })
 
-// ⑧ 引用消息（10-27 主人报"他看不懂引用/看不见引用了哪条"）
+// ⑧ 引用消息（10-27 用户报"他看不懂引用/看不见引用了哪条"）
 //    OneBot 只给 reply 段的 id，正文得自己取 —— 以前只折成"【引用回复了一条消息】"，
 //    被引用的原话一个字没有，于是她只能回"我这边看不到引用的啥"。
 await ok('parseMessage 把 reply 段的 id 挖出来（array 与 CQ 码都认）', async () => {
@@ -268,7 +268,7 @@ await ok('qq-server 真的把 quoteLine 送进提示词，并且写进记忆', (
   assert.ok(/warmQuoteIndex/.test(src), '老消息要靠预热历史才取得到原文')
 })
 
-// ⑨ B站「自己作品下的评论」（10-27 主人报"没有实现和抖音一样的回复评论"）
+// ⑨ B站「自己作品下的评论」（10-27 用户报"没有实现和抖音一样的回复评论"）
 //   真实病根三连：bvid 没落库 → 找不到投稿；space 列表默认关 → 自己发现不了；
 //   "发现即算看过" → 额度卡住一次就永久失联。
 await ok('找自己的投稿：默认会走 space 接口（否则永远"自己还没有投稿"）', () => {
@@ -303,14 +303,14 @@ await ok('发出去了≠看得见：要有匿名可见性核查 + 被挂就自�
   assert.ok(/holdCheck/.test(r) && /--force/.test(r), '被挂过半要自刹车，但要留 --force')
 })
 
-await ok('主人评论免额度：跟抖音一致', () => {
+await ok('用户评论免额度：跟抖音一致', () => {
   const w = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'lib', 'bili-write.mjs'), 'utf8')
   assert.ok(/bypassCap/.test(w), 'postReply 要支持 bypassCap')
-  assert.ok(/主人的评论永远不受日额度限制/.test(w), '语义要写清')
+  assert.ok(/用户的评论永远不受日额度限制/.test(w), '语义要写清')
 })
 
 // ⑩ 辅助服务守护（10-27 第三批·下半）：
-//    病根是"抖音私信陪聊 09:46 起过一次，之后进程没了，主人发私信一整天没人回" ——
+//    病根是"抖音私信陪聊 09:46 起过一次，之后进程没了，用户发私信一整天没人回" ——
 //    没人崩了不管。也要保证"别人来她视频下评论"不被主动出击的日额度卡死。
 await ok('辅助服务：探活靠端口 /health，不是靠手里有没有 child', () => {
   // 名字是 auxsvc.mjs：aux.mjs 是 Windows 保留设备名（AUX），Win32 打不开 → 动态 import 静默失败

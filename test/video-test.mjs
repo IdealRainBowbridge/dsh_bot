@@ -4,7 +4,7 @@
 // "片子出来了但音画不同步"这种最难发现的毛病，所以这里把算术和真实渲染都测一遍。
 //
 // 隔离：先把 USERPROFILE 指到临时目录，再动态 import —— social-log / debut 全写沙箱里，
-// 绝不碰主人真的 ~/.data。
+// 绝不碰用户真的 ~/.data。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -15,7 +15,7 @@ process.on('exit', () => { try { fs.rmSync(SANDBOX, { recursive: true, force: tr
 process.env.USERPROFILE = SANDBOX
 process.env.HOME = SANDBOX
 // 2026-11-02：swallow 必须在隔离之后动态 import —— 静态 import 会在 env 生效前
-// 加载 paths.mjs，把真实 HOME 缓存进去，社交流水就写进主人真的 ~/.data 了（已发生过）。
+// 加载 paths.mjs，把真实 HOME 缓存进去，社交流水就写进用户真的 ~/.data 了（已发生过）。
 const { swallow } = await import('../tools/lib/swallow.mjs')
 
 const ROOT = path.resolve(import.meta.dirname, '..')
@@ -91,7 +91,7 @@ await ok('字幕：一句一拍，时间按配音的真实时刻落（不是猜�
   const spec = V.specOf('bili')
   const scenes = [{ line: '第一句话', voiceDur: 2 }, { line: '第二句话', voiceDur: 1.5 }]
   const t = V.buildTimeline(scenes, spec)
-  const ass = V.buildAss({ scenes, timeline: t, spec, title: '标题', brand: '大肥鱼' })
+  const ass = V.buildAss({ scenes, timeline: t, spec, title: '标题', brand: '理想的机械人' })
   assert.match(ass, /Dialogue: 1,0:00:0(\d)\.\d\d,/)
   for (const sc of scenes) assert.ok(ass.includes(sc.line), '每句台词都得进字幕')
   assert.match(ass, /Style: Say,Microsoft YaHei/)
@@ -211,7 +211,7 @@ await ok('首条锁：投稿包就绪（ready）仍然锁着 —— 没点发布
   D.markReady({ title: '你好B站', dir: 'x' })
   assert.equal(D.read().status, 'ready')
   assert.equal(D.locked(), true)
-  assert.ok(D.describe().includes('等主人发布'))
+  assert.ok(D.describe().includes('等用户发布'))
 })
 
 await ok('首条锁：标了已发布才解锁，并记下 BV 号', () => {
@@ -237,7 +237,7 @@ await ok('首条锁：剧本没讲到「第一天/账号运营/自我介绍」�
 
 await ok('首条锁：讲全了三件事就过', () => {
   const good = { title: '本鱼来了', intro: '初次见面', scenes: [
-    { acting: '自我介绍', line: '大家好，我是大肥鱼，一条蓝鲸鱼娘' },
+    { acting: '自我介绍', line: '大家好，我是理想的机械人，一条蓝鲸鱼娘' },
     { acting: '紧张', line: '今天是本鱼第一天来B站' },
     { acting: '拍胸', line: '以后这个账号就归我运营' },
   ] }
@@ -258,18 +258,18 @@ await ok('社交流水：写进去能读回来，字段不丢', () => {
   assert.equal(recs[0].bvid, 'BV1aa411c7mD')
 })
 
-await ok('社交流水：@主人的那条会标出来（主人就不用重复看）', () => {
-  S.append({ kind: 'reply', bvid: 'BV1bb411c7mD', title: '视频2', text: '@主人 快看这个', to: '张三' })
+await ok('社交流水：@用户的那条会标出来（用户就不用重复看）', () => {
+  S.append({ kind: 'reply', bvid: 'BV1bb411c7mD', title: '视频2', text: '@用户 快看这个', to: '张三' })
   const recs = S.read({ days: 1 })
-  const hit = recs.find((r) => r.text.includes('@主人'))
+  const hit = recs.find((r) => r.text.includes('@用户'))
   assert.equal(hit.toOwner, true)
-  assert.equal(S.read({ days: 1, excludeOwner: true }).some((r) => r.text.includes('@主人')), false)
+  assert.equal(S.read({ days: 1, excludeOwner: true }).some((r) => r.text.includes('@用户')), false)
 })
 
-await ok('社交流水：@别人不算 @主人', () => {
+await ok('社交流水：@别人不算 @用户', () => {
   assert.equal(S.mentionsOwner({ text: '@--友利奈绪- 本鱼来了' }, {}), false)
-  assert.equal(S.mentionsOwner({ text: '@主人 看这里' }, {}), true)
-  assert.equal(S.mentionsOwner({ text: '看这里', to: '主人' }, {}), true)
+  assert.equal(S.mentionsOwner({ text: '@用户 看这里' }, {}), true)
+  assert.equal(S.mentionsOwner({ text: '看这里', to: '用户' }, {}), true)
 })
 
 await ok('社交流水：按类型过滤 + 计数行', () => {
@@ -280,10 +280,10 @@ await ok('社交流水：按类型过滤 + 计数行', () => {
   assert.equal(S.read({ days: 1, kind: '回评' }).every((r) => r.label === '回评'), true)
 })
 
-await ok('社交流水：给主人的摘要重点列"没 @ 他"的那些', () => {
+await ok('社交流水：给用户的摘要重点列"没 @ 他"的那些', () => {
   const text = S.digestText(S.read({ days: 1 }), { limit: 5 })
   assert.ok(text.includes('你没看到的那部分'))
-  assert.ok(!text.includes('@主人 快看这个'), '已经 @ 过主人的不该再出现在"没看到"里')
+  assert.ok(!text.includes('@用户 快看这个'), '已经 @ 过用户的不该再出现在"没看到"里')
 })
 
 await ok('社交流水：Markdown 带表格和视频链接（能直接点进去看上下文）', () => {
@@ -295,7 +295,7 @@ await ok('社交流水：Markdown 带表格和视频链接（能直接点进去�
 await ok('社交流水：能从老台账 bili-outbox.md 补历史，且补第二次是 0（幂等）', () => {
   const f = path.join(SANDBOX, 'outbox.md')
   fs.writeFileSync(f, [
-    '# 大肥鱼 · B站发言台账',
+    '# 理想的机械人 · B站发言台账',
     '',
     '## 2026-10-20',
     '',
@@ -311,7 +311,7 @@ await ok('社交流水：能从老台账 bili-outbox.md 补历史，且补第二
 })
 
 // ── ⑩ 源码守卫（这些接错了就是"功能静悄悄不生效"）──────────────────────────
-await ok('写入链路：点赞/投币/关注都要进社交流水（不然主人永远不知道她点了谁）', () => {
+await ok('写入链路：点赞/投币/关注都要进社交流水（不然用户永远不知道她点了谁）', () => {
   const s = read('tools/lib/bili-write.mjs')
   assert.match(s, /capRecord\('like', \{ bvid, title: info\.title \}\)/)
   assert.match(s, /capRecord\('coin', \{ bvid, title: info\.title/)
@@ -360,7 +360,7 @@ await ok('配置：视频与社交日报的默认值都在（0 = 不限 / 23:30 
   assert.match(s, /socialDigest: \{ enabled: true, at: '23:30'/)
 })
 
-// ── ⑨ 配音对齐与漏字（10-26 主人报"字幕和语音没对上、漏了很多字"）────────────────
+// ── ⑨ 配音对齐与漏字（10-26 用户报"字幕和语音没对上、漏了很多字"）────────────────
 // 造一条"0.3s 静音 + 1.0s 正弦 + 0.3s 静音"的 wav 当素材，验三件事：
 //   说话段测得准、剪完头尾干净、成片同步校验能把偏移算出来。
 const toneWav = path.join(SANDBOX, 'tone.wav')
@@ -398,7 +398,7 @@ await ok('剪静音：剪完约 1.18s（前留 0.06 气口 + 后留 0.12 余音�
 })
 
 await ok('剪静音不能毁音质：输出必须是原声的波形，不是 ±1 的方波（10-27 真凶）', () => {
-  // 这是主人报了一周的"电音机械音"的根：writeWavLocal 把 Int16Array 当 float 压成 ±1 再乘 32767，
+  // 这是用户报了一周的"电音机械音"的根：writeWavLocal 把 Int16Array 当 float 压成 ±1 再乘 32767，
   // 整条配音只剩 3 个取值（-32767 / 0 / +32767）—— 满幅方波，听起来就是电音。
   const out = path.join(SANDBOX, 'tone.trim2.wav')
   V.trimVoice(toneWav, out)
@@ -435,7 +435,7 @@ await ok('同步校验：配音挪进混音里能被算出来，偏差 ≤0.06s�
 })
 
 await ok('漏字闸门：13 字念 1.07 秒 = 12.2 字/秒，必须被拦下来', () => {
-  assert.equal(P.speakChars('本鱼叫大肥鱼，住在主人电脑里。'), 13)
+  assert.equal(P.speakChars('本鱼叫理想的机械人，住在用户电脑里。'), 13)
   assert.equal(P.speakChars('规矩就一条：别叫本鱼胖，哼。'), 11)
   assert.ok(13 / 1.07 > 6.0, '这条必须被判为离谱')
   const s = read('tools/commands/produce.mjs')
@@ -471,7 +471,7 @@ await ok('参考段体检：文本配不上音频的参考会被认出来（这�
   assert.equal(bad.ok, false, `配比 ${bad.ratio} 竟然合格`)
   assert.ok(bad.ratio > 1.8, `ratio=${bad.ratio}`)
   // 同一段音频配一句话长差不多的文本 → 合格
-  const good = T.refSanity(tone, '主人你看这条片子，本鱼自己剪的，声音是不是还认得出来呀，嗯？')
+  const good = T.refSanity(tone, '用户你看这条片子，本鱼自己剪的，声音是不是还认得出来呀，嗯？')
   assert.ok(good.dur > 5.5, `dur=${good.dur}`)
   assert.equal(good.ok, true, `配比 ${good.ratio} 应该是合格的`)
 })
@@ -518,7 +518,7 @@ await ok('句尾能量比：突然截断的尾巴比自然收束更"响"（辅�
 })
 
 await ok('台词情绪映射：撒娇/生气/温柔各归各的参考', () => {
-  assert.equal(P.pickEmotion('本鱼叫大肥鱼，住在主人电脑里。'), 'coquettish')
+  assert.equal(P.pickEmotion('本鱼叫理想的机械人，住在用户电脑里。'), 'coquettish')
   assert.equal(P.pickEmotion('规矩就一条：别叫本鱼胖，哼。'), 'coquettish')
   assert.equal(P.pickEmotion('今天真的有点生气'), 'angry')
   assert.equal(P.pickEmotion('慢点吃啊，别急'), 'tender')

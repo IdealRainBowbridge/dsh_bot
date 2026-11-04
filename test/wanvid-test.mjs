@@ -5,7 +5,7 @@
 //   ② 片段时长和时间轴对不上（成片音画不同步，最难排查的那种）。
 // 所以这里用一条**带音轨的假成片**当素材：如果 output 里还有 audio 流，测试就该红。
 //
-// 隔离：USERPROFILE / DSH_HOME / BOT_CONFIG 全指到临时目录，绝不碰主人真的 ~/.data。
+// 隔离：USERPROFILE / DSH_HOME / BOT_CONFIG 全指到临时目录，绝不碰用户真的 ~/.data。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -200,7 +200,7 @@ try {
       scenes.push({ img: IMG, clip, voice: wav, voiceDur: 1.5, line: `第${i + 1}句台词` })
     }
     const res = await V.makeFilm({
-      scenes, spec, dir, text: { title: '测试片', brand: '大肥鱼' },
+      scenes, spec, dir, text: { title: '测试片', brand: '理想的机械人' },
       opts: { trimVoices: false, bgm: null, intro: 0, outro: 0 }, log: () => {},
     })
     const info = V.inspect(res.final)

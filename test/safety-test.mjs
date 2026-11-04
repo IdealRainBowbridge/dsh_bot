@@ -3,7 +3,7 @@
 // 器官判据（M58）：
 //   ① 纯读纪律：safety() 不写任何账本/状态文件（读前后数据目录逐字节一致）
 //   ② 无数据 → 0.5 中性（不缓冲也不放任）；72h 窗外 → 0.5
-//   ③ 主人正向互动 → 高安全；负向 → 低安全（episode valence 化学慢变量，非数值好感度）
+//   ③ 用户正向互动 → 高安全；负向 → 低安全（episode valence 化学慢变量，非数值好感度）
 //   ④ hpa 增益衰减：同 stress 输入，safety 高 → cortisol 峰显著低，峰时刻不变（变钝≠变慢）
 //   ⑤ 慢性通路不受扰动：fbSensitivity/load 照常累积
 import assert from 'node:assert'

@@ -50,7 +50,7 @@ ok('没问微信时不多嘴', !/微信那边/.test(plain.messages[0].content))
 const tight = assemble.assemble({ platform: 'qq', chatId: 'qq:1', userId: '1', userText: '在吗', isGroup: false, now, budget: 800 })
 ok('预算 800 时字数不超', tight.chars <= 800, `实际 ${tight.chars}`)
 ok('预算 800 时记了截断明细', tight.dropped.length > 0, JSON.stringify(tight.dropped.map((d) => d.key)))
-ok('预算再紧也保住身份层和诚实层', /大肥鱼/.test(tight.messages[0].content) && /怎么说话才算不糊弄他/.test(tight.messages[0].content))
+ok('预算再紧也保住身份层和诚实层', /理想的机械人/.test(tight.messages[0].content) && /怎么说话才算不糊弄他/.test(tight.messages[0].content))
 
 // 默认预算（5650）下的字数
 const def = assemble.assemble({ platform: 'qq', chatId: 'qq:1', userId: '1', userText: '在吗', isGroup: false, now })

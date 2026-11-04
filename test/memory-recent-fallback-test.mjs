@@ -38,7 +38,7 @@ const ym = new Date().toISOString().slice(0, 7)
 const epFile = path.join(epDir, ym + '.jsonl')
 const mkEp = (at, act, othersKind, quote, gist) => ({
   id: 'ep-test-' + at, at, atIso: new Date(at).toISOString(),
-  who: { self: 'dsh_bot', others: othersKind ? [{ kind: othersKind, id: '700001', name: '主人' }] : [] },
+  who: { self: 'dsh_bot', others: othersKind ? [{ kind: othersKind, id: '700001', name: '用户' }] : [] },
   where: { platform: 'qq', chat: chatId, group: null }, scope: 'private',
   act, gist: gist || quote, quote, feel: { valence: 0, arousal: 0.3 }, salience: 0.4,
   entities: [], evidence: [], meta: {},

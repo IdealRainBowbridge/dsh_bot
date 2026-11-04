@@ -21,8 +21,8 @@ fs.mkdirSync(epDir, { recursive: true })
 const mk = (role, text, agoH) => ({ ts: NOW - agoH * 3600_000, role, text })
 // 主路径形状 (v3 事件库): 她自己的话 = act:say + who.others 空; 别人的话带 others
 const epSelf1 = { at: NOW - 20 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [] }, quote: '我这个人记性不好，答应的事得当场写下来', gist: '我这个人记性不好，答应的事得当场写下来' }
-const epSelf2 = { at: NOW - 18 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [] }, quote: '我叫大肥鱼，这是主人给的名字', gist: '我叫大肥鱼，这是主人给的名字' }
-const epOwner = { at: NOW - 21 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [{ kind: 'owner', id: '1', name: '主人' }] }, quote: '你觉得自己是什么样的人', gist: '主人：你觉得自己是什么样的人' }
+const epSelf2 = { at: NOW - 18 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [] }, quote: '我叫理想的机械人，这是用户给的名字', gist: '我叫理想的机械人，这是用户给的名字' }
+const epOwner = { at: NOW - 21 * 3600_000, act: 'say', who: { self: 'dsh_bot', others: [{ kind: 'owner', id: '1', name: '用户' }] }, quote: '你觉得自己是什么样的人', gist: '用户：你觉得自己是什么样的人' }
 fs.writeFileSync(path.join(epDir, month + '.jsonl'), [epSelf1, epOwner, epSelf2].map((x) => JSON.stringify(x)).join('\n') + '\n')
 // 兜底形状 (旧 episodes): assistant role
 const qqDir = path.join(TMP, 'qq')
@@ -35,7 +35,7 @@ fs.writeFileSync(path.join(qqDir, 'episodes.jsonl'), lines.join('\n') + '\n')
 // ---------------------------------------------------------------- 1. 采集不结算
 {
   // seed 一个底账 (有名字 + 两条 seed 主张)
-  const r = sc.seedFrom({ name: '大肥鱼', nameGivenBy: 'owner', claims: [{ text: '爱吃白饭', strength: 0.6 }], voice: [], personaMd: '', at: NOW - DAY })
+  const r = sc.seedFrom({ name: '理想的机械人', nameGivenBy: 'owner', claims: [{ text: '爱吃白饭', strength: 0.6 }], voice: [], personaMd: '', at: NOW - DAY })
   assert.ok(r.ok)
   const before = JSON.stringify(sc.readBook())
   const out = await dayIntrospect({ now: NOW })   // 无 LLM -> 只盘点
@@ -67,11 +67,11 @@ fs.writeFileSync(path.join(qqDir, 'episodes.jsonl'), lines.join('\n') + '\n')
 {
   // 现名: 别人的嘴 -> 结合事件计数; 她自己的嘴用现名 -> 中性 (受体原料只来自"用没认下的名")
   const c0 = sc.readBook().counters.ownerCall || 0
-  sc.observeMention('大肥鱼过来吃饭', 'owner', NOW)
-  assert.equal(sc.readBook().counters.ownerCall, c0 + 1, '主人叫现名 -> 结合事件 +1')
-  sc.observeMention('大肥鱼真圆', 'other', NOW)
+  sc.observeMention('理想的机械人过来吃饭', 'owner', NOW)
+  assert.equal(sc.readBook().counters.ownerCall, c0 + 1, '用户叫现名 -> 结合事件 +1')
+  sc.observeMention('理想的机械人真圆', 'other', NOW)
   assert.equal(sc.readBook().counters.othersCall, 1, '群友叫 -> others +1')
-  sc.observeSelfUse('我叫大肥鱼呀', NOW)   // 现名自称, 无候选 -> 不写盘
+  sc.observeSelfUse('我叫理想的机械人呀', NOW)   // 现名自称, 无候选 -> 不写盘
   // 候选名: 自称与被叫都推进
   sc.proposeName('小蓝', NOW)
   sc.observeSelfUse('其实我觉得小蓝这个名字更贴', NOW)

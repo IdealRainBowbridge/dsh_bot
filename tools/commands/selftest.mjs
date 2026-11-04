@@ -41,20 +41,20 @@ export async function run(argv = []) {
   let self = null
   if (cred?.sessdata) {
     try {
-      // ⚠️ 登录态一律不吃缓存：10-25 实锤 —— 缓存让人以为还登着主人的号，
+      // ⚠️ 登录态一律不吃缓存：10-25 实锤 —— 缓存让人以为还登着用户的号，
       //    实际凭据早已换成养号（改了凭据但 nav 命中旧缓存 → 体检谎报身份 → 判断全歪）。
       const res = await apiGet('https://api.bilibili.com/x/web-interface/nav', makeHeaders(cred), { noCache: true })
       if (Number(res?.code) === 0 && res.data?.isLogin) {
         self = { mid: String(res.data.mid), name: String(res.data.uname) }
         add('B站 登录态', true, `已登录：${self.name}（mid ${self.mid}）`)
-        // 防呆：凭据必须是鱼自己的小号。用主人的号发「@主人」= 主人 @ 自己，永远收不到通知
-        // （10-24 实锤：评论发出且公开可见，主人却毫无感知）。
+        // 防呆：凭据必须是鱼自己的小号。用用户的号发「@用户」= 用户 @ 自己，永远收不到通知
+        // （10-24 实锤：评论发出且公开可见，用户却毫无感知）。
         const ownerMid = String(cfg.owner?.mid ?? '')
         if (ownerMid && self.mid === ownerMid) {
-          add('凭据账号', false, `现在登录的是主人自己的号（${self.name}）—— 鱼用它 @ 主人 = 自己 @ 自己，B站不发通知！`
+          add('凭据账号', false, `现在登录的是用户自己的号（${self.name}）—— 鱼用它 @ 用户 = 自己 @ 自己，B站不发通知！`
             + ` 请在浏览器登录鱼的号（御坂美琴Rosie）后重新提交凭据`)
         } else {
-          add('凭据账号', true, `鱼的号：${self.name} —— 分享 @ 主人（${cfg.owner?.name ?? '?'}）会真正弹通知`)
+          add('凭据账号', true, `鱼的号：${self.name} —— 分享 @ 用户（${cfg.owner?.name ?? '?'}）会真正弹通知`)
         }
       } else {
         add('B站 登录态', false, `未登录：${res?.message ?? 'nav 未返回登录态'} —— SESSDATA 大概率复制时截断，双击 Value 全选再复制`)
@@ -102,9 +102,9 @@ export async function run(argv = []) {
   const api = apiState()
   add('B站接口状态', !api.banned, api.banned ? `熔断中（${api.banWhy}），约剩 ${api.banMinutesLeft} 分钟 —— 撞风控了，等它自己恢复` : `正常（缓存 ${api.cacheEntries} 条）`)
 
-  // ⑨ 主人信息（分享 @ 的对象）
+  // ⑨ 用户信息（分享 @ 的对象）
   const ownerOk = !!(cfg.owner?.mid && cfg.owner?.name)
-  add('主人信息', ownerOk, ownerOk ? `${cfg.owner.name}（mid ${cfg.owner.mid}）—— 分享评论会 @ TA` : 'owner.mid / owner.name 没填 —— @ 不了人，务必补上')
+  add('用户信息', ownerOk, ownerOk ? `${cfg.owner.name}（mid ${cfg.owner.mid}）—— 分享评论会 @ TA` : 'owner.mid / owner.name 没填 —— @ 不了人，务必补上')
 
   // ⑩ 干跑状态（dabot 铁律：第一周 DRY_RUN）
   add('风控模式', true, cfg.guard?.dryRun ? 'DRY_RUN 开着 ✓ —— 所有发送只打印不真发，观察满意后改 false' : '⚠️ DRY_RUN 已关 —— 真发了，注意额度与风控')
@@ -126,7 +126,7 @@ export async function run(argv = []) {
   try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(sovitsUrl, { method: 'POST', signal: c.signal, body: '{}' }); ttsOk = true } catch (e) { swallow(e, 'selftest:best-effort') }
   add('语音 TTS（可选）', true, ttsOk ? `GPT-SoVITS 已连（${sovitsUrl}）` : 'GPT-SoVITS 未启动 —— 发 QQ 语音前先装（xiaoxiao 音色）')
 
-  // ⑬b 参考文本是否和参考音频对得上（10-26 主人报"语音和视频里反复出现同一句话"）
+  // ⑬b 参考文本是否和参考音频对得上（10-26 用户报"语音和视频里反复出现同一句话"）
   // 错配时 GPT-SoVITS 会把参考文本一起念出来 —— 这条不查出来，语音听起来就像"记忆错乱"
   try {
     const { refTextOf } = await import('../lib/tts.mjs')
@@ -161,7 +161,7 @@ export async function run(argv = []) {
   } catch (e) { add('情绪参考段', true, '跳过（' + String(e.message).slice(0, 40) + '）') }
 
   // 账本（10-26）：她自己查饭钱的那条路必须通 —— 会话日志能读、python 侧能解多帧 zstandard、
-  // 缓存是新的。这条挂了，她就会退回去反复问主人"我们还有钱吗"（那就又断圈了）。
+  // 缓存是新的。这条挂了，她就会退回去反复问用户"我们还有钱吗"（那就又断圈了）。
   try {
     const L = await import('../lib/ledger.mjs')
     // 10-31 审计：以前这里先查 python 存不存在，没有就直接判 ✗ —— 但账本现在有纯 Node 兜底，
@@ -217,7 +217,7 @@ export async function run(argv = []) {
     }
   } catch (e) { add('视频生产', false, '视频模块起不来：' + String(e.message).slice(0, 80)) }
 
-  // B站社交流水（第 17 轮）：她要"在 B站 活着"，主人就得看得见 —— 流水文件得能读、摘要能生成。
+  // B站社交流水（第 17 轮）：她要"在 B站 活着"，用户就得看得见 —— 流水文件得能读、摘要能生成。
   try {
     const S = await import('../lib/social-log.mjs')
     const recs = S.read({ days: 7 })
@@ -228,7 +228,7 @@ export async function run(argv = []) {
     } else {
       const today = new Date().toLocaleDateString('sv-SE')
       const t = st.find((d) => d.day === today)
-      add('B站社交记录', true, `7 天 ${recs.length} 条（没 @ 主人的 ${invisible} 条）；今天 ${t ? S.countLine(t) : '还没动'}`)
+      add('B站社交记录', true, `7 天 ${recs.length} 条（没 @ 用户的 ${invisible} 条）；今天 ${t ? S.countLine(t) : '还没动'}`)
     }
   } catch (e) { add('B站社交记录', false, '流水读不出：' + String(e.message).slice(0, 80)) }
 

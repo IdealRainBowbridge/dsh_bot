@@ -3,7 +3,7 @@
 //
 //   node bot.mjs sticker gen "本鱼饿了" [--tag 生气] [--send]
 //   · --tag  → 生成"标签"样式存进标签目录（图库增长，以后 [表情:标签] 直接用）
-//   · --send → 生成完顺手把图发给主人 QQ 看效果
+//   · --send → 生成完顺手把图发给用户 QQ 看效果
 import fs from 'node:fs'
 import { generateStickerImage } from '../lib/imggen.mjs'
 import { config } from '../lib/config.mjs'
@@ -45,7 +45,7 @@ export async function run(argv = []) {
     if (!file) { console.error('✗ 生成失败（看 imageGen 配置 / 代理 7897 是否活着 / 今日额度）'); process.exit(1) }
     console.log(`✓ 已入库：${file}`)
     if (has(argv, '--send')) {
-      try { console.log((await sendToOwnerQQ(file)) ? '✓ 已发主人 QQ 看效果' : '✗ 发送失败（NapCat 没起？）') }
+      try { console.log((await sendToOwnerQQ(file)) ? '✓ 已发用户 QQ 看效果' : '✗ 发送失败（NapCat 没起？）') }
       catch (e) { console.error('✗ 发送失败：' + e.message) }
     }
     return

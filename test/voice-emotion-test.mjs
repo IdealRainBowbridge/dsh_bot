@@ -11,7 +11,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-// 先把 dataPath 指到临时目录 —— 情绪参考段清单不能读主人真实的那份
+// 先把 dataPath 指到临时目录 —— 情绪参考段清单不能读用户真实的那份
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-emo-test-'))
 process.env.DSH_HOME = sandbox
 process.env.USERPROFILE = sandbox
@@ -37,9 +37,9 @@ async function okAsync(name, fn) {
 
 console.log('情绪标签（L1）')
 ok('[[撒娇]] 认得出，而且剥干净', () => {
-  const r = E.parseEmotionTag('[[撒娇]]主人你怎么才回我呀～')
+  const r = E.parseEmotionTag('[[撒娇]]用户你怎么才回我呀～')
   assert.equal(r.emotion, 'coquettish')
-  assert.equal(r.text, '主人你怎么才回我呀～')
+  assert.equal(r.text, '用户你怎么才回我呀～')
 })
 ok('【情绪：困】这种写法也认', () => {
   const r = E.parseEmotionTag('【情绪：困】别吵，我再睡五分钟。')
@@ -50,14 +50,14 @@ ok('生造词 [[火大]] 也认（别名兜住）', () => {
   assert.equal(E.parseEmotionTag('[[火大]]你又不吃饭').emotion, 'angry')
 })
 ok('[表情:开心] 不许被当成情绪标签吃掉', () => {
-  const r = E.parseEmotionTag('主人[表情:开心] 我吃完了！')
+  const r = E.parseEmotionTag('用户[表情:开心] 我吃完了！')
   assert.equal(r.emotion, '')
-  assert.equal(r.text, '主人[表情:开心] 我吃完了！')
+  assert.equal(r.text, '用户[表情:开心] 我吃完了！')
 })
 ok('B站表情码 [doge] 原样保留', () => {
   assert.equal(E.stripEmotionTags('[doge]这条是表情码'), '[doge]这条是表情码')
 })
-ok('未知情绪名的双括号也要删掉（不能漏给主人看）', () => {
+ok('未知情绪名的双括号也要删掉（不能漏给用户看）', () => {
   assert.equal(E.stripEmotionTags('[[莫名]]喂').includes('[['), false)
 })
 ok('情绪 → 参数：都能查到，语速/温度在合理区间', () => {
@@ -81,7 +81,7 @@ ok('一条长回复切成 ≤2 条语音，剩下的走文字', () => {
   assert.ok(p.rest.includes('忙完'), '剩余文字丢了：' + p.rest)
 })
 ok('短回复只有一条语音、没有剩余', () => {
-  const p = E.splitVoiceParts('主人我回来了。', { maxChars: 60, maxParts: 2 })
+  const p = E.splitVoiceParts('用户我回来了。', { maxChars: 60, maxParts: 2 })
   assert.equal(p.parts.length, 1)
   assert.equal(p.rest, '')
 })
@@ -120,7 +120,7 @@ ok('显式指定参考音频时只用那一段', () => {
 
 console.log('分块与拼接（L0）')
 ok('80 字以内不分块', () => {
-  assert.deepEqual(tts.splitForTts('主人我回来啦。'), ['主人我回来啦。'])
+  assert.deepEqual(tts.splitForTts('用户我回来啦。'), ['用户我回来啦。'])
 })
 ok('长文本按句分块，每块不超预算', () => {
   const t = '第一句说完了。'.repeat(30)
@@ -197,8 +197,8 @@ ok('QQ 的提示里带语气暗号，B站/抖音不带', () => {
   assert.equal(E.emotionTagPrompt('bilibili'), '')
   assert.equal(E.emotionTagPrompt('douyin'), '')
 })
-ok('她能看懂"方括号不会显示给主人"', () => {
-  assert.match(E.emotionTagPrompt('qq'), /不会显示给主人/)
+ok('她能看懂"方括号不会显示给用户"', () => {
+  assert.match(E.emotionTagPrompt('qq'), /不会显示给用户/)
 })
 
 console.log('源码防线')

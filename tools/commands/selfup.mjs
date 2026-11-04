@@ -51,8 +51,8 @@ function logLine(text) {
   const md = LOG()
   let content = ''
   try { content = fs.readFileSync(md, 'utf8') } catch (e) { swallow(e, 'selfup:logLine') }
-  if (!content.startsWith('# 大肥鱼 · 自我升级日志')) content = '# 大肥鱼 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n'
-  if (!content.includes(`## ${day}\n`)) content = content.replace('# 大肥鱼 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n', `# 大肥鱼 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n## ${day}\n\n`)
+  if (!content.startsWith('# 理想的机械人 · 自我升级日志')) content = '# 理想的机械人 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n'
+  if (!content.includes(`## ${day}\n`)) content = content.replace('# 理想的机械人 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n', `# 理想的机械人 · 自我升级日志\n\n> 她对自己动的每一次手术：改了什么、为什么、验证结果。\n\n## ${day}\n\n`)
   const at = content.indexOf(`## ${day}\n`) + `## ${day}\n\n`.length
   content = content.slice(0, at) + `- ${time} ${String(text).slice(0, 400)}\n` + content.slice(at)
   fs.mkdirSync(path.dirname(md), { recursive: true })

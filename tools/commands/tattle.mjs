@@ -1,4 +1,4 @@
-// tattle —— 打小报告：看完好视频 → LLM 写一段"汇报" → QQ 私信发给笨蛋老爸。
+// tattle —— 打小报告：看完好视频 → LLM 写一段"汇报" → QQ 私信发给笨蛋管理员。
 // 形态（网上流行的鱼号）：不是甩链接，是「老爹我跟你说，我今天看到…」的人话汇报。
 // 触发：bili-watch 深读评分 >= 阈值（默认 15）时调用；手动也能跑。
 // 节流：一天最多 3 条（config.tattle.dailyMax），避免变成骚扰。
@@ -33,11 +33,11 @@ function markSent(st) {
   writeState(st)
 }
 
-/** 写汇报：LLM 用她的口吻把「看了什么+我的看法」讲给笨蛋老爸听。 */
+/** 写汇报：LLM 用她的口吻把「看了什么+我的看法」讲给笨蛋管理员听。 */
 async function compose({ title, bvid, score, highlight, reason }) {
   const llm = await import('../lib/llm.mjs')
   const r = await llm.chat([
-    { role: 'system', content: fill('你是{name}，一只住在电脑里的鲸鱼娘，正在 QQ 私信跟{owner}（你的主人）「打小报告」——汇报你今天看到的好视频。要求：像跟家人聊天，60 字内，先说看到了什么，再说你为什么觉得值得说（你的真实看法），最后可以带一句想跟他讨论的点。不要客套开头，直接进内容。只输出消息本身。') },
+    { role: 'system', content: fill('你是{name}，一只住在电脑里的鲸鱼娘，正在 QQ 私信跟{owner}（你的用户）「打小报告」——汇报你今天看到的好视频。要求：像跟家人聊天，60 字内，先说看到了什么，再说你为什么觉得值得说（你的真实看法），最后可以带一句想跟他讨论的点。不要客套开头，直接进内容。只输出消息本身。') },
     { role: 'user', content: `视频：《${title}》（BV ${bvid}）\n我的评分：${score}/20\n评分理由：${reason || '（无）'}\n值得说的点：${highlight || '（无，自己从理由里提炼）'}` },
   ], { temperature: 0.9, max_tokens: 150, timeoutMs: 25000, purpose: 'creative' })
   return String(r || '').trim()

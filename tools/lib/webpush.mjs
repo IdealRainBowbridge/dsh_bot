@@ -137,7 +137,7 @@ export function planProactive({ cfg, force = false, now = Date.now() } = {}) {
 }
 
 /** 真发出去了才记：fired/lastAt/used。由 scheduler 或面板路由在 prompt 成功后调用。 */
-/** 发出后记一笔「这条在等回应」；主人下一条 QQ 私聊到达时由 outcome() 结账。 */
+/** 发出后记一笔「这条在等回应」；用户下一条 QQ 私聊到达时由 outcome() 结账。 */
 export function pendingOutcome({ kind = '', now = Date.now() } = {}) {
   try {
     updateWake((st) => ({ ...st, pending: { at: now, kind: String(kind || '') } }))
@@ -145,7 +145,7 @@ export function pendingOutcome({ kind = '', now = Date.now() } = {}) {
 }
 
 /**
- * 结果学习：主人来话了 → 刚才那条主动消息有没有被接住。
+ * 结果学习：用户来话了 → 刚才那条主动消息有没有被接住。
  * 30 分钟内回复 = 接住；更久 = 没接住。样本 ≥5 才开始漂时段（防迷信）。
  * 漂移：接住多的时段 slot 微涨（slots 归一化到均值 1.0）。
  */

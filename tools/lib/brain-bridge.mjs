@@ -8,13 +8,13 @@ import { config } from './config.mjs'
 const PLATFORM_ACT = { bilibili: 'observe', douyin: 'observe', web: 'observe' }
 
 /**
- * 主人是谁 —— 从配置读，绝不硬编码。
+ * 用户是谁 —— 从配置读，绝不硬编码。
  *
  * v5 修：旧代码写死 `includes('3682285116')`。后果有三：
- *   ① 换一个 QQ 号部署，所有"主人"判定全错，主人被当成陌生人（记忆里没有他的位置）；
+ *   ① 换一个 QQ 号部署，所有"用户"判定全错，用户被当成陌生人（记忆里没有他的位置）；
  *   ② 这个文件是双写桥，每一行记忆都过它 —— 错一次污染全部；
  *   ③ 仓库里留着一个真实 QQ 号，属于不该存在的个人信息。
- * 现在：优先 owner.qq，其次 brain.ownerIds；都没有就"私聊即主人"（与旧兜底一致）。
+ * 现在：优先 owner.qq，其次 brain.ownerIds；都没有就"私聊即用户"（与旧兜底一致）。
  */
 function isOwnerRecord(rec) {
   try {
@@ -46,7 +46,7 @@ export function rememberToBrain(rec) {
       isGroup: rec.isGroup === true,
       kind: rec.kind || '',
       isOwner,
-      name: isSelf ? '我' : isOwner ? String(config().owner?.name || '主人') : '',
+      name: isSelf ? '我' : isOwner ? String(config().owner?.name || '用户') : '',
     })
   } catch { /* 旁路，绝不抛 */ }
 }

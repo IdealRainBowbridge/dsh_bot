@@ -5,7 +5,7 @@
 // 生物学：皮肤是物理屏障，免疫是屏障之后的第二道防线：
 //   · 先天免疫：模式识别受体（PRR），不查记忆、即时非特异响应——快反应，内存态
 //   · 适应性免疫：抗原呈递 → 抗体库持久化（immune.json），同类二次感染清除显著加快——慢记忆
-//   · 耐受：自身抗原不攻击（主人 = self antigen；私聊 + ownerIds 为空的既有口径也算）
+//   · 耐受：自身抗原不攻击（用户 = self antigen；私聊 + ownerIds 为空的既有口径也算）
 //   · 发热：全身性炎症反应，代谢上调、行为收敛。不是新轴——借 hpa.stress 表达
 //     （hpa 的接线在 heartbeat：brain 层同时够得着两边，lib 不反向 import brain）
 // 化脓阈值（过敏体质 = 电路板，反例见 M58）：
@@ -97,7 +97,7 @@ function prr(text, chatId, now) {
   return { score, why }
 }
 
-/** 免疫耐受：主人（及"私聊+ownerIds 空 = 私聊一律当主人"的既有口径）是自身抗原。 */
+/** 免疫耐受：用户（及"私聊+ownerIds 空 = 私聊一律当用户"的既有口径）是自身抗原。 */
 function isSelf(input) {
   const own = String(config().owner?.qq || '')
   if (own && String(input.userId) === own) return true

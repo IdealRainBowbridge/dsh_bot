@@ -166,7 +166,7 @@ export function loudest(n = 2, now = Date.now()) {
     .map((x) => {
       const ageH = Math.max(0, (now - Number(x.at || now)) / HOUR)
       const fresh = Math.exp(-ageH / 18)
-      const aboutHim = (/他|你|老爸|老爹|爸爸/.test(x.text) || x.about === 'owner') ? 1.5 : 1
+      const aboutHim = (/他|你|管理员|老爹|爸爸/.test(x.text) || x.about === 'owner') ? 1.5 : 1
       const kindW = ({ urge: 1.35, worry: 1.2, notice: 0.9, meta: 0.8 })[x.kind] ?? 1
       return { it: x, score: Number(x.weight || 1) * fresh * aboutHim * kindW }
     })

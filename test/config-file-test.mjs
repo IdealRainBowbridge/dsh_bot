@@ -14,10 +14,10 @@ process.env.BOT_DATA_DIR = TMP
 process.env.BOT_CONFIG = path.join(TMP, 'bot.config.json')
 
 // 先落一个"很薄"的用户配置（模拟真实情况：只写了自己关心的几个键）
-// 注意：identity.name 的默认值**就是** '大肥鱼'，所以它会被 stripDefaults 剔掉 ——
-// 这是对的（读回来仍然是大肥鱼）。要验证"用户的值必须保留"，得用一个非默认值。
+// 注意：identity.name 的默认值**就是** '理想的机械人'，所以它会被 stripDefaults 剔掉 ——
+// 这是对的（读回来仍然是理想的机械人）。要验证"用户的值必须保留"，得用一个非默认值。
 fs.writeFileSync(process.env.BOT_CONFIG, JSON.stringify({
-  identity: { name: '大肥鱼', ownerTitle: '笨蛋老爸' },
+  identity: { name: '理想的机械人', ownerTitle: '笨蛋管理员' },
   qq: { enabled: true },
 }))
 
@@ -26,8 +26,8 @@ const { DEFAULTS } = await import('../tools/lib/config.mjs')
 
 // ── 1. 读：必须补全默认值 ───────────────────────────────────────────────────
 const cfg = cf.readConfigFile()
-assert.equal(cfg.identity.name, '大肥鱼', '用户的值得保留')
-assert.equal(cfg.identity.ownerTitle, '笨蛋老爸', '非默认值的用户设置要保留')
+assert.equal(cfg.identity.name, '理想的机械人', '用户的值得保留')
+assert.equal(cfg.identity.ownerTitle, '笨蛋管理员', '非默认值的用户设置要保留')
 assert.equal(cfg.qq.enabled, true)
 assert.equal(cfg.guard.dryRun, true, '**缺的键必须从 DEFAULTS 补上**（旧版这里会 undefined）')
 assert.equal(cfg.qq.channel.debounceMs, DEFAULTS.qq.channel.debounceMs)
@@ -40,13 +40,13 @@ const r = cf.writeConfigFile(cfg)
 assert.equal(r.ok, true)
 const after = JSON.parse(fs.readFileSync(process.env.BOT_CONFIG, 'utf8'))
 assert.equal('guard' in after, false, '**默认值不许被写进配置文件**（否则以后升级默认值不再生效）')
-assert.equal(after.identity.ownerTitle, '笨蛋老爸', '用户改过的值必须保留')
+assert.equal(after.identity.ownerTitle, '笨蛋管理员', '用户改过的值必须保留')
 assert.equal('name' in (after.identity || {}), false, '与默认值相同的键会被剔掉（读回来仍然一样）')
 assert.equal(after.qq.enabled, true, '用户显式开的值要保留')
 // 读回来必须仍然等于用户原本看到的样子
 const reread = cf.readConfigFile()
-assert.equal(reread.identity.name, '大肥鱼')
-assert.equal(reread.identity.ownerTitle, '笨蛋老爸')
+assert.equal(reread.identity.name, '理想的机械人')
+assert.equal(reread.identity.ownerTitle, '笨蛋管理员')
 
 // ── 3. 用户改过的值必须落盘 ────────────────────────────────────────────────
 cfg.qq.voice_enabled = true          // 与默认值不同

@@ -39,7 +39,7 @@ const RULES = [
 function ruleFacts(eps) {
   const out = []
   for (const ep of eps) {
-    if (!ep.who?.others?.some((w) => w.kind === 'owner')) continue     // 只从主人嘴里抽
+    if (!ep.who?.others?.some((w) => w.kind === 'owner')) continue     // 只从用户嘴里抽
     for (const r of RULES) {
       const m = r.re.exec(ep.quote || ep.gist || '')
       if (!m) continue
@@ -152,7 +152,7 @@ export async function run({ now = Date.now(), chatFn = null, dryRun = false, lim
 async function extractLLM(cluster, chatFn) {
   const text = cluster.eps.slice(-8).map((e) => `${isoOf(e.at)} ${e.gist}`).join('\n')
   const ask = [
-    '从下面这些对话里抽"关于主人"的稳定事实。只输出 JSON 数组，每项',
+    '从下面这些对话里抽"关于用户"的稳定事实。只输出 JSON 数组，每项',
     '{"p":"food.eat|activity.do|plan.go|mood.state|media.like|preference.like|place.visit|work.do","o":"具体内容≤20字"}。',
     '抽不出来就输出 []。不要编，不要把问句当事实。',
     '---',

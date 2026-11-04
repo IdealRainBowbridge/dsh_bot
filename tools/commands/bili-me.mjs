@@ -1,5 +1,5 @@
 // bili-me —— 她自己的账号台：whoami + 改签名。
-// 账号归属（10-31 笨蛋老爸拍板）：B站糖鲸大肥鱼归她运营，这是本鱼自己的号（糖鲸大肥鱼）。
+// 账号归属（10-31 笨蛋管理员拍板）：B站糖鲸理想的机械人归她运营，这是本鱼自己的号（糖鲸理想的机械人）。
 // 接口实测（10-31）：改签名走 POST /x/member/web/update（usersign 小写，整包 uname/sex/birthday）。
 import { config } from '../lib/config.mjs'
 import { loadCred } from '../lib/cred.mjs'
@@ -28,13 +28,13 @@ export async function whoami() {
         sign: (await getSign()).sign || '',
       }
     } else {
-      out.bilibili.error = '凭据失效或被风控（code ' + (j?.code ?? '?') + '）—— 需要笨蛋老爸重贴 cookie'
+      out.bilibili.error = '凭据失效或被风控（code ' + (j?.code ?? '?') + '）—— 需要笨蛋管理员重贴 cookie'
     }
   } catch (e) {
     out.bilibili.error = String(e.message).slice(0, 100)
   }
   out.qq = { self: String(cfg.qq?.self_id || ''), owner: String(cfg.owner?.qq || '') }
-  out.owner = { name: cfg.owner?.name || '', mid: cfg.owner?.mid || '', note: '这是本鱼的号，这是本鱼自己的号（糖鲸大肥鱼）' }
+  out.owner = { name: cfg.owner?.name || '', mid: cfg.owner?.mid || '', note: '这是本鱼的号，这是本鱼自己的号（糖鲸理想的机械人）' }
   return out
 }
 
@@ -57,7 +57,7 @@ export async function setSign(rawText) {
   const nd = await nav.json().catch(() => ({}))
   const cur = nd?.data || {}
   const body = new URLSearchParams({
-    uname: cur.uname || '糖鲸大肥鱼',
+    uname: cur.uname || '糖鲸理想的机械人',
     usersign: text,
     sex: cur.sex || '保密',
     birthday: cur.birthday || '',
@@ -96,6 +96,6 @@ export async function run(args) {
   const me = await whoami()
   const b = me.bilibili
   console.log('【B站】' + (b.mid ? b.name + '（mid ' + b.mid + '）Lv.' + b.level + ' · 硬币 ' + b.coins + ' · 签名「' + b.sign + '」' : '✗ ' + (b.error || '未知')))
-  console.log('【QQ 】我自己 ' + me.qq.self + '；笨蛋老爸 ' + me.qq.owner)
-  console.log('【关系】这是本鱼的号，这是本鱼自己的号（糖鲸大肥鱼）；写操作走额度计数。')
+  console.log('【QQ 】我自己 ' + me.qq.self + '；笨蛋管理员 ' + me.qq.owner)
+  console.log('【关系】这是本鱼的号，这是本鱼自己的号（糖鲸理想的机械人）；写操作走额度计数。')
 }

@@ -52,7 +52,7 @@ const DRY = process.argv.includes('--dry')
 const THEMES = [
   ['sleep-work', /睡|困|闭眼|躺|歇|醒/],
   ['todo-six', /六件事|六件|一件一件|写下来|落到纸上|写在纸上|清单|脑子清/],
-  ['owner', /老爸|主人|他/],
+  ['owner', /管理员|用户|他/],
   ['work-code', /代码|改|修|部署|提交/],
 ]
 

@@ -6,8 +6,8 @@
 // 规则（都可配）：
 //   ① 全局最小间隔      qq.proactive.globalGapMin  默认 45 分钟
 //   ② 全局每日上限      qq.proactive.globalDailyMax 默认 8 条
-//   ③ 连续主动上限      qq.proactive.maxStreak     默认 2 条（主人没说话就最多连发 2 条）
-//   ④ 主人刚说过话      qq.proactive.ownerActiveMin 默认 3 分钟（他正在聊，别插）
+//   ③ 连续主动上限      qq.proactive.maxStreak     默认 2 条（用户没说话就最多连发 2 条）
+//   ④ 用户刚说过话      qq.proactive.ownerActiveMin 默认 3 分钟（他正在聊，别插）
 //
 // ── 2026-11-02 补丁：改走 atomic ────────────────────────────────────────────
 // 这里原来是裸 fs.writeFileSync。这张闸门账是三条主动通道**唯一**的共用节流依据，
@@ -36,7 +36,7 @@ function read() {
  * 跨进程安全的「读-改-写」。
  *
  * 拿不到锁就**这次不写** —— 宁可少发一条主动消息，也不能多发。这条取舍是有意的：
- * 主动消息超发的代价（刷屏、被主人当成 bug）远大于少发的代价。
+ * 主动消息超发的代价（刷屏、被用户当成 bug）远大于少发的代价。
  *
  * @param {(cur: object) => object | undefined} mutate
  * @returns {{ok: boolean, value?: object, error?: string}}
@@ -52,7 +52,7 @@ function save(mutate) {
   return r || { ok: false, error: 'no-result' }
 }
 
-/** 记一次"主人说话了"（重置连续计数）。 */
+/** 记一次"用户说话了"（重置连续计数）。 */
 export function noteOwnerSpoke(at = Date.now()) {
   save((st) => { st.ownerLastAt = at; st.streak = 0; return st })
 }
@@ -79,10 +79,10 @@ export function allow(kind = 'proactive') {
     return { ok: false, why: '距上次主动消息不足 ' + gapMin + ' 分钟' }
   }
   if (st.streak >= maxStreak) {
-    return { ok: false, why: '已连发 ' + st.streak + ' 条且主人没说话（上限 ' + maxStreak + '）' }
+    return { ok: false, why: '已连发 ' + st.streak + ' 条且用户没说话（上限 ' + maxStreak + '）' }
   }
   if (st.ownerLastAt && now - st.ownerLastAt < ownerActiveMin * 60_000) {
-    return { ok: false, why: '主人 ' + ownerActiveMin + ' 分钟内刚说过话，别插' }
+    return { ok: false, why: '用户 ' + ownerActiveMin + ' 分钟内刚说过话，别插' }
   }
   return { ok: true, why: '' }
 }

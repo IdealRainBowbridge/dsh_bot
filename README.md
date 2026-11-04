@@ -1,9 +1,9 @@
-# dsh_bot —— 大肥鱼·私享版
+# dsh_bot —— 理想的机械人·
 
 > **dsh_bot** · 作者 **idealrainbowbridge**
 
 
-> 一只养在你本机的「大肥鱼」：**B站** 自主刷视频写日记、**QQ** 秒回陪你聊（含语音条）、
+> 一只养在你本机的「理想的机械人」：**B站** 自主刷视频写日记、**QQ** 秒回陪你聊（含语音条）、
 > **微信** 替你回消息。
 > 三平台共用同一套人格、情绪与记忆，在 DSH 设置里用面板控制；
 > 所有外发默认关闭，每一项都有独立开关和上限。
@@ -15,7 +15,7 @@
 > **10-29：记忆层升级成「脑」**（七器官四回路，`tools/brain/`，零依赖）。原文照旧一条不丢，
 > 但多了一层"她能不能用得上、说了算不算"：召回带证据、承诺必须兑现、自我认知可审计。
 > 结构、开关、实测数字见 [§3.8](#38-v3-脑七器官四回路1029-全量落地)；设计与交接见
-> [`FEIYU-BRAIN-PLAN.md`](FEIYU-BRAIN-PLAN.md) / [`FEIYU-BRAIN-HANDOFF.md`](FEIYU-BRAIN-HANDOFF.md)。
+> [`BRAIN-PLAN.md`](BRAIN-PLAN.md) / [`BRAIN-HANDOFF.md`](BRAIN-HANDOFF.md)。
 
 ---
 
@@ -37,7 +37,7 @@
 |---|---|---|---|
 | 消息入口 | WBI API（签名 + 缓存） | NapCat（OneBot v11） | UI 自动化（wechatauto） |
 | 模型宿主 | DSH 会话（零 API 费） | 直连 DeepSeek（秒回） | 直连 DeepSeek |
-| 主动行为 | 刷视频→看懂→评论→写日记 | 私聊/群聊@回复、语音、说说、表情包 | 替主人回消息 |
+| 主动行为 | 刷视频→看懂→评论→写日记 | 私聊/群聊@回复、语音、说说、表情包 | 替用户回消息 |
 | 记忆 | 主记忆 | QQ 独立记忆 + **跨通道共享** | **按联系人隔离、不进人格记忆** |
 | 表情 | B站表情码（447 个白名单） | 图片表情（根本形象）+ 颜文字 | 图片表情 + 颜文字 |
 | 语音 | — | GPT-SoVITS 音色克隆 | — |
@@ -46,7 +46,7 @@
 
 - **B站**：生物钟到点自己醒 → 选题 → 深读（字幕/热评/简介）→ 打分 → 干跑分享 → 写两本日记。写通道只有**评论**，DRY_RUN 默认开。
 - **QQ**：常驻 `qq-server` 秒回；群聊被 @ 才回、私聊都回；能发图、能发语音条、能发空间说说。会主动找你（有安静阈值、间隔、每日上限、相似度去重）。
-- **微信**：独立 Python 进程，替主人回消息（对方不知道是自动回复），语气是她本人——有温度、会吐槽；按联系人分开记，广告/服务号跳过，钱/时间/见面不承诺。
+- **微信**：独立 Python 进程，替用户回消息（对方不知道是自动回复），语气是她本人——有温度、会吐槽；按联系人分开记，广告/服务号跳过，钱/时间/见面不承诺。
 - **B站评论区**：`replies` 三段 —— ⓪ 自己投稿下面别人的评论（同样任何类型）、① 别人对我评论的回复、② 主动去搭话；默认干跑，走 `bilibili.replies.enabled` + 日额度 + 风控闸。
 
 ---
@@ -58,7 +58,7 @@
 | 空间 | 路径 | 内容 | 谁读写 |
 |---|---|---|---|
 | **主记忆** | `~/.data/episodes.jsonl`（+ `episodes-YYYY-MM.jsonl` 分片；episodes **按平台分文件**——QQ 落 `qq/`、微信落 `wechat/`，其余平台才落根目录这份，没写过的平台不出文件）、`facts.json`、`lore.json`（冷历史已迁 `brain/`） | 情节事件流 / 关系事实 / 世界设定与兴趣 | B站、上网、工具链 |
-| **QQ 记忆** | `~/.data/qq/` | `episodes.jsonl`、`summary-<会话>.json`（每 6 轮压一次摘要）、`owner-profile.md`（主人画像） | qq-server + qq-memory |
+| **QQ 记忆** | `~/.data/qq/` | `episodes.jsonl`、`summary-<会话>.json`（每 6 轮压一次摘要）、`owner-profile.md`（用户画像） | qq-server + qq-memory |
 | **微信记忆** | `~/.data/wechat/<wxid>/` | `episodes.jsonl` + `profile.md` + `meta.json` | 微信机器人 |
 | **情绪** | `~/.data/mood.json` | 情绪值 / 饥饿度，会自己漂移 | mood |
 | **身体器官**（2026-11-03 B 系） | `~/.data/metabolism.json`、`bond.json`、immune/wound/pain 状态 | 认知能量与消化积压 / 关系好慢账本 / 免疫发热 / 伤口 / 痛觉 | heartbeat 30s 心跳统一推进；说话链路经各器官 `llmState()` 读 |
@@ -76,7 +76,7 @@
 **绝对不许说"我不知道""我没做过"**：
 23:42 [上网] 我：写了小说片段：南京巷子里的鸭血粉丝——蓝鲸娘蹲在巷口…
 21:53 [B站] 我：回复了 朴昌范 的评论「蟹黄饭好吃吗」：蟹黄多到犯规…
-21:32 [B站] 主人：你怎么不去b站逛逛…
+21:32 [B站] 用户：你怎么不去b站逛逛…
 20:06 [B站] 我：@--友利奈绪- 酱比饭多是真受不了…
 ```
 
@@ -92,13 +92,13 @@
 
 ```
 【现在】当前时间：2026-10-25T23:48:12+08:00（2026年10月25日 周日 · 深夜）
-主人最后一次说话：1 小时 8 分前
+用户最后一次说话：1 小时 8 分前
 你上一次说话：11 分钟前
 时间就用上面这个；**别自己编天数**（"四天""好几天"这类没依据的话不要说）。
 ```
 
 配套三层护栏：prompt 层（上面这段）→ 生成后检测（编了天数就让它重写一次）→ 兜底改写（`lib/timefix.mjs` 的 `sanitizeDayClaims`）。
-起因：她曾对着真实间隔 13 分钟说"主人消失四天"，说了三次。
+起因：她曾对着真实间隔 13 分钟说"用户消失四天"，说了三次。
 
 ### 3.4 占位符归一（治「我看不到内容」）
 
@@ -159,7 +159,7 @@ O10 自我模型 · O11 交付账 · O12 实体/关系 · O13 能力自评
 | O6 图式（`schema`） | `brain/sem/schemata.json` | **30 天 × 同 (主,谓) 5 条**才归纳，不够就一个字不写 |
 | O7 意图（`intents`） | `brain/intent/intents.json` | 三态 `intent/blocked/wish`；**完成必须有证据**，无证据一律 `failed` |
 | O8 情绪（`affect`） | `brain/affect/state.json` | EMA 底色；**兑现才给奖励**，嘴上说不算 |
-| O10 自我（`self`） | `brain/self/me.md` 三段 | 主人层只读、自助层要理由、每周叙事；历史版本 + 漂移检测 |
+| O10 自我（`self`） | `brain/self/me.md` 三段 | 用户层只读、自助层要理由、每周叙事；历史版本 + 漂移检测 |
 | O11 交付（`delivery`） | `brain/log/delivery.jsonl` | 她真说出去的每句都有账；声称闸没证据就改口 |
 | O13 能力（`competence`） | `brain/sem/competence.json` | **成功 3 次**才算"会"，做一次就自夸是吹牛 |
 
@@ -170,10 +170,10 @@ O10 自我模型 · O11 交付账 · O12 实体/关系 · O13 能力自评
 | 历史导入 | 旧 `episodes.jsonl` 1175 行 → **1045 条情景**（拦掉 45 条微信行） |
 | 巩固 | 6 轮吃完 → **29 条结构化事实**，0 条无证据；第 7 轮 `processed=0`（幂等） |
 | 召回 | 120 道真题 **Recall@6 0.875 / MRR 0.757**（权重由评测台标定后写回） |
-| 提示词 | 真主人私聊装配 **5608 字**（旧版实测 7371），预算 5650，截断 0 块 |
+| 提示词 | 真用户私聊装配 **5608 字**（旧版实测 7371），预算 5650，截断 0 块 |
 | 体检 | `brain doctor` **22 项全绿**（8 条不变量 + 派生层门槛 + 任务队列 + C 系五器官读数） |
 
-**"说到做到"是怎么被保证的**（这是主人在意的第一条）：
+**"说到做到"是怎么被保证的**（这是用户在意的第一条）：
 
 1. 她说"这就去看" → `intents.create({verify:'ledger', dueAt})`，缺验收方式的自动降级 `blocked`（**不丢**，只是标成做不了）；
 2. 独立执行器 60s tick（不掷骰子、不占搭话配额）认领**租约**（fencing，防双开）→ 真跑 `binge`；
@@ -207,7 +207,7 @@ node tools/bot.mjs brain task          # 看队列/历史
 
 kind 是白名单（`binge/produce/dm-read/card-open/tts/web-search/backup`），args 必须数组逐项透传 —— **绝不拼 shell**。
 
-完整设计与交接见 [`FEIYU-BRAIN-PLAN.md`](FEIYU-BRAIN-PLAN.md)、[`FEIYU-BRAIN-HANDOFF.md`](FEIYU-BRAIN-HANDOFF.md)。
+完整设计与交接见 [`BRAIN-PLAN.md`](BRAIN-PLAN.md)、[`BRAIN-HANDOFF.md`](BRAIN-HANDOFF.md)。
 
 ---
 
@@ -220,10 +220,10 @@ kind 是白名单（`binge/produce/dm-read/card-open/tts/web-search/backup`）�
 | **自定唤醒**（`selfwake`） | 她自己说"我 23:40 再醒"，到点**真的**叫起来（优先于概率）。`node bot.mjs selfwake 23:40 --note "把那篇小说收尾"` |
 | **真的看番/看剧**（`binge`，10-27 新增 / 10-28 修续集） | 不是"看标题和热评"，是**真看完一集**：`binge --search "可塑性记忆"` → `binge --show "可塑性记忆" --ep next --go`（不给 `--ep` 且账本里已有这本，也按下一集走）。材料优先用弹幕（番剧字幕轨串片率极高，实测拿到过 ED 歌词和钢化膜测评），LLM 读完写 `{剧情, 感受}` 进她的记忆；进度落 `~/.data/binge/<番名>.json`，`--list` 查看到第几集。**一个投稿看不明白会自动换源重试**（同一集在合集/单集投稿里的弹幕密度差三倍），P 数不够或"其实是别的集（备份分 P）"会立刻放弃、不硬看。**节奏她自己定**：`--count 3`=连看三集、`--count all`=看到底、`--to 6`=看到第 6 集；`binge.dailyMax` 默认 **0 = 不限**（只是可选保险，不是日常规矩） |
 | **承诺有账本**（`promises`，10-27 新增 / 10-28 改独立执行） | 她说"这就去看"会被 `catchFromReply` 记成一条带截止时间的承诺；**执行器独立跑**（`runDuePromises()` 60s tick，不掷骰子、不占搭话日额，启动 25 秒先补做一次夜里的欠账），`binge` 成功就结清、没材料才照实记失败；额度满就顺延到明天 09:30，进程崩了只顺延 6 小时不判她失信。`promises` 查全部、`promises --due` 查到期 |
-| **看得懂引用**（10-27 新增） | 主人引用她（或别人）某条消息再说话时，她读到的是**被引用的原文**，不是"【引用回复了一条消息】"。做法：她发出去的每条都记 `message_id → 正文`（环形表 400 条落 `msg-index.json`），收到引用先查本地表，没命中走 NapCat `get_msg`，再没有就把最近 40~50 条历史拉一遍（`get_msg` 对老消息只回"消息不存在"，所以启动时和每 10 分钟预热一次）。引用的是图片还会过一次 VL。开关 `qq.quote = {enabled, seeImage, historyCount}` |
+| **看得懂引用**（10-27 新增） | 用户引用她（或别人）某条消息再说话时，她读到的是**被引用的原文**，不是"【引用回复了一条消息】"。做法：她发出去的每条都记 `message_id → 正文`（环形表 400 条落 `msg-index.json`），收到引用先查本地表，没命中走 NapCat `get_msg`，再没有就把最近 40~50 条历史拉一遍（`get_msg` 对老消息只回"消息不存在"，所以启动时和每 10 分钟预热一次）。引用的是图片还会过一次 VL。开关 `qq.quote = {enabled, seeImage, historyCount}` |
 | **自己作品下的评论真的回**（10-27 修） | `replies --own-only` 走 ⓪ 路：先 `listOwnVideos()` 认出投稿（手填 `ownBvids` → 本地 `bvid.txt`/`bili-debut.json` → `space/wbi/arc/search`，space 路默认开且 `soft` 不熔断），再逐条回（任何类型：文字/图/纯表情）。`produce --debut-posted <BV>` 必须跑一次，否则本地不知道你发过什么，这条路永远是空的。楼中楼**不能带图**（B站 硬限制），带图稿会自动降级纯文字。额度走独立桶 `ownDailyMax`（默认 20），**不占**"主动出击"那条 `dailyMax` |
 | **常驻服务有人守**（10-27 新增） | B站 自己作品巡检由 **qq-server 每 90s 的监工**看着：探 `/health`，死了就 detached 拉起来（10 分钟最多 3 次退避），B站 巡检每 `autoMin`（默认 12 分钟）跑一轮。插件侧还有一层 `watchServices()`（60s，只在 `startWithDsh:true` 的服务上动手、端口有活服务就跳过）。**前提：`qq.startWithDsh` 必须是 true**，否则 DSH 重启后整条链没人起 |
-| **主人事实**（`owner-facts`，10-27 新增） | 他说"我中午吃了烧鸭""我在改插件""推荐你看《可塑性记忆》"→ 抽成 `food/doing/plan/mood/media` 五类事实，注入成【今天已经知道的事】，出门前还有一道闸门：命中"吃了吗/在干嘛"且已有事实就打回重写，**绝不再问第二遍** |
+| **用户事实**（`owner-facts`，10-27 新增） | 他说"我中午吃了烧鸭""我在改插件""推荐你看《可塑性记忆》"→ 抽成 `food/doing/plan/mood/media` 五类事实，注入成【今天已经知道的事】，出门前还有一道闸门：命中"吃了吗/在干嘛"且已有事实就打回重写，**绝不再问第二遍** |
 | **每日回顾**（`personality.nightly`，默认 23:00） | 翻今天 → 写日记 → 更新"我是谁"（改前存快照）→ 记账 |
 | **人格进化**（`personality.evolve`） | 每 N 天一次复盘，更新 `persona.md` 自我迭代区 |
 
@@ -249,7 +249,7 @@ dsh_bot/
 │   │                           （宿主身份/编码 agent 设定让位，工具 schemas 照常）
 │   ├── http-utils.mjs          信任栅栏（回环 或 已声明反代 + 容器网关）
 │   └── node-runtime.js         找真 node（DSH 自带运行时 / PATH / DSH_NODE）
-├── client.js                   浏览器半边：DSH 设置里那一页「🐟 大肥鱼」
+├── client.js                   浏览器半边：DSH 设置里那一页「🐟 理想的机械人」
 ├── tools/                      工具链（spawn 真 node 跑，改完不用重启 DSH）
 │   ├── bot.mjs               CLI 入口（30+ 子命令）
 │   ├── lib/
@@ -258,9 +258,9 @@ dsh_bot/
 │   │   ├── timefix.mjs         时间说法护栏（gapText / mentionsDays / sanitizeDayClaims）
 │   │   ├── speechfix.mjs       嘴瓢护栏（"看不到/打不开"→改成问标题）
 │   │   ├── persona.mjs         三段式 prompt 装配 + 时间常驻层 + 我是谁快照
-│   │   ├── qq-memory.mjs       QQ 长记忆（摘要 + 主人画像 + worldBlock）
+│   │   ├── qq-memory.mjs       QQ 长记忆（摘要 + 用户画像 + worldBlock）
 │   │   ├── stickers.mjs        表情库（标签挑选 / 根本形象过滤 / autoTag 情绪兜底）
-│   │   ├── owner-facts.mjs     主人今天说过的硬事实（food/doing/plan/mood/media）+ 反问闸门
+│   │   ├── owner-facts.mjs     用户今天说过的硬事实（food/doing/plan/mood/media）+ 反问闸门
 │   │   ├── promises.mjs        承诺账本（认诺 → 到点执行 → done/fail → 注入提示词）
 │   │   ├── quote.mjs           引用消息（message_id → 正文 环形表 + describe + get_msg 解析）
 │   │   ├── imggen.mjs          AI 表情包（硅基参考图锁形象 > Pollinations 兜底）
@@ -316,7 +316,7 @@ QQ / 微信需要实时响应，走直连 API。
 
 ### 3. 能力桥（DSH 会话 = QQ 里的她）
 
-`lib/dsh-bridge.mjs` 注册 6 个工具，并把她与老爸的对话写进记忆库：
+`lib/dsh-bridge.mjs` 注册 6 个工具，并把她与管理员的对话写进记忆库：
 
 | 工具 | 做什么 |
 |---|---|
@@ -324,7 +324,7 @@ QQ / 微信需要实时响应，走直连 API。
 | `bot_remember` | 记一条情节 / 关系事实 / 世界设定 |
 | `bot_state` | 看她此刻（情绪 / 在做什么 / 欠着谁的事 / 今天的账 / 自主计划） |
 | `bot_diary` | 读/写两本日记 |
-| `bot_tell_owner` | 用 QQ 给老爸发一条 |
+| `bot_tell_owner` | 用 QQ 给管理员发一条 |
 | `bot_act` | 跑 `bot.mjs` 的任何命令（白名单**从 bot.mjs 解析**，不抄清单；`qq-server` 等常驻进程被排除） |
 
 两个必须知道的实现约束：
@@ -443,7 +443,7 @@ produce --reuse <已有投稿包目录>          # 图没毛病、只重做配�
 #                 ③ 语速/温度钉死 1.0，不按"起伏大"择优、不动态压缩（改一点就是变调/电音）
 #                 ④ 一句话只用一个参考段：没标情绪就用基础音色 voice.videoEmotion=calm
 # 剪静音那步只能是"切"，绝不能重新量化 —— writeWavLocal 曾把 Int16 当 float 压成 ±1 方波，
-# 那就是主人报了一周的"电音机械音"（voice-*.wav 只有 3 个取值）。测试里用"不同取值 >200"兜住。
+# 那就是用户报了一周的"电音机械音"（voice-*.wav 只有 3 个取值）。测试里用"不同取值 >200"兜住。
 # 配音是抽奖：抽到满意的用 --keep-voices 锁住；只改音轨不动画面用 --reaudio（复用 visual.mp4）
   ① DeepSeek 出脚本/分镜（每幕：动作 + 台词 + 景别 + **她自己写的视频导演稿**）
   ② 硅基 Qwen-Image-Edit 逐幕 2 帧配图（锁她的形象，同场景换个动作/表情）
@@ -517,7 +517,7 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
 
 ```jsonc
 {
-  "identity": { "name": "友利奈绪的大肥鱼", "ownerTitle": "主人", "selfClaim": "我" },
+  "identity": { "name": "友利奈绪的理想的机械人", "ownerTitle": "用户", "selfClaim": "我" },
   "owner": { "mid": "数字mid", "name": "B站昵称", "qq": "QQ号", "wechat": "wxid" },
   "llm": { "api_key": "千问AI平台 key", "base_url": "https://maas.qianwenaiapi.com/compatible-mode/v1",
             "model": "deepseek-v4.1-flash-1017", "params": { "enable_thinking": false },
@@ -621,7 +621,7 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 
 - 生物钟窗口内随机醒（拟人，不整点），跨零点、最小间隔
 - 链路：凭据 → 分享标尺 → 风控闸门 → 额度闸 → POST → 记账
-- 真 @ 主人：评论正文 `@昵称` + `at_name_to_mid`（B站原生通知，非风控点）
+- 真 @ 用户：评论正文 `@昵称` + `at_name_to_mid`（B站原生通知，非风控点）
 - 红线：只写评论；撞验证码/限流立刻熔断（5 分钟起步指数退避）
 
 ### QQ（像真人聊天）
@@ -670,13 +670,13 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 
 ---
 
-## 十一、设置面板（DSH → 设置 → 🐟 大肥鱼）
+## 十一、设置面板（DSH → 设置 → 🐟 理想的机械人）
 
 | 区块 | 能改什么 |
 |---|---|
 | 运行状态 | 通道健康（QQ 网关/QQ 进程/微信心跳/B站/上网）、今日计数、情绪、干跑；跑体检 |
 | 平台开关 | B站 / QQ / 微信 / B站 四个独立开关 |
-| 主人 | QQ 号（认主）、称呼、B站 mid、微信 wxid |
+| 用户 | QQ 号（认主）、称呼、B站 mid、微信 wxid |
 | 音色 | 扫 GPT-SoVITS 模型列、试听（发你 QQ）、语音概率 |
 | 微信 | 节奏档、合并窗口、上下文条数、smart_skip |
 | 作息与限额 | 醒来窗口/次数、分享开关与上限、B站每次条数、观看日报、自主观看、评论 @ 开关 |
@@ -729,7 +729,7 @@ node tools/bot.mjs report --days 1                # 观看日报（不调模型�
 | `~/.dsh/feiyu-night.json` · `feiyu-freedom.json` · `feiyu-review.json` · `feiyu-next-wake.json` · `feiyu-evolve.json` | 作息/自由唤醒/每日回顾/自定唤醒/人格进化的状态 |
 | `~/.data/credentials.json` | B站凭据（0600） |
 | `~/.data/episodes.jsonl`（+`episodes-YYYY-MM.jsonl`）· `facts.json` · `lore.json` | 主记忆 |
-| `~/.data/qq/` | QQ 记忆（episodes + 摘要 + 主人画像） |
+| `~/.data/qq/` | QQ 记忆（episodes + 摘要 + 用户画像） |
 | `~/.data/wechat/<wxid>/` | 微信按联系人记忆 |
 | `~/.data/mood.json` · `quota.json` · `reports/` | 情绪 / 额度 / 日报 |
 | `~/.data/persona.md` + `persona.history/` | 她的人设 + 每日快照 |

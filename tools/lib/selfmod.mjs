@@ -1,21 +1,21 @@
 // selfmod —— 她改自己的安全网（2026-11-03：审批撤了，她全自主）
 //
-// 用户要求：能在 QQ 里叫她改自己；选的是「先备案：她说想改 XXX，老爸回'改吧'才真动手」，
+// 用户要求：能在 QQ 里叫她改自己；选的是「先备案：她说想改 XXX，管理员回'改吧'才真动手」，
 // 范围「全部都能改（含 QQ 通路/记忆/账本）」——所以安全网必须厚，不能靠她自己自觉。
 //
 // 流程（一条提案的生命周期）：
 //   propose()  她提一个改动 → 落盘 pending，同时 QQ 里说一句"我想改 XXX，你看行不行"
 //   selfApply() 2026-11-03 起：审批撤了，提案直接落地（备份→写→语法→门禁→失败还原）
-//   approve()  （已退役）原「老爸回改吧才动手」的批准入口，保留但不再用
+//   approve()  （已退役）原「管理员回改吧才动手」的批准入口，保留但不再用
 //   apply()    备份 → 写文件 → node --check → check.mjs → 测试
 //              任一失败 → 自动用备份还原（不留半成品）
-//   reject()   老爸说"不改" → 提案作废
+//   reject()   管理员说"不改" → 提案作废
 //
 // 红线（写死在代码里，不靠提示词）：
 //   ①（2026-11-03 撤销）审批闸已拆：selfApply 免审批落地；安全网=备份+语法+门禁+回滚+宿主定时git+整容器快照
 //   ② 每次写前强制备份（selfup backup 独立目录）
 //   ③ 写后必须 node --check 通过，否则立即回滚
-//   ④ **绝不自动重启** —— 重启会让 QQ 断线，必须老爸点头
+//   ④ **绝不自动重启** —— 重启会让 QQ 断线，必须管理员点头
 //   ⑤ 只允许改 dsh_bot 项目内文件，路径穿越/外部路径一律拒绝
 import fs from 'node:fs'
 import path from 'node:path'
@@ -46,7 +46,7 @@ function writeState(s) {
  * 2026-11-03 红线（评审①第 4 条）：保护名单内的文件她自己不能改 ——
  * 审批闸已拆，安全网只剩"改不坏"；而门禁/selfmod/锁这几个文件若可被她自己改掉，
  * "改不坏"就成了她可以拆的保险丝（门禁自指）。核心安全件只有宿主侧能动
- * （宿主 git 快照 + 老爸 CLI），容器内的自改通道对它们一律拒绝。
+ * （宿主 git 快照 + 管理员 CLI），容器内的自改通道对它们一律拒绝。
  */
 const PROTECTED = new Set([
   'tools/lib/selfmod.mjs',        // 自改机制本身
@@ -92,7 +92,7 @@ export function propose({ file, why, change, by = 'self', create = false } = {})
   return { ok: true, id, file: item.file, why: item.why }
 }
 
-/** 老爸批准最近一条（或指定的）待批。 */
+/** 管理员批准最近一条（或指定的）待批。 */
 export function approve(id) {
   const s = readState()
   const item = id ? s.pending.find((x) => x.id === id) : s.pending[0]
@@ -124,7 +124,7 @@ export function listPending() {
  *   ① 改哪个文件的哪几行（定位到具体行号）
  *   ② 删了什么、加了什么（逐行 diff，不是"改了某处"这种空话）
  *   ③ 影响面：这个文件被谁引用、改了可能波及什么
- * 老爸看这个就能判断"改得对不对"，而不是只能回"改吧"或"别改"。
+ * 管理员看这个就能判断"改得对不对"，而不是只能回"改吧"或"别改"。
  */
 export function plan(id) {
   const s = readState()
@@ -401,7 +401,7 @@ export function selfApply(id) {
   // 重启 flag：qq-server 每分钟看一眼，10 分钟没人说话就自己重启生效
   try { fs.writeFileSync(dataPath('selfmod-restart.flag'), JSON.stringify({ id: item.id, file: item.file, at: Date.now() })) } catch (e) { swallow(e, 'selfmod:restart-flag') }
 
-  // 全量测试异步兜底（不阻塞落地；挂了自动还原并通知老爸）
+  // 全量测试异步兜底（不阻塞落地；挂了自动还原并通知管理员）
   void runFullTests(item, file, before, item.change, fs.statSync(file).mtimeMs)
 
   return { ok: true, id: item.id, checks, backup: bk ? bk.dir : null, needRestart: true }
@@ -437,7 +437,7 @@ export async function snapshot() {
 }
 
 
-/** 一键回滚（老爸说"回滚"时用）。 */
+/** 一键回滚（管理员说"回滚"时用）。 */
 export function rollback(id) {
   const s = readState()
   const item = id ? s.history.find((x) => x.id === id) : s.history.find((x) => x.state === 'applied')

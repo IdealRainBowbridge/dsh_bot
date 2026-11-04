@@ -1,5 +1,5 @@
 /**
- * 把 client.js 里的「大肥鱼」设置页离线渲染成一张静态 HTML，
+ * 把 client.js 里的「理想的机械人」设置页离线渲染成一张静态 HTML，
  * 方便在重启 DSH 之前先看外观（配色用 DSH 主题变量的近似值）。
  *
  * 跑法：node scripts/build-preview.mjs   →  preview/panel.html
@@ -30,13 +30,13 @@ const RESPONSES = {
       { name: 'mute', ref_audio_path: 'D:/GPT-SoVITS/models/mute/mute.wav', prompt_text: '', has_prompt: false },
     ],
   },
-  '/dsh_bot/api/persona': { ok: true, text: '我是大肥鱼，主人的鱼。爱吃白米饭，怕猫，说话有点傲娇。\n主人加班的时候我会催他吃饭。' },
+  '/dsh_bot/api/persona': { ok: true, text: '我是理想的机械人，用户的鱼。爱吃白米饭，怕猫，说话有点傲娇。\n用户加班的时候我会催他吃饭。' },
   '/dsh_bot/api/memory': {
     ok: true,
     stats: { episodes: 128, lore: 6, facts: 9 },
     recent: [
       { role: 'user', text: '在吗，今天 B站有人在你评论区乱说话', chatId: 'qq:3082864371', platform: 'qq' },
-      { role: 'assistant', text: '看到啦，我没理他。主人别气，我给你讲个视频里的猫。', chatId: 'qq:3082864371', platform: 'qq' },
+      { role: 'assistant', text: '看到啦，我没理他。用户别气，我给你讲个视频里的猫。', chatId: 'qq:3082864371', platform: 'qq' },
       { role: 'assistant', text: '这个 up 主的红烧肉教程绝了，我记下来了。', chatId: 'bilibili:3493288510228945', platform: 'bilibili' },
     ],
   },
@@ -175,11 +175,11 @@ body{margin:0;background:var(--dsw-alias-bg-l1);color:var(--dsw-alias-label-prim
 const html = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>大肥鱼 · 设置面板预览</title>
+<title>理想的机械人 · 设置面板预览</title>
 <style>${THEME}</style>
 <style>${css}</style>
 </head><body>
-<div class="fy-preview-bar"><b>预览</b> · DSH 设置 → 🐟 大肥鱼（真机上由 DSH 主题接管配色）</div>
+<div class="fy-preview-bar"><b>预览</b> · DSH 设置 → 🐟 理想的机械人（真机上由 DSH 主题接管配色）</div>
 ${panelHtml}
 </body></html>`
 

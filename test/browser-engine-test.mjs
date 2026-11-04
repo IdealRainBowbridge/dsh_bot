@@ -124,7 +124,7 @@ if (!chromeBin) {
       <nav>导航条（应被过滤）</nav>
       <h1>欢迎来到鱼塘</h1>
       <p id="js-only">占位</p>
-      <p>这是第一段正文，讲的是大肥鱼今天吃得很饱。</p>
+      <p>这是第一段正文，讲的是理想的机械人今天吃得很饱。</p>
       <p>这是第二段正文，讲的是她学会了自己上网冲浪。</p>
       <a href="/next" id="go-next">下一页</a>
       <input id="say" placeholder="说点什么"/>

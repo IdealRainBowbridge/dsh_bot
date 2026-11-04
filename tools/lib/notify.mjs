@@ -1,7 +1,7 @@
-// notify —— 主动发消息给主人（QQ，走 NapCat OneBot）。
-// 用途：抖音/B站看到有意思的视频，直接发一条 QQ 给主人，附链接 + 她自己的吐槽。
+// notify —— 主动发消息给用户（QQ，走 NapCat OneBot）。
+// 用途：抖音/B站看到有意思的视频，直接发一条 QQ 给用户，附链接 + 她自己的吐槽。
 // ⚠️ 发出去的话必须同步写进 QQ 对话记忆（10-24 实锤的脱节坑）：不记的话，
-// 鱼看自己的 QQ 聊天流不知道"我刚分享过"，主人问起就一脸懵。
+// 鱼看自己的 QQ 聊天流不知道"我刚分享过"，用户问起就一脸懵。
 import fs from 'node:fs'
 import { config } from './config.mjs'
 import * as memory from './memory.mjs'
@@ -15,7 +15,7 @@ import { dataPath } from './paths.mjs'
 import { updateJson } from './atomic.mjs'
 
 /**
- * 给主人发一条 QQ 私聊（成功后记进 QQ 记忆，对话流里她"记得自己说过"）。
+ * 给用户发一条 QQ 私聊（成功后记进 QQ 记忆，对话流里她"记得自己说过"）。
  * @returns {Promise<boolean>} 是否发送成功（失败不抛，静默返回 false，由调用方决定）
  */
 export async function sendOwnerQQ(text) {
@@ -53,7 +53,7 @@ export async function sendOwnerQQ(text) {
           return dd
         }, { fallback: {}, waitMs: 1500 })
         if (!dedup.ok) {
-          // 拿不到锁 = 另一个进程正在写：这一次跳过发送（宁可少发一条，也别重复打扰主人）
+          // 拿不到锁 = 另一个进程正在写：这一次跳过发送（宁可少发一条，也别重复打扰用户）
           console.log('[notify] 去重表被占用（' + (dedup.error || 'lock-timeout') + '），本次跳过')
           return { ok: true, deduped: true, reason: 'dedup-lock' }
         }
@@ -75,7 +75,7 @@ export async function sendOwnerQQ(text) {
         await fetch(`${napcat}/set_input_status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: Number(ownerQQ), event_type: 0 }), signal: AbortSignal.timeout(4000) })
       } catch (e) { swallow(e, 'tools/lib/notify.mjs:60') }
       if (ok) {
-        // 发送成功 = 她"亲口说过"这句话：记进 QQ 对话记忆，主人接着聊才接得上
+        // 发送成功 = 她"亲口说过"这句话：记进 QQ 对话记忆，用户接着聊才接得上
         try { memory.remember('qq', `qq:${ownerQQ}`, ownerQQ, 'assistant', content, { kind: 'push' }) } catch (e) { swallow(e, 'tools/lib/notify.mjs:63') }
         // 交付证据（v3 §11）：推送也是"她说出去的话"，声称闸要能查到这一条
         try {
@@ -90,11 +90,11 @@ export async function sendOwnerQQ(text) {
         return true
       }
       lastErr = `HTTP ${r.status} ${JSON.stringify(j).slice(0, 160)}`
-      console.log(`[notify] 发主人失败（第 ${attempt + 1}/${waits.length} 次）：${lastErr}`)
+      console.log(`[notify] 发用户失败（第 ${attempt + 1}/${waits.length} 次）：${lastErr}`)
       if (r.status >= 400 && r.status < 500) return false
     } catch (e) {
       lastErr = e.message
-      console.log(`[notify] 发主人异常（第 ${attempt + 1}/${waits.length} 次）：${e.message}`)
+      console.log(`[notify] 发用户异常（第 ${attempt + 1}/${waits.length} 次）：${e.message}`)
     }
   }
   return false

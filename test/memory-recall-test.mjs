@@ -57,7 +57,7 @@ console.log('\n[2] 统一时序回忆（recallAll）')
   ok('从新到旧（第一条时间不早于最后一条）', r.lines.length >= 2
     ? (r.lines[0].slice(0, 5) >= r.lines[r.lines.length - 1].slice(0, 5))
     : true, joined)
-  ok('每行都带时间+通道标记', r.lines.every(l => /^\d{2}:\d{2} \[.+\] (主人|我)：/.test(l)), joined)
+  ok('每行都带时间+通道标记', r.lines.every(l => /^\d{2}:\d{2} \[.+\] (用户|我)：/.test(l)), joined)
 }
 
 console.log('\n[3] 全文检索（grepEpisodes）')
@@ -73,7 +73,7 @@ console.log('\n[3] 全文检索（grepEpisodes）')
 console.log('\n[4] 时间常驻层（lastByRole）')
 {
   const r = memory.lastByRole('qq:1')
-  ok('能拿到主人最后一次说话的时间', Number(r.lastUser) > 0, JSON.stringify(r))
+  ok('能拿到用户最后一次说话的时间', Number(r.lastUser) > 0, JSON.stringify(r))
   ok('能拿到她最后一次说话的时间（此通道没说过 → 0）', r.lastAssistant === 0, JSON.stringify(r))
 }
 

@@ -19,10 +19,10 @@ const ok = (name, pass, detail = '') => {
 const at = await import('../tools/brain/attention.mjs')
 const now = Date.now()
 
-// ① urgencyOf：主人私聊 @ 的连续重要消息 > 群里随口一句
+// ① urgencyOf：用户私聊 @ 的连续重要消息 > 群里随口一句
 const uOwner = at.urgencyOf({ isOwner: true, isPrivate: true, atMe: true, streak: 4, important: true })
 const uStray = at.urgencyOf({ streak: 1 })
-ok('主人私聊紧迫度显著高于群里随口', uOwner > uStray + 0.3, `${uOwner} vs ${uStray}`)
+ok('用户私聊紧迫度显著高于群里随口', uOwner > uStray + 0.3, `${uOwner} vs ${uStray}`)
 ok('紧迫度夹在 [0,1]', uOwner <= 1 && uStray >= 0)
 ok('等待越久紧迫度越高', at.urgencyOf({ waitedMin: 30 }) > at.urgencyOf({ waitedMin: 0 }))
 

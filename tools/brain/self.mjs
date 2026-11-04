@@ -2,7 +2,7 @@
 //
 // 为什么要有写闸：她有文件权限（selfup），能改自己的 persona.md。
 // 一个能改自己"我是谁"的角色，如果没有版本与留痕，一次手滑就再也说不清"她原来是什么样"。
-// 这里：主人层只读、自助层可改（要理由 + 证据）、每周叙事段重写、每次写前存历史。
+// 这里：用户层只读、自助层可改（要理由 + 证据）、每周叙事段重写、每次写前存历史。
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJson, mutateJson, shortHash, ensureDir } from './json.mjs'
@@ -16,7 +16,7 @@ const MARK = (s) => [`<!-- ${s}:begin -->`, `<!-- ${s}:end -->`]
 const TEMPLATE = `# 我是谁
 
 <!-- owner:begin -->
-（这一段只有主人能改：名字、称呼、关系、底线。）
+（这一段只有用户能改：名字、称呼、关系、底线。）
 <!-- owner:end -->
 
 <!-- self:begin -->
@@ -82,7 +82,7 @@ function snapshot(raw, why = '') {
 export function write(section, text, { by = 'self', reason = '', prov = [], force = false } = {}) {
   if (!SECTIONS.includes(section)) return { ok: false, reason: 'unknown-section' }
   if (section === 'owner' && by !== 'owner' && !force) {
-    return { ok: false, reason: 'owner-locked' }        // 主人层默认锁死
+    return { ok: false, reason: 'owner-locked' }        // 用户层默认锁死
   }
   if (section === 'self' && by === 'self' && !String(reason || '').trim() && !force) {
     return { ok: false, reason: 'reason-required' }     // 改自己必须写理由
@@ -143,7 +143,7 @@ export function renderBlock({ limit = 250 } = {}) {
 
 export function ownerBlock({ limit = 400 } = {}) {
   const s = read()
-  // 模板里那几行"（这一段只有主人能改…）"不是真内容：主人还没写就当空
+  // 模板里那几行"（这一段只有用户能改…）"不是真内容：用户还没写就当空
   const real = String(s.owner || '').split('\n').filter((l) => l.trim() && !/^[（(]/.test(l.trim())).join(' ')
   return real.replace(/\s+/g, ' ').slice(0, limit)
 }

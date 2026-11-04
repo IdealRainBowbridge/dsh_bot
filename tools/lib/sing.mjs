@@ -123,14 +123,14 @@ async function pitchToMelody(wavFile, notes, bpm) {
 
 /**
  * 让她"唱"一段。mode='rap'（节拍说唱）或 'melody'（WORLD 旋律操控，真歌声）。
- * @param {string} theme 主人点的主题
+ * @param {string} theme 用户点的主题
  * @param {string} mode rap | melody
  */
 export async function sing(theme = '', mode = 'rap') {
   // ① 写词
   const msgs = [
-    { role: 'system', content: '你是"大肥鱼"，一条圆滚滚的蓝鲸鱼娘，爱吃白饭、会撒娇、有点傲娇。现在要写一首超短的说唱歌词。只输出 JSON：'
-      + '{"title":"歌名，≤8字","bpm":66到96的整数（慢=抒情快=活泼）,"lyrics":["每句5~10字，共6~8句，口语押韵，有鱼的生活细节（白饭/游泳/主人/刷视频）"]}' },
+    { role: 'system', content: '你是"理想的机械人"，一条圆滚滚的蓝鲸鱼娘，爱吃白饭、会撒娇、有点傲娇。现在要写一首超短的说唱歌词。只输出 JSON：'
+      + '{"title":"歌名，≤8字","bpm":66到96的整数（慢=抒情快=活泼）,"lyrics":["每句5~10字，共6~8句，口语押韵，有鱼的生活细节（白饭/游泳/用户/刷视频）"]}' },
     { role: 'user', content: (theme ? `主题：${theme}。` : '自由发挥（今天的心情/最近看到的视频）。') + '\n写一首她的说唱：' },
   ]
   let title = '鱼的小曲', bpm = 76, lyrics = []
@@ -140,7 +140,7 @@ export async function sing(theme = '', mode = 'rap') {
     bpm = Math.max(60, Math.min(100, Number(j?.bpm) || 76))
     lyrics = (Array.isArray(j?.lyrics) ? j.lyrics : []).map(s => String(s).slice(0, 14)).filter(Boolean).slice(0, 8)
   } catch { /* 写词失败用兜底词 */ }
-  if (lyrics.length < 2) lyrics = ['今天也想吃白饭', '三大碗都不够', '主人快去煮饭', '本鱼饿得游不动']  // ① 写词（旋律模式还产旋律序列）
+  if (lyrics.length < 2) lyrics = ['今天也想吃白饭', '三大碗都不够', '用户快去煮饭', '本鱼饿得游不动']  // ① 写词（旋律模式还产旋律序列）
   let melodyNotes = ''
   if (mode === 'melody') {
     const msgs2 = [

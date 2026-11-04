@@ -1,4 +1,4 @@
-// promises —— 她的「承诺账本」（10-27 主人报的"说去看可塑性记忆，一直没看"）
+// promises —— 她的「承诺账本」（10-27 用户报的"说去看可塑性记忆，一直没看"）
 //
 // 病根不是记忆差：**根本没有任何东西记得她答应过什么**。
 // "这就去看"只活在对话文本和滚动摘要里，没有执行者、没有截止时间、没有完成/失败状态。
@@ -80,7 +80,7 @@ export function extract(reply, { userText = '' } = {}) {
     if (!m) continue
     const verb = m[2] || m[1] || ''
     const tail = norm(m[3] || '')
-    // 具体对象：她这句话里的名字 > 主人那句话里的名字 > 她自己的尾巴（太长就不当对象）
+    // 具体对象：她这句话里的名字 > 用户那句话里的名字 > 她自己的尾巴（太长就不当对象）
     const obj = nameIn(s) || nameIn(userText) || (tail && tail.length <= 10 ? tail : '') || ''
     out.push({ kind: verb || 'todo', what: obj, dueMin: r.dueMin })
   }
@@ -127,7 +127,7 @@ export function add(text, opts = {}) {
     if (cur.items.length > 80) cur.items = cur.items.slice(-80)
     return cur
   })
-  // 镜像进脑的意图账本（v3 O7）：旧账本仍是执行者，这边只观察 —— S4 再换它当主人。
+  // 镜像进脑的意图账本（v3 O7）：旧账本仍是执行者，这边只观察 —— S4 再换它当用户。
   try {
     if (process.env.BOT_BRAIN_MIRROR !== '0') {
       brainIntents.create({
@@ -266,7 +266,7 @@ export function promptBlock(now = Date.now()) {
     parts.push('【这些你真没做成】（再被问起就照实说做不到，不许再空口答应）\n'
       + failed.map((x) => `· ${x.what}${x.why ? '：' + x.why : ''}`).join('\n'))
   }
-  // 节奏归她自己（10-28 主人拍板："不做限制，给她自主性"）：
+  // 节奏归她自己（10-28 用户拍板："不做限制，给她自主性"）：
   // 不给她设"一天只能看一集"的规矩，但把她现在的位置告诉她，让她自己安排几集、什么时候看。
   if (justDone.length || due.length || open.length) {
     parts.push('【你自己安排】（看番/看剧没有次数限制，也不占搭话额度：'
