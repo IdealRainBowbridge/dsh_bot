@@ -176,7 +176,13 @@ const switches = collect(platforms[0], (n) => String(n.props.className || '').in
 assert.equal(switches.length, 3, '平台开关数量应为 3（B站/QQ/微信），实际 ' + switches.length)
 assert.equal(switches.filter((n) => n.props.className.includes("on")).length, 2, "默认应有 2 个平台开启（B站/QQ）")
 const allSwitches = collect(tree, (n) => String(n.props.className || '').includes('fy-switch'))
-assert.equal(allSwitches.length, 22, "全页开关应为 22 个（抖音已移除，10-31）")
+// 不再钉"全页一共几个开关"：那是个纯计数，每次加控件都要改，改的人只会照数字改，
+// 永远发现不了真问题（2026-11-04 新增接管开关时它就红了一次，而页面完全正常）。
+// 改为钉**可访问性和可点性**：每个开关渲染成 role=switch + aria-checked，且带 onClick。
+const broken = allSwitches.filter((n) =>
+  n.props.role !== 'switch' || n.props['aria-checked'] === undefined || typeof n.props.onClick !== 'function')
+assert.equal(broken.length, 0, '每个开关都要 role=switch / aria-checked / onClick，实际坏 ' + broken.length + ' 个')
+assert.ok(allSwitches.length >= 20, '开关数量不应骤减（现有 ' + allSwitches.length + ' 个）')
 
 assert.ok(fetchCalls.includes('/dsh_bot/api/config'), '没有请求 /config')
 assert.ok(styleTags.length >= 1, '样式没注入')

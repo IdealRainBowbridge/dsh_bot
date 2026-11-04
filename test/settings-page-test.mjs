@@ -66,16 +66,17 @@ ok(!!taId, '人格 textarea 有 id（实际：' + taId + '）')
 ok(!!taId && HTML.includes("$('" + taId + "')"), "脚本用 $('" + taId + "') 读写人格文本")
 
 /* ── 3) 控件只写后端白名单里真实生效的键 ──────────────────────────────── */
-// 后端 /api/config 的写入白名单（lib/index.js）。键不在里面的 patch 会被静默丢弃。
-const ALLOWED = ['platforms', 'owner', 'identity', 'night', 'quota', 'voice', 'qq', 'wechat',
-  'bilibili', 'llm', 'preferences', 'share', 'imageGen', 'vision', 'rvc', 'sing', 'web',
-  'personality', 'freedom', 'guard']
+// 白名单从后端**直接 import**（单一真相），不在这里抄副本。
+// 2026-11-04：上一版抄了一份，新增 `agent` 后测试反而变红 —— 复制逻辑的测试
+// 发现不了真不一致，只会拖慢改动。现在它只可能因为"后端真的漏了键"而红。
+// 不 import lib/index.js（那会连带加载整条插件链、碰真实数据目录），
+// 但也不再手抄：只从源码里读**那一处** `export const CONFIG_WRITABLE = [...]`。
 const indexSrc = fs.readFileSync(path.join(root, 'lib', 'index.js'), 'utf8')
-const wl = (indexSrc.match(/for \(const k of \[([^\]]+)\]\)/) || [])[1] || ''
-const backendKeys = [...wl.matchAll(/'([^']+)'/g)].map((m) => m[1])
+const decl = (indexSrc.match(/export const CONFIG_WRITABLE = \[([\s\S]*?)\]/) || [])[1] || ''
+const backendKeys = [...decl.matchAll(/'([^']+)'/g)].map((m) => m[1])
 ok(backendKeys.length > 0, '读到后端写入白名单（' + backendKeys.length + ' 个键）')
-ok(backendKeys.join(',') === ALLOWED.join(','),
-  '白名单与本测试一致（后端改了就要同步这里）' + (backendKeys.join(',') === ALLOWED.join(',') ? '' : '\n      实际：' + backendKeys.join(', ')))
+ok(/for \(const k of CONFIG_WRITABLE\)/.test(indexSrc),
+  '路由真的用了 CONFIG_WRITABLE（常量存在但没用 = 白名单没生效）')
 
 /**
  * 页面里所有 save({ <key>: ... }) 的顶层键都必须在白名单内。

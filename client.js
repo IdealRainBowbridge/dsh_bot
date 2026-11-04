@@ -551,6 +551,21 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						}),
 						h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 240px" } },
 							"开 = 只打印不发送（她照常思考、算分、写日记）；关 = 真发。")),
+					// 人格接管（2026-11-04）：装了插件，DSH 里开任何会话都是她 ——
+					// 宿主的 system prompt（harness 身份 / 编码 agent 设定 / 工具规范段）全部被替换。
+					// 工具本身不受影响（schemas 走另一条通道），她照样能读写文件、跑命令。
+					h(Row, { label: "DSH 会话人格" },
+						h(Switch, {
+							on: !!(cfg && cfg.agent && cfg.agent.takeover && cfg.agent.takeover.enabled !== false),
+							label: "takeover",
+							onChange: async (v) => {
+								const ok = await save({ agent: { takeover: { enabled: v } } },
+									v ? "已接管：DSH 新会话都用大肥鱼人格（下一轮生效）" : "已回退：DSH 会话恢复原生提示词（下一轮生效）");
+								if (ok) setCfg((prev) => Object.assign({}, prev || {}, { agent: { takeover: { enabled: v } } }));
+							},
+						}),
+						h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 240px" } },
+							"开 = DSH 里所有会话都是她（宿主身份/编码 agent 设定全部让位，工具照常可用）；关 = 用 DSH 原生系统提示词。")),
 					// 通道健康：进程活着 ≠ 能收发。QQ 要看 NapCat 网关，微信要看心跳
 					h("div", { className: "fy-stats", style: { marginTop: 10 } },
 						h("div", { className: "fy-chip" + (napcatOk ? "" : " bad") },
