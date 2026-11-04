@@ -63,7 +63,7 @@ const MIN = 60_000
 export const BEAT = {
   intervalMs: 30_000,       // 30 秒一拍（原来各通道 20s~30m 不等）
   // 体征类子步骤的周期（按拍数算，不再各自 setInterval）
-  napcatEveryBeats: 1,      // 30s  ← 原 checkNapcat 30s
+  snowlumaEveryBeats: 1,      // 30s  ← 原 checkNapcat 30s
   taskEveryBeats: 1,        // 30s  ← 原 pollTasks 20s（略微放慢，够用）
   promiseEveryBeats: 2,     // 60s  ← 原 runDuePromises 60s
   quoteWarmEveryBeats: 20,  // 10 分钟 ← 原 warmQuoteIndex 10min
@@ -236,8 +236,8 @@ export async function beat(now = Date.now()) {
     // ── ② 体征类子步骤（不进决策，按拍数触发）────────────────────
     // 这些是"身体自己在跑的部分"，不是她决定做的事。
     // （`ex` 已在函数顶部取好快照，见上面 TDZ 注释。）
-    if (_beatCount % BEAT.napcatEveryBeats === 0 && ex.vitals?.napcat) {
-      try { await ex.vitals.napcat(now); out.vital.push('napcat') } catch (e) { swallow(e, 'beat:vital:napcat') }
+    if (_beatCount % BEAT.snowlumaEveryBeats === 0 && ex.vitals?.snowluma) {
+      try { await ex.vitals.snowluma(now); out.vital.push('snowluma') } catch (e) { swallow(e, 'beat:vital:snowluma') }
     }
     if (_beatCount % BEAT.taskEveryBeats === 0 && ex.vitals?.tasks) {
       try { await ex.vitals.tasks(now); out.vital.push('tasks') } catch (e) { swallow(e, 'beat:vital:tasks') }

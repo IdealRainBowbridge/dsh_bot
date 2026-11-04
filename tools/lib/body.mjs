@@ -91,7 +91,7 @@ export async function bindBody(deps) {
   HB.bind({
     // ── 体征：身体自己在跑的部分（不进决策）────────────────────
     vitals: {
-      napcat: () => { try { deps.checkNapcat() } catch (e) { swallow(e, 'body:napcat') } },
+      snowluma: () => { try { deps.checkNapcat() } catch (e) { swallow(e, 'body:snowluma') } },
       tasks: () => { try { void deps.pollTasks() } catch (e) { swallow(e, 'body:tasks') } },
       promises: () => { try { void deps.runDuePromises('tick') } catch (e) { swallow(e, 'body:promises') } },
       quotes: () => { try { void deps.warmQuoteIndex(40) } catch (e) { swallow(e, 'body:quotes') } },

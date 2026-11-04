@@ -114,11 +114,11 @@ export async function run(argv = []) {
   const hasLLMKey = !!(process.env.DEEPSEEK_API_KEY || cfg.llm?.api_key)
   add('LLM 直连（可选）', true, hasLLMKey ? '有 API key（QQ/抖音可实时响应）' : '未设 DEEPSEEK_API_KEY / llm.api_key —— 接 QQ/抖音前补上（B站不受影响）')
 
-  // ⑫ QQ（NapCat）
-  const napcatUrl = (cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
-  let napcatOk = false
-  try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(napcatUrl, { signal: c.signal }); napcatOk = true } catch (e) { swallow(e, 'selftest:best-effort') }
-  add('QQ·OneBot 网关（SnowLuma）', true, napcatOk ? `OneBot 网关已连（${napcatUrl}）` : 'OneBot 网关未启动 —— 先确认 snowluma.service 在跑且已登录 QQ')
+  // ⑫ QQ（SnowLuma）
+  const snowlumaUrl = (cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+  let snowlumaOk = false
+  try { const c = new AbortController(); setTimeout(() => c.abort(), 1500); await fetch(snowlumaUrl, { signal: c.signal }); snowlumaOk = true } catch (e) { swallow(e, 'selftest:best-effort') }
+  add('QQ·OneBot 网关（SnowLuma）', true, snowlumaOk ? `OneBot 网关已连（${snowlumaUrl}）` : 'OneBot 网关未启动 —— 先确认 snowluma.service 在跑且已登录 QQ')
 
   // ⑬ TTS（GPT-SoVITS）
   const sovitsUrl = cfg.voice?.sovits_url || 'http://127.0.0.1:9880/tts'

@@ -43,9 +43,9 @@ function listVoices() {
 async function sendQQ(file) {
   const cfg = config()
   const ownerQQ = String(cfg.owner?.qq || '')
-  const napcat = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+  const snowluma = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   if (!ownerQQ) throw new Error('owner.qq 未配置')
-  const r = await fetch(`${napcat}/send_private_msg`, {
+  const r = await fetch(`${snowluma}/send_private_msg`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     // file 走 base64：发送方 SnowLuma 在宿主上，容器内路径它 stat 不到（见 lib/onebot-file.mjs）
     body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'record', data: { file: onebotFileValue(file) } }] }),
@@ -126,7 +126,7 @@ export async function run(argv = []) {
       try {
         const f = await synth(INTRO, dataPath('voice', `try-${v.name}-${Date.now()}.wav`), { ref_audio_path: v.wav, prompt_text: v.text, prompt_lang: 'zh' })
         const ok = await sendQQ(f)
-        console.log(`${ok ? '✓ 已试听' : '✗ 发送失败（NapCat 没起？）'}：${v.name}${v.wav === (config().voice?.ref_audio_path || '').replace(/\\/g, '/') ? '（当前）' : ''}`)
+        console.log(`${ok ? '✓ 已试听' : '✗ 发送失败（SnowLuma 没起？）'}：${v.name}${v.wav === (config().voice?.ref_audio_path || '').replace(/\\/g, '/') ? '（当前）' : ''}`)
       } catch (e) { console.error(`✗ ${v.name} 合成失败：${e.message}`) }
     }
     console.log('听完想换：node bot.mjs voice use --name <名字>')

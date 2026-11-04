@@ -465,9 +465,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			}, [cfg, draft, save]);
 
 			const startNapcat = useCallback(async () => {
-				setBusy("svc:napcat");
+				setBusy("svc:snowluma");
 				try {
-					const r = await api("/services", { method: "POST", body: JSON.stringify({ target: "napcat", action: "install" }) });
+					const r = await api("/services", { method: "POST", body: JSON.stringify({ target: "snowluma", action: "install" }) });
 					flash(r.ok ? (r.note || "已请求启动 QQ 网关，请在 UAC 窗口点「是」") : (r.errors || []).join("；") || "启动失败", !r.ok);
 					if (r.ok) setTimeout(load, 8000);
 				} catch (e) {
@@ -522,7 +522,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const platforms = (cfg && cfg.platforms) || {};
 			const schedulerOn = !!(status && status.scheduler && status.scheduler.ok);
 			// 通道是否真的通：进程活着不等于能收发
-			const napcatOk = !!(status && status.qqChannel && status.qqChannel.napcat && status.qqChannel.napcat.ok);
+			const snowlumaOk = !!(status && status.qqChannel && status.qqChannel.snowluma && status.qqChannel.snowluma.ok);
 			// 10-31：她的记忆在 ~/.data，不在 session workspace 里。preset 不是
 			// danger-full-access 时，她写得进日记、写不进记忆 —— 且完全静默。
 			const perm = (status && status.permission) || null;
@@ -530,7 +530,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const beat = (status && status.wxBeat) || null;
 			const beatAge = beat && beat.ts ? Math.max(0, Math.round((Date.now() - Number(beat.ts)) / 1000)) : null;
 			const beatFresh = beatAge !== null && beatAge <= 120;
-			const napcatQr = (status && status.napcatQr) || null;   // 网关在等扫码登录
+			const snowlumaQr = (status && status.snowlumaQr) || null;   // 网关在等扫码登录
 			const mood = (status && status.mood) || { value: 0, hunger: 0 };
 			const presence = (status && status.presence) || null;
 
@@ -597,11 +597,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					// 接管实况（2026-11-04）：开关说的是「想不想」，这里说的是「到底成没成」。
 					// 三个探针的判定与文案全在模块级的 StatusProbe() 里 —— 主面板不再为它长行数。
 					h(StatusProbe, { status }),
-					// 通道健康：进程活着 ≠ 能收发。QQ 要看 NapCat 网关，微信要看心跳
+					// 通道健康：进程活着 ≠ 能收发。QQ 要看 SnowLuma 网关，微信要看心跳
 					h("div", { className: "fy-stats", style: { marginTop: 10 } },
-						h("div", { className: "fy-chip" + (napcatOk ? "" : " bad") },
-							h("span", { className: "fy-dot" + (napcatOk ? "" : " off") }),
-							"QQ 网关 ", h("b", null, napcatOk ? "在线" : "断开")),
+						h("div", { className: "fy-chip" + (snowlumaOk ? "" : " bad") },
+							h("span", { className: "fy-dot" + (snowlumaOk ? "" : " off") }),
+							"QQ 网关 ", h("b", null, snowlumaOk ? "在线" : "断开")),
 						h("div", { className: "fy-chip" + (svc && svc.qq && svc.qq.running ? "" : " bad") },
 							"QQ 进程 ", h("b", null, svc && svc.qq && svc.qq.running ? "在跑" : "没跑")),
 						h("div", { className: "fy-chip" + (beatFresh ? "" : " bad") },
@@ -609,10 +609,10 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("div", { className: "fy-chip" + (permOk ? "" : " bad"), title: "她写记忆需要完全访问：记忆库在 ~/.data，不在会话工作目录里" },
 							"记忆写入 ", h("b", null, permOk ? "可写" : (perm && perm.ok === false ? "被沙箱拦住" : "未确认")))),
 					h("div", { className: "fy-row", style: { marginTop: 8, marginBottom: 0 } },
-						!napcatOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 260px" } },
-							napcatQr
-								? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(napcatQr.ageSec / 60)) + " 分钟前刚刷新，用手机 QQ 扫 " + (napcatQr.path || "网关目录里的 qrcode.png") + "。已开快速登录，正常只需要扫这一次。"
-								: "⚠️ QQ 网关（NapCat）不通：服务在跑，但收不到也发不出任何 QQ 消息。点右边按钮，UAC 点一次「是」即可；网关随 DSH 启停。") : null,
+						!snowlumaOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 260px" } },
+							snowlumaQr
+								? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(snowlumaQr.ageSec / 60)) + " 分钟前刚刷新，用手机 QQ 扫 " + (snowlumaQr.path || "网关目录里的 qrcode.png") + "。已开快速登录，正常只需要扫这一次。"
+								: "⚠️ QQ 网关（SnowLuma）不通：服务在跑，但收不到也发不出任何 QQ 消息。点右边按钮，UAC 点一次「是」即可；网关随 DSH 启停。") : null,
 						!permOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 300px", color: "#c0392b" } },
 							"⚠️ 记忆写入被 DSH 沙箱拦住：她能写日记（会话目录内），但写不进 ~/.data 的记忆（这一项完全静默）。点右边修复。") : null,
 						!permOk ? h("button", {
@@ -628,11 +628,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								finally { setBusy(""); }
 							},
 						}, busy === "perm:fix" ? "修复中…" : "修复记忆写入") : null,
-						!napcatOk ? h("button", {
+						!snowlumaOk ? h("button", {
 							className: "fy-btn primary",
-							disabled: busy === "svc:napcat",
+							disabled: busy === "svc:snowluma",
 							onClick: startNapcat,
-						}, busy === "svc:napcat" ? "授权中…" : (napcatQr ? "重新拉网关" : "安装并启动 QQ 网关")) : null,
+						}, busy === "svc:snowluma" ? "授权中…" : (snowlumaQr ? "重新拉网关" : "安装并启动 QQ 网关")) : null,
 						h("button", {
 							className: "fy-btn",
 							disabled: busy === "svc:all",

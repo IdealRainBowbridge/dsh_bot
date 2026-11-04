@@ -1,6 +1,6 @@
-// qq-server —— QQ 常驻聊天服务：接收 NapCat OneBot v11 上报 → 直连 LLM 秒回。
+// qq-server —— QQ 常驻聊天服务：接收 SnowLuma OneBot v11 上报 → 直连 LLM 秒回。
 // 群聊默认也像私聊一样回（at_only=false，10-25 用户拍板；true 则群里被 @ 才回），私聊都回；
-// 支持语音条（GPT-SoVITS + record 段，NapCat 自动转 silk）。
+// 支持语音条（GPT-SoVITS + record 段，SnowLuma 自动转 silk）。
 // 无第三方依赖，node 内置 http 即可。
 //
 //   node bot.mjs qq-server [port]     # 默认 8080
@@ -330,7 +330,7 @@ export async function run(argv = []) {
 
       // ── 引用消息（10-27）：把他引用的那条原文取回来 ────────────────────────
       // 用户常常引用她上面那句再问"这个呢/你去了吗"，以前她只看到"【引用回复了一条消息】"，
-      // 等于被蒙着眼睛提问。这里：本地表 → NapCat get_msg → 连图片都用 VL 看一眼。
+      // 等于被蒙着眼睛提问。这里：本地表 → SnowLuma get_msg → 连图片都用 VL 看一眼。
       let quoteLine = ''
       if (parsed.replyId && config().qq?.quote?.enabled !== false) {
         try {
@@ -781,7 +781,7 @@ export async function run(argv = []) {
         if (!out) return
       }
 
-      // 表情：文字和 [表情:标签] 拆开发（NapCat 图片段）
+      // 表情：文字和 [表情:标签] 拆开发（SnowLuma 图片段）
       let { text: body, tag, caption } = splitSticker(out)
       // 摇中了要发图、但她没写标记 → 按她自己那句话的情绪自动挑一个（10-25：光靠模型自觉，
       // 17:01 之后七八条回复一张图都没发出去，这个功能等于废了）。
@@ -938,12 +938,12 @@ export async function run(argv = []) {
     await handle(synth)
   })
 
-  // ── OneBot 看门狗（SnowLuma/NapCat 通用）：它才是 QQ 的消息网关。网关不通 = 服务在跑但永远不回复 ──
-  const LAUNCHER = QQ.napcat_launcher || 'D:/NapCat/launcher-user.bat'
-  let napcatOk = false
-  let napcatCheckedAt = 0
-  let napcatDownSince = 0
-  let napcatFails = 0        // 连续探活失败次数（去抖用）
+  // ── OneBot 看门狗（SnowLuma/SnowLuma 通用）：它才是 QQ 的消息网关。网关不通 = 服务在跑但永远不回复 ──
+  const LAUNCHER = QQ.napcat_launcher || 'D:/SnowLuma/launcher-user.bat'
+  let snowlumaOk = false
+  let snowlumaCheckedAt = 0
+  let snowlumaDownSince = 0
+  let snowlumaFails = 0        // 连续探活失败次数（去抖用）
   let autostartAt = 0
 
   async function checkNapcat() {
@@ -953,41 +953,41 @@ export async function run(argv = []) {
       // HTML —— 也是 HTTP 200，只看 r.ok 会一直假绿，出站全断也没人知道。
       // 探活必须认 OneBot 语义：JSON + retcode===0（HTML 解析失败就是不通）。
       const j = await r.json().catch(() => null)
-      napcatOk = !!(j && (j.retcode === 0 || j.status === 'ok'))
+      snowlumaOk = !!(j && (j.retcode === 0 || j.status === 'ok'))
     } catch {
-      napcatOk = false
+      snowlumaOk = false
     }
-    napcatCheckedAt = Date.now()
-    if (!napcatOk) {
-      napcatFails += 1
+    snowlumaCheckedAt = Date.now()
+    if (!snowlumaOk) {
+      snowlumaFails += 1
       // 单次探活失败不算断（QQ 忙的时候 /get_status 也会超时，实测 26s 就自愈的瞬时抖动）：
       // 连续 2 次失败才拉警报，不然日志全是狼来了。
-      if (napcatFails < 2) return napcatOk
-      if (!napcatDownSince) napcatDownSince = Date.now()
-      const downSec = Math.round((Date.now() - napcatDownSince) / 1000)
-      logErr(`[napcat] 网关不通（${NAPCAT}），已持续 ${downSec}s —— 这期间收不到也发不出任何 QQ 消息`)
-      if (downSec === 30) logErr(`[napcat] 修复办法：右键「管理员运行」${LAUNCHER}（QQ 会自动登录/让你扫码）`)
-      // 默认不自动拉：NapCat 要管理员把 DLL 注入 QQ，普通权限起了也是白起（实测 QQ 进程数 0）。
+      if (snowlumaFails < 2) return snowlumaOk
+      if (!snowlumaDownSince) snowlumaDownSince = Date.now()
+      const downSec = Math.round((Date.now() - snowlumaDownSince) / 1000)
+      logErr(`[snowluma] 网关不通（${NAPCAT}），已持续 ${downSec}s —— 这期间收不到也发不出任何 QQ 消息`)
+      if (downSec === 30) logErr(`[snowluma] 修复办法：右键「管理员运行」${LAUNCHER}（QQ 会自动登录/让你扫码）`)
+      // 默认不自动拉：SnowLuma 要管理员把 DLL 注入 QQ，普通权限起了也是白起（实测 QQ 进程数 0）。
       const auto = QQ.autostartNapcat === true
       if (auto && downSec >= 20 && Date.now() - autostartAt > 10 * 60_000 && fs.existsSync(LAUNCHER)) {
         autostartAt = Date.now()
-        log(`[napcat] 尝试拉起 QQ 网关：${LAUNCHER}（登录态需要你扫码时会弹窗）`)
+        log(`[snowluma] 尝试拉起 QQ 网关：${LAUNCHER}（登录态需要你扫码时会弹窗）`)
         try {
           const { spawn } = await import('node:child_process')
           spawn('cmd.exe', ['/c', 'start', '', LAUNCHER], { detached: true, stdio: 'ignore', windowsHide: false }).unref()
         } catch (e) {
-          logErr('[napcat] 拉起失败：' + e.message)
+          logErr('[snowluma] 拉起失败：' + e.message)
         }
       }
     } else {
-      napcatFails = 0
-      if (napcatDownSince) log('[napcat] 网关恢复')
-      napcatDownSince = 0
+      snowlumaFails = 0
+      if (snowlumaDownSince) log('[snowluma] 网关恢复')
+      snowlumaDownSince = 0
     }
-    return napcatOk
+    return snowlumaOk
   }
   checkNapcat()
-  // [beat] setInterval(checkNapcat, 30_000) -> heartbeat vitals.napcat
+  // [beat] setInterval(checkNapcat, 30_000) -> heartbeat vitals.snowluma
 
   const server = http.createServer((req, res) => {
     // ── v5 统一鉴权闸 ────────────────────────────────────────────────────────
@@ -1000,7 +1000,7 @@ export async function run(argv = []) {
     // 没配就只允许本机回环（跨容器/局域网一律 401）。
     if (req.url !== '/health') {
       // /onebot 是 OneBot v11 的上报口，它**不支持自定义请求头** ——
-      // 强制 token 会直接断掉本机 SnowLuma/NapCat（安全改到不能用）。
+      // 强制 token 会直接断掉本机 SnowLuma/SnowLuma（安全改到不能用）。
       // 所以它只要求"本机回环"，其余入口（/inbound /outbound /task /event /sent）
       // 配了 token 就严格校验。
       const isOneBotIngress = req.method === 'POST' && req.url === '/onebot'
@@ -1031,7 +1031,7 @@ export async function run(argv = []) {
           return { mode: t ? 'token' : 'loopback-only', hasToken: !!t, bindHost: process.env.QQ_BIND_HOST || '127.0.0.1' }
         })(),
         platforms: PLATFORMS.snapshot(config()),
-        napcat: { ok: napcatOk, url: NAPCAT, checkedAt: napcatCheckedAt, downSince: napcatDownSince || null },
+        snowluma: { ok: snowlumaOk, url: NAPCAT, checkedAt: snowlumaCheckedAt, downSince: snowlumaDownSince || null },
         brain: brainHealth(brain),
         channel: (() => { try { return CHANNEL.snapshot() } catch (e) { return { error: String(e?.message ?? e) } } })(),
         ...memory.stats(),
@@ -1088,7 +1088,7 @@ export async function run(argv = []) {
   server.listen(port, QQ_BIND, () => {
     log(`[qq] 监听 http://${QQ_BIND}:${port}/onebot`)
     log(`    SnowLuma WebUI → OneBot配置 → HTTP上报 → http://127.0.0.1:${port}/onebot（messagePostFormat=array）`)
-    log(`    dryRun=${!!config().guard?.dryRun} · at_only=${QQ.at_only !== false} · voice=${!!QQ.voice_enabled} · napcat=${NAPCAT}`)
+    log(`    dryRun=${!!config().guard?.dryRun} · at_only=${QQ.at_only !== false} · voice=${!!QQ.voice_enabled} · snowluma=${NAPCAT}`)
     // 群聊认人护栏自检（10-26）：启动就把三件套的状态打出来 —— 换了代码却忘了重启时，
     // 看这一行就知道跑的是哪一版，不用再猜"到底生效了没有"。
     log(`    群聊认人护栏：事实块 + 剔旧错话 + 出稿拦截 = 已启用（用户号 ${String(config().owner?.qq || '').slice(0, 3)}***）`)

@@ -9,7 +9,7 @@
 // 这里做三件事：
 //   ① 她自己发出去的每条消息，把 message_id → 正文 记进一个小环形表（引用自己的话时零延迟、零请求）
 //   ② 收到消息时同样登记（用户引用的常常是他自己或群友前面那句）
-//   ③ 表里没有 → 让 NapCat 的 get_msg 把原文取回来（含图片/语音/卡片的描述）
+//   ③ 表里没有 → 让 SnowLuma 的 get_msg 把原文取回来（含图片/语音/卡片的描述）
 import fs from 'node:fs'
 import { dataPath } from './paths.mjs'
 import { swallow } from './swallow.mjs'

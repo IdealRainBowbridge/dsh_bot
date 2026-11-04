@@ -1,7 +1,7 @@
 // qq-quote-bridge —— QQ 引用索引的预热与解析（2026-11-03 高压修缮：自 qq-server.mjs 外迁）
 //
 // 为什么单独成文件：qq-server.mjs 1,771 行顶破门禁上限（1750），先把这段自包含的
-// 「NapCat get_msg 不可靠 → 本地索引兜底 → 图走 VL」逻辑搬出来（~100 行）。
+// 「SnowLuma get_msg 不可靠 → 本地索引兜底 → 图走 VL」逻辑搬出来（~100 行）。
 // 依赖全部显式注入（callApi / config / log / selfId / parseMessage），本文件只 import
 // 基础设施（quote / paths / swallow / vision），不产生新的依赖反向边 —— 门禁白名单不加东西。
 //

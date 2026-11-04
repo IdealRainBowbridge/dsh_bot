@@ -166,7 +166,7 @@ export async function run(argv = []) {
     try {
       const { sendOwnerQQ } = await import('../lib/notify.mjs')
       const ok = await sendOwnerQQ(`【B站分享】《${title.slice(0, 40)}》\n${message.slice(0, 80)}\nhttps://www.bilibili.com/video/${bvid}`)
-      console.log(ok ? '  📨 已推送到用户 QQ（评论区 @ 自己账号不会弹通知）' : '  ⚠️ QQ 推送失败（NapCat 没起？用户可能注意不到这条分享）')
+      console.log(ok ? '  📨 已推送到用户 QQ（评论区 @ 自己账号不会弹通知）' : '  ⚠️ QQ 推送失败（SnowLuma 没起？用户可能注意不到这条分享）')
     } catch (e) { swallow(e, 'tools/commands/comment.mjs:167') }
   }
 }

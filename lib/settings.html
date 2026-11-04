@@ -727,7 +727,7 @@ function renderStatus() {
     return;
   }
   const sched = s.scheduler || {};
-  const nap = (s.qqChannel && s.qqChannel.napcat) || {};
+  const nap = (s.qqChannel && s.qqChannel.snowluma) || {};
   const beat = s.wxBeat || null;
   const age = beat && beat.ts ? Math.max(0, Math.round((Date.now() - Number(beat.ts)) / 1000)) : null;
   const wxOk = age !== null && age <= 120;

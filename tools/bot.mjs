@@ -43,7 +43,7 @@ const COMMANDS = {
   selfmod: '改自己（全自主）：selfmod propose <文件> <为什么> --from <新内容文件> 提案 → selfmod selfApply 免审批落地（备份+语法+门禁+失败自动还原）｜selfmod snapshot 拍快照｜selfmod status',
   diary: '两本日记（--book owner|private）',
   mem: '三层记忆（remember/fact/lore/recall/old/stats）',
-  'qq-server': 'QQ 常驻聊天服务（OneBot v11 网关：SnowLuma/NapCat 均可，实时秒回）',
+  'qq-server': 'QQ 常驻聊天服务（OneBot v11 网关：SnowLuma/SnowLuma 均可，实时秒回）',
   qzone: '发 QQ 空间说说（OneBot send_qzone_msg）',
   report: '观看日报（B站/抖音 聚合 Markdown，不调模型）',
   review: '复盘学习日记（B站/抖音 提炼，写进私人日记）',

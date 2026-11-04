@@ -16,9 +16,9 @@ async function sendToOwnerQQ(file) {
   const cfg = config()
   if (cfg.guard?.dryRun) { console.log('   （干跑 guard.dryRun：贴纸不发 QQ，图已经存进图库）'); return false }
   const ownerQQ = String(cfg.owner?.qq || '')
-  const napcat = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+  const snowluma = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   if (!ownerQQ) throw new Error('owner.qq 未配置')
-  const r = await fetch(`${napcat}/send_private_msg`, {
+  const r = await fetch(`${snowluma}/send_private_msg`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'image', data: { file: 'file:///' + String(file).replace(/\\/g, '/') } }] }),
     signal: AbortSignal.timeout(15000),
@@ -45,7 +45,7 @@ export async function run(argv = []) {
     if (!file) { console.error('✗ 生成失败（看 imageGen 配置 / 代理 7897 是否活着 / 今日额度）'); process.exit(1) }
     console.log(`✓ 已入库：${file}`)
     if (has(argv, '--send')) {
-      try { console.log((await sendToOwnerQQ(file)) ? '✓ 已发用户 QQ 看效果' : '✗ 发送失败（NapCat 没起？）') }
+      try { console.log((await sendToOwnerQQ(file)) ? '✓ 已发用户 QQ 看效果' : '✗ 发送失败（SnowLuma 没起？）') }
       catch (e) { console.error('✗ 发送失败：' + e.message) }
     }
     return

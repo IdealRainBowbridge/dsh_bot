@@ -70,7 +70,7 @@
 细胞层（synapse/receptor/neuron）齐备，`organs/senses.mjs` 做了解环接线板。
 
 **缺口**：
-1. **所有器官共用一个 30 秒节拍**。`BEAT` 表把 napcat/tasks/promises/quotes/qzone/brain/novelty/presence/collateral 全塞进同一个 `beat()`。
+1. **所有器官共用一个 30 秒节拍**。`BEAT` 表把 snowluma/tasks/promises/quotes/qzone/brain/novelty/presence/collateral 全塞进同一个 `beat()`。
    生物学的核心事实是**时间尺度分离**：心率秒级、HPA 小时级、昼夜 24 小时、发育以周计。
    压在一起的后果已经实测到：`decide()` 每 30 秒重算一次欲望，而"想做什么"这件事的心理有效窗口是十几分钟。
 2. **没有循环系统**（见轴一）。器官之间靠 import 与 `setDim` 直连。
@@ -255,7 +255,7 @@
 - 门禁：`field.setDim` 在白名单外被调用 → 红（先只警告一周）。
 
 **P1-2 时间尺度分离（`BEAT` 分层）**
-- 现象：napcat/tasks/promises/quotes/qzone/brain/novelty/presence/collateral 全在 30 秒节拍里（实测 #1 的同源问题）。
+- 现象：snowluma/tasks/promises/quotes/qzone/brain/novelty/presence/collateral 全在 30 秒节拍里（实测 #1 的同源问题）。
 - 机制：`decide()` 的"专心窗口"（`until`）本来是解决办法，但它被"每拍执行"架空了（P0-1）。分层之后，
   决策窗口是**真正的**窗口：90 分钟一层，层内不重算。
 - 器官：`heartbeat` 拆 `fast/slow/ultra/circadian` 四个 tick 表；每层只演化自己尺度上的量。

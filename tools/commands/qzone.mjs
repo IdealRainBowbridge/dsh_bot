@@ -1,5 +1,5 @@
-// qzone —— 发 QQ 空间说说（NapCat 扩展 API send_qzone_msg）。
-// 不是标准 OneBot v11，是 NapCat 扩展；部分版本未暴露（调用会失败，看错误）。
+// qzone —— 发 QQ 空间说说（SnowLuma 扩展 API send_qzone_msg）。
+// 不是标准 OneBot v11，是 SnowLuma 扩展；部分版本未暴露（调用会失败，看错误）。
 //
 //   node bot.mjs qzone --content "今天吃了三碗白饭…吧" [--image URL] [--permission 1]
 //     permission: 1=所有人可见(默认) 4=好友可见 64=仅自己
@@ -44,7 +44,7 @@ export async function run(argv = []) {
   try { j = await r.json() } catch (e) { swallow(e, 'qzone:run') }
   if (!r.ok || (j && j.status === 'failed')) {
     console.error(`✗ 发说说失败：${JSON.stringify(j ?? r.status).slice(0, 200)}`)
-    console.error('  提示：send_qzone_msg 是 NapCat 扩展，部分版本未暴露；确认 NapCat 版本支持，或改用 qzone-bridge 桥接')
+    console.error('  提示：send_qzone_msg 是 SnowLuma 扩展，部分版本未暴露；确认 SnowLuma 版本支持，或改用 qzone-bridge 桥接')
     process.exit(1)
   }
   console.log(`✓ 说说已发布${j?.data?.tid ? `（tid=${j.data.tid}）` : ''}`)

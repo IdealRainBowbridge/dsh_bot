@@ -24,18 +24,18 @@
 
 ---
 
-## 二、QQ 通道（NapCat）
+## 二、QQ 通道（SnowLuma）
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| **QQNT 客户端** | `9.9.20-36330`（内置 `qqnt.json` 目标 `9.9.22-40990`） | NapCat 注入宿主 |
-| **NapCatQQ** | **`NapCat.Onebot 4.18.41`**（OneBot **v11**） | 通过 `NapCatWinBootHook.dll` + `NapCatWinBootMain.exe` 注入 |
-| 启动方式 | `D:\napcat\launcher-user.bat`（需管理员） | 本插件注册计划任务 `DSH-Feiyu-NapCat`（`RunLevel Highest`），随 DSH 起停 |
+| **QQNT 客户端** | `9.9.20-36330`（内置 `qqnt.json` 目标 `9.9.22-40990`） | SnowLuma 注入宿主 |
+| **SnowLumaQQ** | **`SnowLuma.Onebot 4.18.41`**（OneBot **v11**） | 通过 `SnowLumaWinBootHook.dll` + `SnowLumaWinBootMain.exe` 注入 |
+| 启动方式 | `D:\snowluma\launcher-user.bat`（需管理员） | 本插件注册计划任务 `DSH-Feiyu-SnowLuma`（`RunLevel Highest`），随 DSH 起停 |
 | HTTP 上报 | `http://127.0.0.1:8080/onebot`，`messagePostFormat=array` | qq-server 的入口 |
 | 验证 | `curl http://127.0.0.1:3000/get_version_info` | 应返回 `"app_version":"4.18.41"` |
 
-> NapCat 挂了的表现：`/health` 里 `napcat.ok=false`、`qq-server.log` 每 30s 报「网关不通」。
-> 修复：`schtasks /Run /TN "DSH-Feiyu-NapCat"`（不用 UAC 交互）。
+> SnowLuma 挂了的表现：`/health` 里 `snowluma.ok=false`、`qq-server.log` 每 30s 报「网关不通」。
+> 修复：`schtasks /Run /TN "DSH-Feiyu-SnowLuma"`（不用 UAC 交互）。
 
 ---
 
@@ -178,7 +178,7 @@ WAV 再返回给 `dsh_bot`。失败一律回落原声（换声是加分项，不
 | 她的音色模型 | `D:\rvc\RVC\assets\weights\feiyu-rose.pth`（+ `_e50/_e100/_e125/_e150` 各轮次） | v2 40k |
 | 底模 | `assets\pretrained_v2\{f0G40k,f0D40k,f0G48k,f0D48k}.pth` | RVC 预训练 |
 
-产物落在她的工作目录，可直接发 QQ（`sendQQ` 用 NapCat `record` 段）。
+产物落在她的工作目录，可直接发 QQ（`sendQQ` 用 SnowLuma `record` 段）。
 
 ---
 
@@ -238,7 +238,7 @@ node tools/bot.mjs produce ["主题"]     # 每天有额度（douyin.produce.dai
 |---|---|---|
 | `8080` | `qq-server`（OneBot 上报入口） | QQ 通道 |
 | `8095` | `douyin-dm-server`（抖音私信陪聊） | 抖音私信 |
-| `3000` | NapCat HTTP | QQ 通道 |
+| `3000` | SnowLuma HTTP | QQ 通道 |
 | `9880` | GPT-SoVITS `api_v2.py` | 语音 / 唱歌 / 视频旁白 |
 | `9222` | Chrome CDP（可选，抖音真发评论用） | 可选 |
 | `7897` | Clash / 系统代理 | 生图兜底、上网 |
@@ -264,7 +264,7 @@ node tools/bot.mjs nav            # 验证登录态
 node tools/bot.mjs selftest       # 全量体检
 
 # 4) QQ
-#    装 QQNT 9.9.20+ → NapCat 注入（管理员）→ 面板点「启动 QQ 服务」
+#    装 QQNT 9.9.20+ → SnowLuma 注入（管理员）→ 面板点「启动 QQ 服务」
 #    curl http://127.0.0.1:3000/get_version_info   # 看 4.18.41
 
 # 5) 抖音
@@ -292,7 +292,7 @@ node tools/bot.mjs sticker gen "本鱼饿了" --tag 开心
 
 ```powershell
 node tools/bot.mjs selftest                 # 全绿
-curl http://127.0.0.1:8080/health             # napcat.ok=true
+curl http://127.0.0.1:8080/health             # snowluma.ok=true
 curl http://127.0.0.1:8095/health             # failStreak=0
 node tools/bot.mjs mem stats                # episodes/facts/lore 都有数
 node tools/bot.mjs mem recallall --chat qq:<你的号>   # 跨通道记忆块能装配出来
@@ -330,7 +330,7 @@ npm test                                      # 8 套测试全过
 | 抖音评论"发成功"却没内容 | 新号在**别人**视频下回复被审核吞 | 先在自己作品下互动；或等号养起来 |
 | 抖音私信不回 | `failStreak` 上升 / 抓不到新消息 | `curl 8095/health`，看 `douyin-dm.log` 里「用户：」 |
 | 完全自由不动 | ① 摇号没中 ② 模型额度 429 | `feiyu-freedom.json` / 会话最后几帧 |
-| QQ 服务在跑却不回 | NapCat 掉了（`napcat.ok=false`） | `schtasks /Run /TN "DSH-Feiyu-NapCat"` |
+| QQ 服务在跑却不回 | SnowLuma 掉了（`snowluma.ok=false`） | `schtasks /Run /TN "DSH-Feiyu-SnowLuma"` |
 
 ---
 
@@ -358,7 +358,7 @@ npm test                                      # 8 套测试全过
 | 数据挂载 | `/home/dsh_bot/data-home → /home/feiyu/.data`（宿主路径 `/home/dsh_bot/data-home`） |
 | 其它挂载 | `/home/dsh_bot/dsh → /opt/dsh`（会被镜像重置，持久件放 `~/.dsh/`）、`/mnt/data/feiyu-stickers → /mnt/stickers`、`entry.sh` / `im-gateway.sh` 单文件注入 |
 | LLM 链路 | 容器内 `http://172.17.0.1:3066` → 宿主 `llm-proxy.service`（`/usr/local/bin/llm-proxy.py`，多监听 172.17.0.1 + tailscale0 的 100.91.165.107）→ `127.0.0.1:3065`（agent2api）。**单点**：动它之前先备份、改完立即验容器链路 |
-| QQ 通路 | 容器内 NapCat + qq-server `0.0.0.0:8081`（docker 只映射宿主 127.0.0.1:8081；绑 0.0.0.0 是修「docker-proxy 从网卡地址进」的必须项） |
+| QQ 通路 | 容器内 SnowLuma + qq-server `0.0.0.0:8081`（docker 只映射宿主 127.0.0.1:8081；绑 0.0.0.0 是修「docker-proxy 从网卡地址进」的必须项） |
 | DSH web | `:3080` |
 | 进程守护 | `im-gateway.sh`（node 挂了 ~52s 拉起）；她的自重启走 `selfmod-restart.flag`，**禁止 docker restart 整容器** |
 | git | 仓库分支 `refactor/v5`，身份 `bot <bot@local>`；她整点 :00/:10 前后跑 auto 快照（会卷走工作区未提交改动——动手前先 git log/status 核对） |

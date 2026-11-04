@@ -259,7 +259,7 @@ locks/                  自由进程单实例锁
 11. **改文件用 Edit 工具**，别用 python heredoc（曾把文件截 0 字节）；heredoc 里复杂转义用临时脚本文件
 12. **GPT-SoVITS**：英文参考需 g2p_en+nltk_data（已装在 runtime/nltk_data）；参考段太短会泄漏参考词（银狼 w12 偶发"这速度"）
 13. **8090 端口**被 Wondershare 占，dm 用 8095
-14. **DSH 重启灭全家**（NapCat/SoVITS/qq-server）；NapCat 手动 `schtasks.exe //Run //TN DSH-Feiyu-NapCat`；扫码登录时 3000 端口关闭是正常
+14. **DSH 重启灭全家**（SnowLuma/SoVITS/qq-server）；SnowLuma 手动 `schtasks.exe //Run //TN DSH-Feiyu-SnowLuma`；扫码登录时 3000 端口关闭是正常
 15. **面板数值**：0 是合法值（=不限），显示一律 `!= null` 判断，禁 `||默认值`
 16. **DM 虚拟列表**：先读底部最新再上翻（先滚后读丢最新）
 17. **完全自由 = 只摇人 + 一次只做一件事（别做成三条流水线）**：`freedom.enabled` 只负责"每 N 分钟摇她一次"；干什么由**她自己**用 `feiyu focus <web|bilibili|douyin> --min N` 定，记在 `~/.dsh/feiyu-focus.json`，宿主 `focusTick`（60 秒）**只放行这一件**、其余循环立刻停、到点自动收工（`focus rest/off` 同理）。10-26 我先做成"开总开关=三开"，用户当场否掉：那既没自主性，也不像活人。**排查"她不活动"先看 `feiyu focus` 与三个开关是否只有一个是开的**
@@ -363,7 +363,7 @@ locks/                  自由进程单实例锁
     `message: [ {type:'reply', data:{id:'50854801'}}, {type:'text', data:{text:'这句啥意思'}} ]`
     老 `parseMessage` 只把 `reply` 折成一句「【引用回复了一条消息】」，被引用的**正文一个字都没取**。于是用户引用她 19:06 那句再问"可塑性记忆看完了吗"，她只能回「哪条呀，我这边看不到引用的是啥」（19:06:06 真实发生）。
     - 新增 `tools/lib/quote.mjs`：`replyIdOf()` / `remember(id,{text,who,name,at})` / `get()` / `describe()` / `fromGetMsg()`；环形表 400 条落盘 `msg-index.json`。
-    - `qq-server` 三处接线：① `send()` 每发一条就把 NapCat 返回的 `message_id → 正文` 记成 `who:'me'`；② 收到的每条也登记（`owner`/`other`+昵称）；③ 收到引用 → 本地表 → 失败才 `get_msg` → 仍失败就**现拉历史**（`warmQuoteIndex`）。
+    - `qq-server` 三处接线：① `send()` 每发一条就把 SnowLuma 返回的 `message_id → 正文` 记成 `who:'me'`；② 收到的每条也登记（`owner`/`other`+昵称）；③ 收到引用 → 本地表 → 失败才 `get_msg` → 仍失败就**现拉历史**（`warmQuoteIndex`）。
     - **实测坑**：`get_msg` 只认还在缓存里的消息，老消息直接回「消息不存在」；所以启动时 + 每 10 分钟用 `get_friend_msg_history` / `get_group_msg_history` 拉 40~50 条预热。启动日志会打「引用索引预热：50 条」。
     - 提示词侧：`persona.quoteBlock()` 注入【他这条是在接上面那一条说的】+ 原文 + "引用≠新话题，不许装没看见、不许反问'你指的是哪句'"；引用行只进**记忆**（`memText`），不进事实抽取（`userText`），否则会把她自己的旧话当成用户新说的话去抽 food/plan。
     - 配置：`qq.quote = { enabled:true, seeImage:true, historyCount:50 }`；引用的是图片时走一次 VL（`seeImage`）把图里内容补进那句话里。
@@ -441,7 +441,7 @@ locks/                  自由进程单实例锁
 | 4 | 银狼 w12 参考段偏短，语音偶发泄漏参考词 | 备选 w07/w08 随时可换 |
 | 5 | 图片评论图床偶发闪断 | 已加一次重试，继续观察 |
 | 6 | img2img 匿名档略糊（一致性>锐度取舍） | 硅基档为主已无此问题 |
-| 7 | NapCat 偶发断连原因未查（用户说先不管） | 观察 |
+| 7 | SnowLuma 偶发断连原因未查（用户说先不管） | 观察 |
 | 8 | 弹幕（post.so 废弃+UI 改版）、投币（gaia）暂缓 | UI 法待 B站改版稳定 |
 | 9 | GitHub token 明文 `~/.feiyu-github-token.json` | 用户知情 |
 | 11 | 8 套情绪参考段是用**漏字文本**做出来的（例如 wronged 的音频开头少了「你都不理我……」） | 方向安全（文本比音频长只会偏慢，不会吃句尾），要更干净就 `voice emo build --force` 重做 —— 现在基础参考段已修好，重做会一次到位 |
@@ -491,7 +491,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY git -c http.proxy=
 web-log.md（上网）/ bili-outbox.md（B站发言）/ selfup-log.md（自我升级）
 面板记忆库卡片（分平台计数）/ 桌面「她的投稿包」
 
-# 排障顺序：看日志 → 查进程/端口（3000 NapCat/8080 qq/8095 dm/9880 SoVITS/9222 CDP）→ 手动跑底层命令抓真错
+# 排障顺序：看日志 → 查进程/端口（3000 SnowLuma/8080 qq/8095 dm/9880 SoVITS/9222 CDP）→ 手动跑底层命令抓真错
 ```
 
 ### 账号速查

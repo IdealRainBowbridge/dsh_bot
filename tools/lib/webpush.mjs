@@ -1,7 +1,7 @@
 // webpush —— webui 主动说话（2026-11-03）：让她在网页会话里自己开口。
 //
 // 哲学与 QQ 主动搭话同源（qq-server tryProactive）：由头驱动，安静兜底，闸门合并计数。
-// 通道区别：QQ 发 NapCat；这里只产出「任务提示」，由调用方（scheduler / 面板）塞进
+// 通道区别：QQ 发 SnowLuma；这里只产出「任务提示」，由调用方（scheduler / 面板）塞进
 // ctx.sessionController.prompt —— 落点就是 webui「工作区 → 未分组」的 dsh_bot 会话，
 // 她在网页里说的话和被生物钟唤醒说的话同一条流。消息本体由她在会话里自己写
 // （不在这边预生成 —— 会话里有她完整的 persona 和工具，预生成就成了替她说话）。

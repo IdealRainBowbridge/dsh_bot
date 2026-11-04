@@ -54,7 +54,7 @@ const PATTERNS = [
   { kind: 'QQ号', re: /QQ\s*[:：#]?\s*\d{4,12}/gi, to: '【一个QQ号】' },
   { kind: '号码', re: /(?:帐号|账号|号码|扣扣|企鹅)\s*(?:是|为|[:：])?\s*\d{4,12}/g, to: '【一个号码】' },
   // 内部代号（2026-11-03 补口）：容器名/项目名/自建服务名都是"她住在哪"的指纹
-  { kind: '内部代号', re: /\b(?:feiyu[-_]?sandbox|dsh[-_]?bot|agent2api|snowluma|vaultwarden|napcat|llm[-_]proxy|im[-_]gateway|feiyu[-_]?net)\b/gi, to: '【内部代号】' },
+  { kind: '内部代号', re: /\b(?:feiyu[-_]?sandbox|dsh[-_]?bot|agent2api|snowluma|vaultwarden|snowluma|llm[-_]proxy|im[-_]gateway|feiyu[-_]?net)\b/gi, to: '【内部代号】' },
   // 裸长编号兜底（8-12 位纯数字：订单号/QQ号裸提/日期串）。30000ms、13KB 这类带单位的短数字不中。
   { kind: '编号', re: /(?<![\d.])\d{8,12}(?![\d.])(?![分秒毫])/g, to: '【一串编号】' },
 ]

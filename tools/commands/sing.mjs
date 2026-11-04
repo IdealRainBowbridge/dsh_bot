@@ -14,9 +14,9 @@ async function sendQQ(file, text) {
   const cfg = config()
   if (cfg.guard?.dryRun) { console.log('   （干跑 guard.dryRun：音频不发 QQ，文件已经生成好了）'); return false }
   const ownerQQ = String(cfg.owner?.qq || '')
-  const napcat = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+  const snowluma = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   if (!ownerQQ) throw new Error('owner.qq 未配置')
-  const r = await fetch(`${napcat}/send_private_msg`, {
+  const r = await fetch(`${snowluma}/send_private_msg`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     // file 走 base64：发送方 SnowLuma 在宿主上，容器内路径它 stat 不到（见 lib/onebot-file.mjs）
     body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'record', data: { file: onebotFileValue(file) } }] }),
@@ -24,7 +24,7 @@ async function sendQQ(file, text) {
   })
   if (r.ok && text) {
     // v5：补超时（上面那条发语音的 fetch 有 signal，这条漏了）
-    await fetch(`${napcat}/send_private_msg`, {
+    await fetch(`${snowluma}/send_private_msg`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: Number(ownerQQ), message: [{ type: 'text', data: { text } }] }),
       signal: AbortSignal.timeout(15000),
@@ -58,7 +58,7 @@ export async function run(argv = []) {
     console.log(`✓ 唱好了（${song.cache === 'hit' ? '歌单直接点唱' : Math.round((Date.now() - t0) / 60000) + ' 分钟学会'}）：${song.file}`)
     try {
       const ok = await sendQQ(song.file, `🎵 我学会唱《${song.title}》了——用我自己的声音哦～`)
-      console.log(ok ? '✓ 已唱给用户 QQ' : '✗ 发送失败（NapCat 没起？音频在上面）')
+      console.log(ok ? '✓ 已唱给用户 QQ' : '✗ 发送失败（SnowLuma 没起？音频在上面）')
     } catch (e) { console.log('✗ 发送失败：' + e.message) }
     return
   }
@@ -67,7 +67,7 @@ export async function run(argv = []) {
   const mode = argv.includes('--melody') ? 'melody' : 'rap'
   const cfg = config()
   const ownerQQ = String(cfg.owner?.qq || '')
-  const napcat = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+  const snowluma = String(cfg.qq?.napcat_http || 'http://127.0.0.1:3000').replace(/\/+$/, '')
   if (!ownerQQ) { console.error('owner.qq 未配置'); process.exit(1) }
   console.log(theme ? `写一首关于「${theme}」的歌（${mode === 'melody' ? '旋律/WORLD歌声' : '说唱/节拍'}）…` : '自由发挥写一首…')
   const song = await sing(theme, mode)

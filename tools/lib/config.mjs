@@ -171,7 +171,7 @@ export const DEFAULTS = {
     content_temperature: 0.7,
   },
 
-  // QQ（OneBot v11 网关：SnowLuma / NapCat 通用）
+  // QQ（OneBot v11 网关：SnowLuma / SnowLuma 通用）
   qq: {
     enabled: false,
     // 随 DSH 自启（false = 只在面板上手动点开）。代码里有 4 处读它，
@@ -181,7 +181,7 @@ export const DEFAULTS = {
     // 填了值就强制校验（Authorization: Bearer / X-Bot-Token / ?token=）。
     // 想给微信桥或外部脚本调用，就在这里发一个 token，别把服务裸奔在 0.0.0.0 上。
     inboundToken: '',
-    napcat_http: 'http://127.0.0.1:3000',   // OneBot HTTP 服务器地址（SnowLuma/NapCat 的 WebUI 里配置）
+    napcat_http: 'http://127.0.0.1:3000',   // OneBot HTTP 服务器地址（SnowLuma/SnowLuma 的 WebUI 里配置）
     allow_groups: [],                        // 空 = 全部群
     at_only: true,                           // 群里只被 @ 才回；设 false = 群里所有消息都回（像私聊一样）
     voice_enabled: false,                    // 语音条开关

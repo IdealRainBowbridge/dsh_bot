@@ -47,7 +47,7 @@ const ok = (name, pass, detail = '') => {
 {
   const N = await import('../tools/lib/notify.mjs')
   // 干跑会让 sendOwnerQQ 直接返回，去重分支就在那之前 —— 需要真跑发送路径。
-  // 这里用本地假 NapCat：127.0.0.1 上的一个一次性 HTTP 服务。
+  // 这里用本地假 SnowLuma：127.0.0.1 上的一个一次性 HTTP 服务。
   const http = await import('node:http')
   const srv = http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"status":"ok","retcode":0,"data":{"message_id":1}}') })
   await new Promise((r) => srv.listen(0, '127.0.0.1', r))

@@ -94,7 +94,7 @@ function presented(req) {
  * @param {object} cfg
  * @param {{allowLoopback?:boolean}} opts
  *   allowLoopback=true：**本机回环永远放行**（即便配了 token）。
- *   为什么需要：`/onebot` 是 SnowLuma/NapCat 的上报口，OneBot v11 的 HTTP 上报
+ *   为什么需要：`/onebot` 是 SnowLuma/SnowLuma 的上报口，OneBot v11 的 HTTP 上报
  *   **不支持自定义请求头**（它只会 POST 一个 JSON body）。如果在 /onebot 上强制校验
  *   token，等于把本机 QQ 网关直接断开 —— 这是"安全改到不能用"的典型。
  *   而它只绑在 127.0.0.1 上（宿主映射也是 127.0.0.1），本来就是本机可达。
