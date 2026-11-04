@@ -73,18 +73,55 @@
 
 ---
 
-## 五、语音克隆（说话 / 语音条）
+## 五、语音（说话 / 语音条）
+
+### 现状：whale-tts（Arch 主机，2026-11-04 上线）
+
+| 组件 | 位置 / 版本 | 说明 |
+|---|---|---|
+| **whale-tts** | `/opt/whale-tts/server.py`，`whale-tts.service`（enabled，`Restart=always`） | 监听 `0.0.0.0:9880`，**GPT-SoVITS `api_v2` 的 `/tts` 接口兼容**，调用方零改动 |
+| 引擎 | `edge-tts` 7.3.1 + `zh-CN-XiaoyiNeural` | 独立 venv（`/opt/whale-tts/.venv`，Python 3.12），不碰系统 Python |
+| 音高标定 | `pitch_base = 0Hz` → F0 中位 **≈291 Hz** | 与「DeepSeek鲸鱼娘在运营」Day1 旁白实测 291Hz 对齐；情绪层只做 ±10Hz 内偏移 |
+| 参数映射 | `temperature`（唤醒度 1.25–1.50）→ pitch；`speed_factor` → rate；`fragment_interval` → 句间静音 | 与 `tools/lib/emotion.mjs` 的 9 种情绪一一对应 |
+| 输出 | 24 kHz 单声道 PCM16 WAV，峰值归一 0.89，句间停顿可配 | `dsh_bot` 的 `concatWav`/`prosody` 只接受 16bit PCM，正好对上 |
+| 访问栅栏 | 只接受 `127.0.0.0/8`、`::1`、`172.16.0.0/12`（docker 网桥） | LAN `192.168.5.2:9880` 与 tailnet `100.91.165.107:9880` 实测 403 |
+| 缓存 | `/opt/whale-tts/cache`（LRU，默认 300 条） | 同文本同参数直接命中；实测 6 秒音频 ≈240 KB |
+| 安装/更新 | `bash /opt/whale-tts/install.sh`（幂等） | 建 venv → 装包 → 写 unit → 重启 → health + 合成自检 |
+| 日志 | `journalctl -u whale-tts` | 每条约一行：参数、句数、时长、文本前 24 字 |
+
+配置（`~/.dsh/bot.config.json`，容器内 `/home/dsh/.dsh/`）：
+
+```json
+"voice": { "sovits_url": "http://172.17.0.1:9880/tts", "autoStartSovits": false,
+           "candidates": 1, "pick": "first", "chunkChars": 80 },
+"qq":    { "voice_enabled": true, "voice_chance": 0.35 }
+```
+
+- `autoStartSovits=false`：宿主没有 GPT-SoVITS 可拉，留着只会每次探活空转。
+- `candidates=1 / pick=first`：edge-tts 是确定性的，同一句话合两遍逐样本一致，择优纯属浪费。
+- 调用链：`qq-server` 摇中语音 → `lib/tts.mjs` POST `172.17.0.1:9880/tts` → 得 wav → **base64** → SnowLuma 转 silk → QQ。
+
+### 发送段（2026-11-04 修）
+
+`{ "type": "record", "data": { "file": "base64://..." } }`
+
+以前直接传容器内绝对路径。发消息的是**宿主上的 SnowLuma**，它 `stat` 不到 `/home/dsh/.data/voice/*.wav`，
+于是每条语音都以 `EACCES` 收场 —— 日志里只有一句「语音失败（剩下转文字）」，看着像没配语音。
+表情包 2026-11-02 踩过同一个坑并用 base64 解决，语音这条路径当时漏了。现在 `qq-server` 的三处
+`record` 发送（聊天语音、两种唱歌）与 `voice`/`sing` 命令统一走 `tools/lib/onebot-file.mjs` 的 `onebotFileValue()`。
+
+### 旧方案：GPT-SoVITS（Windows 本机，arch 主机上不可用）
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| **GPT-SoVITS** | commit `b4570b8`（2026-10-19，API v2 语义流式切分） | `D:\GPT-SoVITS` |
+| **GPT-SoVITS** | commit `b4570b8`（2026-10-19，API v2 语义流式切分） | `D:\GPT-SoVITS`，只在 Windows 本机 |
 | 关键依赖 | `numpy<2.0`、`librosa==0.10.2`、`pytorch-lightning>=2.4`、`gradio<5`、`ffmpeg-python` | 见 `requirements-tts.txt` |
-| API 服务 | `api_v2.py` → `http://127.0.0.1:9880/tts` | 插件启动时自动拉起 + 每 60s 探活 |
-| 零样本参考音 | `D:\GPT-SoVITS\models\yinlang\yinlang.wav`（+ `prompt_text`/`prompt_lang`） | 当前配置用的就是它 |
+| API 服务 | `api_v2.py` → `http://127.0.0.1:9880/tts` | 插件启动时自动拉起 + 每 60s 探活（`autoStartSovits`） |
+| 零样本参考音 | `D:\GPT-SoVITS\models\yinlang\yinlang.wav`（+ `prompt_text`/`prompt_lang`） | Windows 部署时配的就是它 |
 | 训练权重（可选） | `models\sunshine_girl\{sunshine_girl.ckpt, .pth}` | 训练过的音色，换成 `sovits_path`/`gpt_path` |
-| 调用链 | `qq-server` 摇中语音 → `lib/tts.mjs` POST `/tts` → 得 wav → NapCat `record` 段发出 | 失败自动降级纯文字 |
 
-发送段：`{ "type": "record", "data": { "file": "<wav>" } }`
+保留原因：`tools/lib/rvc.mjs`（唱歌换声 / 训练她自己的音色）仍然依赖 Windows 上的 RVC，`voice train` 也走它。
+**要回到 SoVITS**：把 `sovits_url` 指回 `127.0.0.1:9880`、`autoStartSovits=true`，`whale-tts` 停掉即可 —— 两者接口同形，互为替换。
 
 ---
 
@@ -300,7 +337,8 @@ npm test                                      # 8 套测试全过
 | 门禁 | `node scripts/check.mjs`（305 文件，含 2026-11-03「裸 catch{} 必须带注释」、2026-11-04「条件里的 `名?.名` 与 TDZ 声明前读取」两条规则） |
 | 面板入口 | nginx `127.0.0.1:8415`（`/deepseekharness/` → `3090`，注入 DSH 会话 cookie）；另有 tailscale serve `:3081` 直连 3090。**子路径挂载**：`client.js`/`settings.html` 的 API 基址从自身脚本 URL 反推（写死 `/dsh_bot/api` 会 404） |
 | 插件访问栅栏 | 回环放行；其余要求「Host ∈ entry.sh 的 `--trusted-host` 且对端是容器网关 `172.17.0.1`（= 宿主反代）」，否则 403。鉴权仍由 DSH `connection.requestRejection` 负责 |
-| 测试 | `node tools/run-tests.mjs`（90 套，全套约 58 秒，容器内直接跑；2026-11-04 新增 `client-base-test` / `access-fence-test` / `settings-page-test` / `silent-failure-test`） |
+| 测试 | `node tools/run-tests.mjs`（90 套，全套约 58 秒，容器内直接跑；2026-11-04 新增 `client-base-test` / `access-fence-test` / `settings-page-test` / `silent-failure-test`）；2026-11-04 语音改 whale-tts（见第五节）|
+| 语音服务 | 宿主 `whale-tts.service`（`/opt/whale-tts`，`0.0.0.0:9880`，只放行回环+docker 网桥）；容器侧 `voice.sovits_url=http://172.17.0.1:9880/tts` |
 
 ## 静默失效修复批次（2026-11-04）
 
