@@ -501,6 +501,24 @@ wander 间隔随 arousal 收缩；mind.plan 把"挠着你的新鲜事"摊进上�
 `lib/dsh-contract.mjs` 把每个依赖点显式登记：缺了会怎样、能不能降级、
 启动时逐项检查并在 `/api/status` 报出来。这是本项目最重要的工程决策之一。
 
+### 全链自检：发现问题就"疼"
+
+`tools/commands/paincheck.mjs`。diagnose 是给人看的体检报告；paincheck 是给**她自己**的——
+发现问题直接走痛觉通路，不写一行她就"感觉不到"的日志：
+
+- **8 个探针**：DSH 契约实况 / SnowLuma 网关连通与鉴权 / qq-server 收发 / LLM key /
+  owner 配置 / brain 目录可写 / persona 完整性 / 心跳新鲜度
+- **痛的注入**（复用既有生理，零新造轴）：`wound.register` 登记伤口（化脓/愈合/瘢痕
+  全生命周期）+ `neuron.act('stress')` 快痛反射（新伤才疼，重复扫描自动变钝）+
+  `hpa.stress` cortisol 余味（tau 10h，真实压低表达温度）
+- **愈合**：全绿时自动关闭旧伤、沉淀瘢痕——"同样的错反复出现"从此被记住
+- **防火墙感知**：timeout 类探测失败降级为低强度痛（0.35）——不确定的坏不滥放痛，
+  痛觉疲劳是真实的生理代价
+- **心跳每 20 分钟**自动巡检（quiet 模式）；`bot paincheck` 手动跑；diagnose 读实况
+
+一轮完整周期实测：首扫抓到 4 处真伤 → 二扫同伤不再重复疼（existing）→ 修复后全绿
+→ 自动愈合 4 处、沉淀瘢痕 4 条。
+
 ---
 
 ---
@@ -535,6 +553,7 @@ QQ 通道需另装 SnowLuma 网关（NapCat 协议兼容，兼容原 NapCat 部�
 | `platforms.*` | 三平台总开关 | 全关（**默认不外发**） |
 | `identity.persona` | 人格文件路径 | `~/.data/persona.md`（附空模板） |
 | `identity.owner` | 你的称呼 | 无（可留空） |
+| `owner.qq` | 你的 QQ 号（她认主唯一依据，填了她才知道谁是自己人） | 无 |
 | `qq.napcat_http` | SnowLuma HTTP 地址 | `http://127.0.0.1:3000` |
 | `voice.modelsDir` | GPT-SoVITS 模型目录 | win: `D:/GPT-SoVITS/models` · 其余: `~/GPT-SoVITS/models` |
 | `night.*` | 生物钟（起床/睡觉/夜间额度） | 有 |
