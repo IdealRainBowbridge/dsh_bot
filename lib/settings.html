@@ -3,161 +3,639 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>大肥鱼 · 设置</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --bg: #080b11;
+    --sheet: #0d131c;
+    --inset: #0a0f16;
+    --line: #1c2634;
+    --line-soft: #151d27;
+    --fg: #e8eef6;
+    --fg-2: #a9b7c7;
+    --fg-3: #8494a6;
+    --accent: #4d9fff;
+    --accent-hover: #66aeff;
+    --accent-ink: #04121f;
+    --ok: #3ddc97;
+    --warn: #f3b13a;
+    --bad: #ff8f85;
+    --r: 10px;
+    --sans: -apple-system, "Segoe UI Variable Text", "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0; padding: 24px 20px 60px; font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-    background: #16181d; color: #e6e8ee; max-width: 920px; margin-inline: auto;
+    margin: 0; font: 13px/1.6 var(--sans); color: var(--fg);
+    background:
+      radial-gradient(1100px 460px at 44% -220px, rgba(77,159,255,.13), transparent 72%),
+      radial-gradient(700px 320px at 92% 4%, rgba(61,220,151,.045), transparent 70%),
+      var(--bg);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
-  h1 { font-size: 20px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
-  h2 { font-size: 14px; margin: 0 0 12px; color: #9aa4b2; font-weight: 600; letter-spacing: .02em; }
-  .sub { color: #808a97; font-size: 12px; margin-bottom: 22px; }
-  .card {
-    background: #1d2027; border: 1px solid #2a2e37; border-radius: 12px;
-    padding: 16px 18px; margin-bottom: 14px;
+  ::selection { background: rgba(77,159,255,.32); color: #fff; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  a { color: inherit; }
+  code { font-family: var(--mono); font-size: 11.5px; }
+
+  /* ── 骨架 ─────────────────────────────────────────────────────────── */
+  .shell {
+    display: grid; grid-template-columns: 236px minmax(0, 1fr);
+    max-width: 1180px; margin: 0 auto; min-height: 100vh;
   }
-  .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
-  .row > label { min-width: 88px; color: #9aa4b2; font-size: 13px; }
+  .rail {
+    position: sticky; top: 0; align-self: start; height: 100vh;
+    display: flex; flex-direction: column; gap: 22px;
+    padding: 28px 18px 22px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px; }
+  .brand-mark {
+    width: 34px; height: 34px; flex: none; border-radius: 11px;
+    display: grid; place-items: center; color: var(--accent);
+    background: linear-gradient(160deg, rgba(77,159,255,.16), rgba(77,159,255,.04));
+    border: 1px solid rgba(77,159,255,.28);
+    box-shadow: 0 6px 18px -10px rgba(77,159,255,.7);
+  }
+  .brand-mark svg { width: 20px; height: 20px; }
+  .brand-name { font-size: 14px; font-weight: 600; letter-spacing: .01em; line-height: 1.25; }
+  .brand-sub { font-family: var(--mono); font-size: 10px; letter-spacing: .16em; color: var(--fg-3); margin-top: 2px; }
+
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav a {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 10px; border-radius: 8px;
+    font-size: 12.5px; color: var(--fg-2); text-decoration: none;
+    transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+  }
+  .nav a svg { width: 15px; height: 15px; flex: none; opacity: .8; }
+  .nav a:hover { background: rgba(255,255,255,.035); color: var(--fg); }
+  .nav a[aria-current="true"] {
+    color: var(--fg); background: rgba(77,159,255,.10);
+    box-shadow: inset 0 0 0 1px rgba(77,159,255,.22);
+  }
+  .nav a[aria-current="true"] svg { opacity: 1; color: var(--accent); }
+
+  .rail-foot {
+    margin-top: auto; display: flex; flex-direction: column; gap: 8px;
+    padding: 12px 10px 0; border-top: 1px solid var(--line-soft);
+    font-size: 11.5px; color: var(--fg-3);
+  }
+  .rail-foot code { color: var(--fg-3); word-break: break-all; line-height: 1.5; }
+  .sync { display: flex; align-items: center; gap: 7px; }
+  .sync i {
+    width: 6px; height: 6px; border-radius: 50%; flex: none;
+    background: var(--ok); box-shadow: 0 0 0 3px rgba(61,220,151,.12);
+  }
+  .sync.busy i { background: var(--warn); box-shadow: 0 0 0 3px rgba(243,177,58,.14); }
+  .sync.err i { background: var(--bad); box-shadow: 0 0 0 3px rgba(255,143,133,.14); }
+
+  main { padding: 40px 44px 120px; min-width: 0; }
+  .col { max-width: 660px; }
+
+  /* ── 抬头 ─────────────────────────────────────────────────────────── */
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 34px; }
+  h1 { margin: 0; font-size: 23px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2; text-wrap: balance; }
+  .lede { margin: 8px 0 0; font-size: 12.5px; color: var(--fg-2); max-width: 58ch; }
+  .head-actions { display: flex; gap: 8px; flex: none; padding-top: 2px; }
+
+  /* ── 分区 ─────────────────────────────────────────────────────────── */
+  .block { padding: 26px 0 30px; border-top: 1px solid var(--line-soft); scroll-margin-top: 18px; }
+  .block:first-of-type { border-top: 0; padding-top: 0; }
+  .block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+  h2 { margin: 0; font-size: 13.5px; font-weight: 600; letter-spacing: .01em; }
+  .block-note {
+    margin: 0; min-width: 0; font-size: 11.5px; color: var(--fg-3);
+    font-variant-numeric: tabular-nums; text-align: right;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── 读数 ─────────────────────────────────────────────────────────── */
+  .readouts {
+    display: flex; flex-wrap: wrap; gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    margin-top: 16px;
+  }
+  .readout {
+    flex: 1 1 152px; min-width: 0;
+    background: var(--sheet); padding: 11px 13px 12px;
+    /* 线画在格子上、容器留 1px 底色，末行不满时缺口也是同色，不会露出空洞 */
+    box-shadow: -1px -1px 0 var(--line-soft);
+  }
+  .readout-k { font-size: 11px; color: var(--fg-3); letter-spacing: .03em; }
+  .readout-v {
+    display: flex; align-items: center; gap: 7px;
+    margin-top: 3px; font-size: 12.5px; color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .readout-v span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--fg-3); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(61,220,151,.1); }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(243,177,58,.1); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px rgba(255,143,133,.1); }
+
+  /* ── 表单 ─────────────────────────────────────────────────────────── */
+  .field {
+    display: grid; grid-template-columns: 132px minmax(0, 1fr);
+    gap: 6px 20px; align-items: start; padding: 11px 0;
+  }
+  .field > label, .field > .flabel {
+    padding-top: 7px; font-size: 12.5px; color: var(--fg-2); line-height: 1.5;
+  }
+  .field > label[for] { cursor: pointer; }
+  .control { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
   input[type=text], input[type=number], select, textarea {
-    background: #12141a; border: 1px solid #313641; color: #e6e8ee;
-    border-radius: 8px; padding: 7px 10px; font: inherit; min-width: 0;
+    appearance: none; -webkit-appearance: none;
+    background: var(--inset); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 9px;
+    padding: 7px 10px; font: inherit; font-size: 12.5px;
+    min-width: 0; outline: none; caret-color: var(--accent);
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
   }
-  input[type=text], input[type=number] { width: 200px; }
-  select { width: 260px; }
-  textarea { width: 100%; min-height: 120px; resize: vertical; line-height: 1.6; }
-  input:focus, select:focus, textarea:focus { outline: none; border-color: #4a7dff; }
-  .grow { flex: 1; }
-  button {
-    background: #2a2e37; border: 1px solid #3a4050; color: #e6e8ee;
-    border-radius: 8px; padding: 7px 14px; font: inherit; cursor: pointer;
+  input[type=text]:hover, input[type=number]:hover, select:hover, textarea:hover { border-color: #26313f; }
+  input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(77,159,255,.16); background: #0b121b;
   }
-  button:hover { background: #343a46; }
-  button.primary { background: #3b6cf6; border-color: #3b6cf6; color: #fff; }
-  button.primary:hover { background: #2f56c4; }   /* hover 压深（白字 6.46:1，AA）；#4a7dff 只有 3.7:1 */
-  .switches { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-  .sw {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    background: #12141a; border: 1px solid #262b34; border-radius: 10px; padding: 10px 12px;
+  input[type=text], input[type=number] { width: 100%; max-width: 300px; }
+  input[type=number] { max-width: 118px; font-variant-numeric: tabular-nums; }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+  input::placeholder, textarea::placeholder { color: #7b8b9e; }
+  input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 3px rgba(255,143,133,.14); }
+  select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238494a6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    padding-right: 30px; max-width: 100%; width: 100%;
   }
-  .sw span { font-size: 13px; }
-  .sw small { display: block; color: #808a97; font-size: 12px; }
-  .toggle { position: relative; width: 40px; height: 22px; flex: none; }
-  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-  .toggle i {
-    position: absolute; inset: 0; background: #333845; border-radius: 22px; transition: .18s; cursor: pointer;
+  select option { background: #0d131c; color: var(--fg); }
+  textarea { width: 100%; min-height: 232px; max-height: 62vh; resize: none; padding: 12px 13px; line-height: 1.75; overflow: auto; }
+
+  .num { position: relative; display: inline-flex; align-items: center; }
+  .num input { padding-right: 34px; }
+  .num .unit {
+    position: absolute; right: 10px; font-size: 11.5px; color: var(--fg-3);
+    pointer-events: none; font-variant-numeric: tabular-nums;
   }
-  .toggle i::after {
-    content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
-    background: #9aa4b2; border-radius: 50%; transition: .18s;
+  .time { max-width: 96px !important; font-variant-numeric: tabular-nums; letter-spacing: .04em; text-align: center; }
+  .arrow { color: var(--fg-3); font-size: 12px; }
+
+  /* 平台行 */
+  .plats { margin-top: 10px; border-top: 1px solid var(--line-soft); }
+  .plat {
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+    padding: 11px 4px; border-bottom: 1px solid var(--line-soft);
+    transition: background .16s ease;
   }
-  .toggle input:checked + i { background: #3b6cf6; }
-  .toggle input:checked + i::after { left: 21px; background: #fff; }
-  .mem { max-height: 260px; overflow: auto; font-size: 12px; line-height: 1.7; }
-  .mem-item { padding: 4px 0; border-bottom: 1px dashed #262b34; color: #b9c1cd; }
-  .mem-item b { color: #7f8b9b; font-weight: 500; margin-right: 6px; }
-  .tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 6px; background: #262b34; color: #8b95a5; }
+  .plat:hover { background: rgba(255,255,255,.017); }
+  .plat-name { font-size: 12.5px; font-weight: 500; }
+  .plat-desc { font-size: 11.5px; color: var(--fg-3); margin-top: 1px; line-height: 1.45; }
+
+  .switch {
+    position: relative; flex: none; width: 42px; height: 24px; padding: 0;
+    border-radius: 999px; cursor: pointer;
+    background: #101823; border: 1px solid #26313f;
+    transition: background .18s ease, border-color .18s ease, opacity .18s ease;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: #7f8fa1;
+    transition: left .2s cubic-bezier(.2,.8,.2,1), background .18s ease;
+  }
+  .switch[aria-checked="true"] { background: var(--accent); border-color: transparent; }
+  .switch[aria-checked="true"]::after { left: 20px; background: #fff; }
+  .switch:hover:not(:disabled) { border-color: #37465a; }
+  .switch:disabled { opacity: .5; cursor: default; }
+
+  /* 按钮 */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border-radius: 9px; padding: 7px 14px; font: inherit; font-size: 12.5px;
+    cursor: pointer; white-space: nowrap;
+    border: 1px solid #2a3644; background: transparent; color: var(--fg-2);
+    transition: background .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease;
+  }
+  .btn svg { width: 14px; height: 14px; }
+  .btn:hover:not(:disabled) { background: rgba(255,255,255,.04); color: var(--fg); border-color: #3a4a5d; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary {
+    background: var(--accent); border-color: transparent; color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: transparent; color: var(--accent-ink); }
+
+  .help { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--fg-3); }
+  .help.cjk { color: var(--fg-3); }
+  .count { font-variant-numeric: tabular-nums; }
+  .flags { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .flag {
+    font-size: 11px; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid rgba(243,177,58,.32); color: var(--warn); background: rgba(243,177,58,.08);
+    font-variant-numeric: tabular-nums;
+  }
+  .flag[hidden] { display: none; }
+
+  /* 音量滑杆 */
+  .range-wrap { display: flex; align-items: center; gap: 14px; max-width: 320px; width: 100%; }
+  input[type=range] {
+    appearance: none; -webkit-appearance: none; flex: 1; height: 22px; background: transparent;
+    --fill: 15%;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent) var(--fill), #1e2836 var(--fill));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 15px; height: 15px; margin-top: -5.5px;
+    border-radius: 50%; background: #fff; border: 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,.55);
+    transition: transform .12s ease;
+  }
+  input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.08); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: #1e2836; }
+  input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--accent); }
+  input[type=range]::-moz-range-thumb { width: 15px; height: 15px; border: 0; border-radius: 50%; background: #fff; }
+  .range-val {
+    min-width: 44px; text-align: right; font-family: var(--mono); font-size: 12px;
+    color: var(--fg); font-variant-numeric: tabular-nums;
+  }
+
+  /* 记忆 */
+  .mem-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .chip {
+    font-size: 11.5px; padding: 2px 9px; border-radius: 999px;
+    background: rgba(255,255,255,.04); border: 1px solid var(--line);
+    color: var(--fg-2); font-variant-numeric: tabular-nums;
+  }
+  .chip b { color: var(--fg); font-weight: 600; }
+  .mem {
+    margin-top: 12px; max-height: 320px; overflow: auto;
+    border-top: 1px solid var(--line-soft);
+    scrollbar-width: thin; scrollbar-color: #26313f transparent;
+  }
+  .mem::-webkit-scrollbar { width: 10px; }
+  .mem::-webkit-scrollbar-thumb { background: #202b39; border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+  .mem::-webkit-scrollbar-thumb:hover { background: #2b394b; background-clip: padding-box; }
+  .mem-row { display: flex; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--line-soft); }
+  .mem-who { flex: none; width: 30px; font-size: 11.5px; color: var(--fg-2); padding-top: 1px; }
+  .mem-body { min-width: 0; font-size: 12px; line-height: 1.65; color: var(--fg-2); }
+  .mem-tag {
+    font-size: 10.5px; font-family: var(--mono); padding: 0 5px; border-radius: 4px;
+    background: rgba(77,159,255,.10); color: #8fc2ff; margin-right: 6px;
+    vertical-align: 1px; letter-spacing: .01em;
+  }
+  .mem-empty { padding: 18px 2px; font-size: 12px; color: var(--fg-3); line-height: 1.6; }
+
+  /* 载入骨架 */
+  .sk { position: relative; overflow: hidden; background: #0e151e; border-radius: 7px; }
+  .sk::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.045), transparent);
+    animation: sweep 1.5s ease-in-out infinite;
+  }
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .sk-line { height: 11px; margin: 9px 0; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+
+  /* 提示条 */
   .toast {
-    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(10px);
-    background: #2b7a4b; color: #fff; padding: 9px 18px; border-radius: 8px; font-size: 13px;
-    opacity: 0; pointer-events: none; transition: .22s;
+    position: fixed; left: 50%; bottom: 28px; z-index: 20;
+    transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 16px; border-radius: 10px; font-size: 12.5px;
+    background: #101a26; border: 1px solid #21303f; color: var(--fg);
+    box-shadow: 0 16px 40px -18px rgba(0,0,0,.9);
+    transition: opacity .18s ease, transform .22s cubic-bezier(.2,.8,.2,1);
+    max-width: min(560px, calc(100vw - 40px));
   }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  .toast.err { background: #a13b3b; }
-  .hint { color: #808a97; font-size: 12px; margin-top: 6px; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+  .toast.err i { background: var(--bad); }
+
+  .fatal { border: 1px solid rgba(255,143,133,.3); background: rgba(255,143,133,.06); border-radius: 12px; padding: 16px 18px; }
+  .fatal h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg); }
+  .fatal p { margin: 0 0 12px; font-size: 12px; color: var(--fg-2); line-height: 1.6; }
+
+  /* ── 窄屏 ─────────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    .rail {
+      position: sticky; top: 0; z-index: 10; height: auto;
+      flex-direction: row; align-items: center; gap: 14px;
+      padding: 10px 16px; overflow-x: auto;
+      background: rgba(8,11,17,.92); backdrop-filter: blur(10px);
+      border-right: 0; border-bottom: 1px solid var(--line-soft);
+    }
+    .brand { flex: none; }
+    .brand-text { display: none; }
+    .nav {
+      flex-direction: row; gap: 2px; overflow-x: auto; scrollbar-width: none;
+      /* 右边渐隐：告诉用户还能往右滑，而不是看起来被裁断 */
+      mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
+      -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
+      padding-right: 26px;
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a { white-space: nowrap; padding: 6px 9px; font-size: 12px; }
+    .nav a svg { display: none; }
+    .rail-foot { display: none; }
+    main { padding: 26px 20px 96px; }
+    .block { scroll-margin-top: 68px; }
+    h1 { font-size: 21px; }
+    .field { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 10px 0; }
+    .field > label, .field > .flabel { padding-top: 0; }
+  }
 </style>
 </head>
 <body>
-  <h1>🐟 大肥鱼 · 设置</h1>
-  <div class="sub">改动即时保存到 <code id="cfgpath">bot.config.json</code>（下次唤醒/重启生效）</div>
-
-  <div class="card">
-    <h2>平台开关</h2>
-    <div class="switches" id="platforms"></div>
-    <div class="hint">关掉的平台不会启动：QQ/微信 = 常驻聊天服务；B站 = 夜间定时养鱼；抖音 = 定时刷视频发评论</div>
-  </div>
-
-  <div class="card">
-    <h2>主人</h2>
-    <div class="row"><label>QQ 号</label><input type="text" id="owner_qq" placeholder="3082864371"></div>
-    <div class="row"><label>B站 mid</label><input type="text" id="owner_mid" placeholder="B站数字 UID"></div>
-    <div class="row"><label>称呼</label><input type="text" id="owner_name" placeholder="B站昵称 / 她怎么叫你"></div>
-    <div class="row"><label>微信 wxid</label><input type="text" id="owner_wechat" placeholder="（可选）主人微信 wxid"></div>
-    <div class="hint">QQ 号填上后，她就能认出「这个人是我主人」，对网友则保持距离、不泄隐私</div>
-  </div>
-
-  <div class="card">
-    <h2>音色（QQ / 微信语音）</h2>
-    <div class="row">
-      <label>音色</label>
-      <select id="voice_sel"></select>
-      <button id="voice_test">试听</button>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <!-- Lucide fish -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/>
+          <path d="M18 12v.5"/>
+          <path d="M16 17.93a9.77 9.77 0 0 1 0-11.86"/>
+          <path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/>
+          <path d="M9.5 12h.01"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">大肥鱼</div>
+        <div class="brand-sub">SETTINGS</div>
+      </div>
     </div>
-    <div class="row"><label>语音概率</label>
-      <input type="number" id="voice_chance" min="0" max="1" step="0.05" style="width:100px">
-      <span class="hint" style="margin:0">0~1，QQ 每条回复走语音的概率（如 0.5 = 一半）</span>
-    </div>
-    <div class="hint" id="voice_hint"></div>
-  </div>
 
-  <div class="card">
-    <h2>作息与限额（B站 / 抖音定时）</h2>
-    <div class="row">
-      <label>醒来窗口</label>
-      <input type="text" id="night_start" placeholder="20:00" style="width:90px">
-      <span>→</span>
-      <input type="text" id="night_end" placeholder="24:00" style="width:90px">
-      <label style="min-width:auto">次数</label>
-      <input type="number" id="night_wakes" min="1" max="5" style="width:70px">
-    </div>
-    <div class="row">
-      <label>每天分享上限</label>
-      <input type="number" id="share_daily" min="0" max="10" style="width:90px">
-      <label style="min-width:auto">抖音每次条数</label>
-      <input type="number" id="douyin_count" min="1" max="5" style="width:90px">
-    </div>
-    <div class="hint">窗口内随机挑一个时间醒来（拟人，不整点）；抖音和 B站共用这个窗口</div>
-  </div>
+    <nav class="nav" aria-label="设置分区">
+      <a href="#overview" data-nav="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+        概览
+      </a>
+      <a href="#platforms" data-nav="platforms">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+        平台
+      </a>
+      <a href="#owner" data-nav="owner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        主人
+      </a>
+      <a href="#voice" data-nav="voice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
+        音色
+      </a>
+      <a href="#rhythm" data-nav="rhythm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        作息与限额
+      </a>
+      <a href="#persona" data-nav="persona">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+        角色设定
+      </a>
+      <a href="#memory" data-nav="memory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+        记忆库
+      </a>
+    </nav>
 
-  <div class="card">
-    <h2>角色设定（她的人格 / 自我迭代的记忆）</h2>
-    <textarea id="persona" placeholder="写下她是谁、怎么说话、在意什么……她每次醒来都会读这份设定"></textarea>
-    <div class="row" style="margin-top:10px">
-      <button class="primary" id="save_persona">保存角色设定</button>
-      <span class="hint" style="margin:0">这是她「自我迭代」的基础：你改她的设定，她会照新的活</span>
+    <div class="rail-foot">
+      <div class="sync" id="sync"><i></i><span id="syncText">即时保存已就绪</span></div>
+      <code id="cfgpath">bot.config.json</code>
     </div>
-  </div>
+  </aside>
 
-  <div class="card">
-    <h2>记忆库</h2>
-    <div class="row" style="margin-top:0">
-      <button id="refresh_mem">刷新</button>
-      <span class="hint" style="margin:0" id="mem_stats"></span>
+  <main>
+    <div class="col">
+      <header class="head">
+        <div>
+          <h1>设置</h1>
+          <p class="lede">改动即时写入配置文件，下一次唤醒或重启 DSH 生效。</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn" id="reload" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            重新读取
+          </button>
+        </div>
+      </header>
+
+      <div id="fatal" hidden></div>
+
+      <!-- 概览 -->
+      <section class="block" id="overview">
+        <div class="block-head">
+          <h2>概览</h2>
+          <p class="block-note" id="overviewNote">—</p>
+        </div>
+        <div class="readouts" id="readouts">
+          <div class="readout"><div class="readout-k">调度器</div><div class="readout-v"><span class="dot"></span><span>读取中</span></div></div>
+          <div class="readout"><div class="readout-k">QQ 网关</div><div class="readout-v"><span class="dot"></span><span>读取中</span></div></div>
+          <div class="readout"><div class="readout-k">微信</div><div class="readout-v"><span class="dot"></span><span>读取中</span></div></div>
+          <div class="readout"><div class="readout-k">执行权限</div><div class="readout-v"><span class="dot"></span><span>读取中</span></div></div>
+        </div>
+      </section>
+
+      <!-- 平台 -->
+      <section class="block" id="platforms">
+        <div class="block-head">
+          <h2>平台</h2>
+          <p class="block-note">关掉即不启动</p>
+        </div>
+        <div class="plats" id="plats">
+          <div class="plat"><div><div class="plat-name">读取中…</div></div></div>
+        </div>
+        <p class="help" style="margin-top:12px">QQ / 微信是常驻聊天服务，B站 / 抖音是定时刷。改动后重启 DSH 完全生效。</p>
+      </section>
+
+      <!-- 主人 -->
+      <section class="block" id="owner">
+        <div class="block-head">
+          <h2>主人</h2>
+          <p class="block-note">认出你，对网友保持距离</p>
+        </div>
+        <div class="field">
+          <label for="owner_qq">QQ 号</label>
+          <div class="control">
+            <input type="text" id="owner_qq" placeholder="3682285116" autocomplete="off" spellcheck="false" inputmode="numeric">
+          </div>
+        </div>
+        <div class="field">
+          <label for="owner_mid">B站 mid</label>
+          <div class="control">
+            <input type="text" id="owner_mid" placeholder="B站数字 UID" autocomplete="off" spellcheck="false" inputmode="numeric">
+          </div>
+        </div>
+        <div class="field">
+          <label for="owner_name">称呼</label>
+          <div class="control">
+            <input type="text" id="owner_name" placeholder="她怎么叫你" autocomplete="off">
+          </div>
+        </div>
+        <div class="field">
+          <label for="owner_wechat">微信 wxid</label>
+          <div class="control">
+            <input type="text" id="owner_wechat" placeholder="可选" autocomplete="off" spellcheck="false">
+            <p class="help">填上微信 wxid 后，微信通道也认得出你。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 音色 -->
+      <section class="block" id="voice">
+        <div class="block-head">
+          <h2>音色</h2>
+          <p class="block-note">QQ / 微信语音</p>
+        </div>
+        <div class="field">
+          <label for="voice_sel">音色模型</label>
+          <div class="control">
+            <div class="inline">
+              <select id="voice_sel" style="max-width:300px"></select>
+              <button class="btn" id="voice_test" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.7 6.6 8H3v8h3.6L11 19.3z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                试听
+              </button>
+            </div>
+            <p class="help" id="voice_hint">读取中…</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="voice_chance">语音概率</label>
+          <div class="control">
+            <div class="range-wrap">
+              <input type="range" id="voice_chance" min="0" max="1" step="0.01" value="0.15" aria-describedby="voice_chance_help">
+              <span class="range-val" id="voice_chance_val">15%</span>
+            </div>
+            <p class="help" id="voice_chance_help">每条回复走语音条的概率。0 = 只打字，1 = 全语音。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 作息与限额 -->
+      <section class="block" id="rhythm">
+        <div class="block-head">
+          <h2>作息与限额</h2>
+          <p class="block-note">B站 / 抖音共用</p>
+        </div>
+        <div class="field">
+          <span class="flabel">醒来窗口</span>
+          <div class="control">
+            <div class="inline">
+              <input type="text" class="time" id="night_start" placeholder="20:00" inputmode="numeric" autocomplete="off" aria-label="窗口开始时间">
+              <span class="arrow">→</span>
+              <input type="text" class="time" id="night_end" placeholder="24:00" inputmode="numeric" autocomplete="off" aria-label="窗口结束时间">
+              <span class="help" style="margin-left:4px">窗口内随机挑时刻醒，不整点</span>
+            </div>
+            <p class="help">结束写 <code>24:00</code> 表示到当天结束。</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="night_wakes">醒来次数</label>
+          <div class="control">
+            <div class="inline">
+              <div class="num"><input type="number" id="night_wakes" min="1" max="12" step="1"><span class="unit">次/天</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="share_daily">每天分享上限</label>
+          <div class="control">
+            <div class="inline">
+              <div class="num"><input type="number" id="share_daily" min="0" max="10" step="1"><span class="unit">次</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="night_maxvideos">每次看几条</label>
+          <div class="control">
+            <div class="inline">
+              <div class="num"><input type="number" id="night_maxvideos" min="1" max="20" step="1"><span class="unit">条</span></div>
+            </div>
+            <p class="help">一次醒来最多看几条视频（选题上限，不是必须看完）。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 角色设定 -->
+      <section class="block" id="persona">
+        <div class="block-head">
+          <h2>角色设定</h2>
+          <p class="block-note" id="personaNote">她没有自我迭代的底稿就照旧的活</p>
+        </div>
+        <div class="field">
+          <span class="flabel" id="persona_label">人格底稿</span>
+          <div class="control">
+            <textarea id="persona_text" aria-labelledby="persona_label" spellcheck="false" placeholder="写下她是谁、怎么说话、在意什么……她每次醒来都会读这份设定"></textarea>
+            <div class="inline" style="justify-content:space-between">
+              <div class="flags">
+                <span class="count help" id="personaCount">0 字</span>
+                <span class="flag" id="personaDirty" hidden>未保存</span>
+              </div>
+              <button class="btn primary" id="save_persona" type="button">保存角色设定</button>
+            </div>
+            <p class="help">保存时自动留一份当天的旧版到 <code>persona.history/</code>，写错可以找回。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 记忆库 -->
+      <section class="block" id="memory">
+        <div class="block-head">
+          <h2>记忆库</h2>
+          <button class="btn" id="refresh_mem" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            刷新
+          </button>
+        </div>
+        <div class="mem-stats" id="mem_stats"></div>
+        <div class="mem" id="mem_list">
+          <div class="mem-empty">读取中…</div>
+        </div>
+      </section>
     </div>
-    <div class="mem" id="mem_list"></div>
-  </div>
+  </main>
+</div>
 
-  <div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"><i></i><span></span></div>
 
 <script>
-// 2026-11-04：同 client.js —— 本页也可能挂在子路径（/deepseekharness/dsh_bot/），
-// 写死根路径会让整页所有请求 404。按当前页 URL 推前缀，只取 pathname 保持同源。
+// 2026-11-04：本页可能挂在子路径（/deepseekharness/dsh_bot/），写死根路径会把整页请求打到站点根 → 404。
+// 这段算法与 client.js 的同名推导必须保持一致；只取 pathname，保持同源。
 const API = (() => {
   try {
     const dir = new URL('.', location.href).pathname.replace(/\/+$/, '');
     return dir.replace(/\/dsh_bot$/, '') + '/dsh_bot/api';
   } catch { return '/dsh_bot/api'; }
 })();
-const $ = (id) => document.getElementById(id);
-let state = { config: {}, voices: [] };
 
+const $ = (id) => document.getElementById(id);
+const state = { config: {}, voices: [], configPath: '', personaSaved: '', status: null };
+
+/* ── 基础设施 ───────────────────────────────────────────────────────── */
+let toastTimer = 0;
 function toast(msg, isErr) {
   const t = $('toast');
-  t.textContent = msg;
-  t.className = 'toast show' + (isErr ? ' err' : '');
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.className = 'toast'; }, 2200);
+  t.querySelector('span').textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), isErr ? 3600 : 2200);
+}
+
+function sync(phase, text) {
+  const box = $('sync');
+  box.classList.toggle('busy', phase === 'busy');
+  box.classList.toggle('err', phase === 'err');
+  $('syncText').textContent = text || (phase === 'busy' ? '写入中…' : phase === 'err' ? '写入失败' : '即时保存已就绪');
 }
 
 async function api(path, opts) {
@@ -167,39 +645,129 @@ async function api(path, opts) {
   return j;
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/** 与宿主侧 /api/config 同语义的深合并：对象递归、数组整体替换。 */
+function deepMerge(base, over) {
+  const out = Object.assign({}, base && typeof base === 'object' && !Array.isArray(base) ? base : {});
+  for (const [k, v] of Object.entries(over || {})) {
+    out[k] = v && typeof v === 'object' && !Array.isArray(v) ? deepMerge(out[k], v) : v;
+  }
+  return out;
+}
+
+/** 写配置：成功后同步本地镜像（避免下一次 change 用旧值覆盖刚写的字段）。 */
+async function save(patch, msg) {
+  sync('busy');
+  try {
+    await api('/config', { method: 'POST', body: JSON.stringify(patch) });
+    state.config = deepMerge(state.config, patch);
+    sync('ok');
+    toast(msg || '已保存');
+    return true;
+  } catch (e) {
+    sync('err', '写入失败：' + e.message);
+    toast('保存失败：' + e.message, true);
+    return false;
+  }
+}
+
+/* ── 平台 ───────────────────────────────────────────────────────────── */
 const PLATFORMS = [
-  ['bilibili', 'B站', '定时养鱼：看视频写评论'],
-  ['qq', 'QQ', '常驻聊天 + 语音 + 说说'],
-  ['wechat', '微信', '私聊秒回（UI 自动化慢一点）'],
-  ['douyin', '抖音', '定时刷视频发评论'],
+  ['bilibili', 'B站', '定时养鱼：刷视频、写评论、发动态'],
+  ['qq', 'QQ', '常驻聊天 + 语音条 + 说说'],
+  ['wechat', '微信', '私聊秒回（UI 自动化，慢一点）'],
+  ['douyin', '抖音', '定时刷视频、发评论'],
 ];
 
 function renderPlatforms() {
-  const box = $('platforms');
+  const box = $('plats');
   box.innerHTML = '';
   const p = state.config.platforms || {};
   for (const [key, label, desc] of PLATFORMS) {
     const on = p[key] !== false;
-    const sw = document.createElement('label');
-    sw.className = 'sw';
-    sw.innerHTML = `<span>${label}<small>${desc}</small></span>
-      <span class="toggle"><input type="checkbox" data-p="${key}" ${on ? 'checked' : ''}><i></i></span>`;
-    box.appendChild(sw);
-  }
-  box.querySelectorAll('input[data-p]').forEach(el => {
-    el.addEventListener('change', async () => {
-      const key = el.dataset.p;
-      const next = Object.assign({}, state.config.platforms);
-      next[key] = el.checked;
-      try {
-        await api('/config', { method: 'POST', body: JSON.stringify({ platforms: next }) });
-        state.config.platforms = next;
-        toast(`${PLATFORMS.find(x => x[0] === key)[1]} 已${el.checked ? '开启' : '关闭'}（重启 DSH 完全生效）`);
-      } catch (e) { toast('保存失败：' + e.message, true); el.checked = !el.checked; }
+    const row = document.createElement('div');
+    row.className = 'plat';
+    row.innerHTML = `<div><div class="plat-name">${escapeHtml(label)}</div><div class="plat-desc">${escapeHtml(desc)}</div></div>
+      <button class="switch" type="button" role="switch" aria-checked="${on}" aria-label="${escapeHtml(label)}"></button>`;
+    const btn = row.querySelector('.switch');
+    btn.addEventListener('click', async () => {
+      const next = Object.assign({}, state.config.platforms, { [key]: !on });
+      // 双开关语义与 DSH 面板一致：platforms 决定服务起不起，qq/wechat.enabled 决定它起后认不认活。
+      // 只写 platforms 会出现「面板关了、服务照回消息」。
+      const patch = { platforms: next };
+      if (key === 'qq' || key === 'wechat') patch[key] = { enabled: !on };
+      btn.disabled = true;
+      const ok = await save(patch, `${label} 已${!on ? '开启' : '关闭'}（重启 DSH 完全生效）`);
+      btn.disabled = false;
+      if (ok) renderPlatforms();
     });
-  });
+    box.appendChild(row);
+  }
 }
 
+/* ── 概览读数 ───────────────────────────────────────────────────────── */
+const PRESENCE = { online: '在线', away: '暂离', busy: '忙碌', sleeping: '睡觉', offline: '离线' };
+
+function readout(label, dot, value, title) {
+  return `<div class="readout"><div class="readout-k">${escapeHtml(label)}</div>
+    <div class="readout-v"${title ? ` title="${escapeHtml(title)}"` : ''}><span class="dot ${dot}"></span><span>${escapeHtml(value)}</span></div></div>`;
+}
+
+function renderStatus() {
+  const s = state.status;
+  const box = $('readouts');
+  if (!s) {
+    box.innerHTML = readout('调度器', '', '—') + readout('QQ 网关', '', '—') + readout('微信', '', '—') + readout('执行权限', '', '—');
+    $('overviewNote').textContent = '状态读取失败';
+    return;
+  }
+  const sched = s.scheduler || {};
+  const nap = (s.qqChannel && s.qqChannel.napcat) || {};
+  const beat = s.wxBeat || null;
+  const age = beat && beat.ts ? Math.max(0, Math.round((Date.now() - Number(beat.ts)) / 1000)) : null;
+  const wxOk = age !== null && age <= 120;
+  const perm = s.permission || {};
+  const mood = s.mood || {};
+  const presence = s.presence || null;
+
+  box.innerHTML = [
+    readout('调度器', sched.ok ? 'ok' : 'bad', sched.ok ? '运行中' : '未启动', sched.reason || ''),
+    readout('QQ 网关', nap.ok ? 'ok' : 'bad',
+      nap.ok ? ('在线 · ' + (nap.host || '') + ':' + (nap.port || '')) : '离线',
+      nap.url || ''),
+    readout('微信', wxOk ? 'ok' : (age === null ? 'bad' : 'warn'),
+      age === null ? '无心跳' : (wxOk ? '心跳 ' + age + 's 前' : '心跳停 ' + age + 's'),
+      wxOk ? '' : '微信服务没跑或已卡住'),
+    readout('执行权限', perm.ok ? 'ok' : 'warn', perm.preset || '未知', perm.ok ? '' : '权限不足时记忆写入会静默失败'),
+    readout('心情', 'ok', String(mood.value != null ? mood.value : '—'), '0–100'),
+    readout('饥饿', (Number(mood.hunger) > 70 ? 'warn' : 'ok'), String(mood.hunger != null ? mood.hunger : '—'), '越高越想吃'),
+    readout('存在感', presence ? (presence.key === 'online' ? 'ok' : 'warn') : 'warn',
+      presence ? (PRESENCE[presence.key] || presence.key) : '—', presence ? (presence.why || '') : ''),
+    readout('今日互动', 'ok', '评论 ' + (s.commentsToday || 0) + ' · 分享 ' + (s.sharesToday || 0) + '/' + (s.sharesMax || 0)),
+    readout('干跑', s.dryRun ? 'warn' : 'ok', s.dryRun ? '开（不实际执行）' : '关'),
+    readout('DSH 契约', (s.contract && s.contract.ok) ? 'ok' : 'bad',
+      (s.contract && s.contract.summary) || '未检查',
+      (s.contract && s.contract.dsh && ('dsh ' + s.contract.dsh.version)) || ''),
+  ].join('');
+
+  const bits = [];
+  if (s.plan && s.plan.atText) bits.push('下次醒 ' + s.plan.atText);
+  else bits.push('暂无唤醒计划');
+  bits.push('体检' + (s.selftestPassed ? '通过' : '未通过'));
+  $('overviewNote').textContent = bits.join(' · ');
+}
+
+async function loadStatus() {
+  try {
+    state.status = await api('/status');
+  } catch { state.status = null; }
+  renderStatus();
+}
+
+/* ── 表单填充 ───────────────────────────────────────────────────────── */
 function fillForm() {
   const c = state.config;
   const o = c.owner || {};
@@ -209,139 +777,288 @@ function fillForm() {
   $('owner_wechat').value = o.wechat || '';
 
   const n = c.night || {};
-  const w = (n.windows && n.windows[0]) || { start: '20:00', end: '24:00', wakes: 1 };
+  const w = (n.windows && n.windows[0]) || {};
   $('night_start').value = w.start || '20:00';
   $('night_end').value = w.end || '24:00';
-  $('night_wakes').value = (w.wakes != null ? w.wakes : 1);
-  $('share_daily').value = (c.quota && c.quota.shareDaily != null) ? c.quota.shareDaily : 3;
-  $('douyin_count').value = (c.douyin && c.douyin.maxPerRun != null) ? c.douyin.maxPerRun : 2;
+  $('night_wakes').value = w.wakes != null ? w.wakes : 1;
+  $('share_daily').value = c.quota && c.quota.shareDaily != null ? c.quota.shareDaily : 3;
+  $('night_maxvideos').value = c.night && c.night.maxVideos != null ? c.night.maxVideos : 5;
 
-  $('voice_chance').value = (c.qq && c.qq.voice_chance != null) ? c.qq.voice_chance : 0.15;
-  const sel = $('voice_sel');
-  sel.innerHTML = '';
-  if (!state.voices.length) {
-    sel.innerHTML = '<option value="">（没找到音色模型）</option>';
-    $('voice_hint').textContent = '把 GPT-SoVITS 音色放到 D:/GPT-SoVITS/models/<名字>/ 下（含 .wav 参考音频 + .txt 参考文本）';
-  } else {
-    const cur = (c.voice && c.voice.ref_audio_path) || '';
-    for (const v of state.voices) {
-      const opt = document.createElement('option');
-      opt.value = v.ref_audio_path;
-      opt.textContent = v.name + (v.has_prompt ? '' : '（缺参考文本）');
-      if (cur && v.ref_audio_path === cur) opt.selected = true;
-      sel.appendChild(opt);
-    }
-    $('voice_hint').textContent = '选中音色会自动写入参考音频 + 参考文本；换音色后重启 DSH 生效';
-  }
+  const chance = c.qq && c.qq.voice_chance != null ? Number(c.qq.voice_chance) : 0.15;
+  $('voice_chance').value = chance;
+  paintRange(chance);
+  // qq.voice_enabled 是总闸：关着时概率滑杆调了也不会发语音条
+  const voiceGate = !(c.qq && c.qq.voice_enabled === false);
+  $('voice_chance').disabled = !voiceGate;
+  $('voice_chance_help').textContent = voiceGate
+    ? '每条回复走语音条的概率。0 = 只打字，1 = 全语音。'
+    : 'QQ 语音总闸（qq.voice_enabled）当前是关的，这条概率不生效。';
+
+  renderVoices();
   $('cfgpath').textContent = state.configPath || 'bot.config.json';
 }
 
-async function saveSection(patch, okMsg) {
-  try {
-    await api('/config', { method: 'POST', body: JSON.stringify(patch) });
-    state.config = Object.assign({}, state.config, patch);
-    toast(okMsg || '已保存');
-  } catch (e) { toast('保存失败：' + e.message, true); }
+function paintRange(v) {
+  const el = $('voice_chance');
+  el.style.setProperty('--fill', (Number(v) * 100).toFixed(0) + '%');
+  $('voice_chance_val').textContent = Math.round(Number(v) * 100) + '%';
 }
 
-function bind() {
-  $('owner_qq').addEventListener('change', () => saveSection({ owner: Object.assign({}, state.config.owner, { qq: $('owner_qq').value.trim() }) }));
-  $('owner_mid').addEventListener('change', () => saveSection({ owner: Object.assign({}, state.config.owner, { mid: $('owner_mid').value.trim() }) }));
-  $('owner_name').addEventListener('change', () => saveSection({ owner: Object.assign({}, state.config.owner, { name: $('owner_name').value.trim() }) }));
-  $('owner_wechat').addEventListener('change', () => saveSection({ owner: Object.assign({}, state.config.owner, { wechat: $('owner_wechat').value.trim() }) }));
+function renderVoices() {
+  const sel = $('voice_sel');
+  const cur = (state.config.voice && state.config.voice.ref_audio_path) || '';
+  const dir = (state.config.voice && state.config.voice.modelsDir) || '';
+  sel.innerHTML = '';
+  if (!state.voices.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '没找到音色模型';
+    sel.appendChild(opt);
+    $('voice_hint').innerHTML = '把音色放到 <code>' + escapeHtml(dir || '~/GPT-SoVITS/models') +
+      '</code> 下：每个音色一个目录，含一段参考音频 <code>.wav</code> 和同名 <code>.txt</code> 文本。';
+    $('voice_test').disabled = true;
+    return;
+  }
+  for (const v of state.voices) {
+    const opt = document.createElement('option');
+    opt.value = v.ref_audio_path;
+    opt.textContent = v.name + (v.has_prompt ? '' : ' · 缺参考文本');
+    if (cur && v.ref_audio_path === cur) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  $('voice_test').disabled = false;
+  const chosen = state.voices.find((v) => v.ref_audio_path === sel.value) || {};
+  $('voice_hint').innerHTML = chosen.has_prompt === false
+    ? '这个音色目录里没有 <code>.txt</code> 参考文本，GPT-SoVITS 合成会走默认文本。'
+    : '换音色会同时写入参考音频与参考文本，重启 DSH 生效。';
+}
 
+/* ── 保存绑定 ───────────────────────────────────────────────────────── */
+const TIME_RE = /^([01]?\d|2[0-3])\s*[:：]\s*[0-5]\d$|^24\s*[:：]\s*00$/;
+
+function bind() {
+  const bindText = (id, apply) => {
+    const el = $(id);
+    el.addEventListener('change', () => {
+      el.removeAttribute('aria-invalid');
+      save(apply(el.value.trim()));
+    });
+  };
+
+  bindText('owner_qq', (v) => ({ owner: { qq: v } }));
+  bindText('owner_mid', (v) => ({ owner: { mid: v } }));
+  bindText('owner_name', (v) => ({ owner: { name: v } }));
+  bindText('owner_wechat', (v) => ({ owner: { wechat: v } }));
+
+  // 作息：只改第一个窗口，别把多窗口配置换成单元素
+  const saveNight = () => {
+    const s = $('night_start'), e = $('night_end');
+    s.removeAttribute('aria-invalid'); e.removeAttribute('aria-invalid');
+    const start = s.value.trim() || '20:00';
+    const end = e.value.trim() || '24:00';
+    let bad = false;
+    if (!TIME_RE.test(start)) { s.setAttribute('aria-invalid', 'true'); bad = true; }
+    if (!TIME_RE.test(end)) { e.setAttribute('aria-invalid', 'true'); bad = true; }
+    if (bad) { toast('时间格式应为 20:00 或 24:00', true); return; }
+    const wakes = Math.max(1, Math.min(12, Number($('night_wakes').value) || 1));
+    const wins = ((state.config.night && Array.isArray(state.config.night.windows)) ? state.config.night.windows : []).slice();
+    wins[0] = Object.assign({}, wins[0] || {}, { start, end, wakes });
+    $('night_wakes').value = wakes;
+    save({ night: { windows: wins } }, `作息已保存：${start} → ${end}，醒 ${wakes} 次`);
+  };
   $('night_start').addEventListener('change', saveNight);
   $('night_end').addEventListener('change', saveNight);
   $('night_wakes').addEventListener('change', saveNight);
-  $('share_daily').addEventListener('change', () => saveSection({ quota: Object.assign({}, state.config.quota, { shareDaily: ($('share_daily').value.trim() === '' ? 3 : Math.max(0, Number($('share_daily').value) || 0)) }) }));
-  $('douyin_count').addEventListener('change', () => saveSection({ douyin: Object.assign({}, state.config.douyin, { maxPerRun: ($('douyin_count').value.trim() === '' ? 2 : Math.max(0, Number($('douyin_count').value) || 0)) }) }));
 
-  $('voice_chance').addEventListener('change', () => {
-    const qq = Object.assign({}, state.config.qq, { voice_chance: Number($('voice_chance').value) });
-    saveSection({ qq });
+  const clampSave = (id, min, max, fallback, build) => {
+    $(id).addEventListener('change', () => {
+      const raw = $(id).value.trim();
+      const n = raw === '' ? fallback : Math.max(min, Math.min(max, Number(raw) || 0));
+      $(id).value = n;
+      save(build(n));
+    });
+  };
+  clampSave('share_daily', 0, 10, 3, (n) => ({ quota: { shareDaily: n } }));
+  clampSave('night_maxvideos', 1, 20, 5, (n) => ({ night: { maxVideos: n } }));
+
+  $('voice_chance').addEventListener('input', (e) => paintRange(e.target.value));
+  $('voice_chance').addEventListener('change', (e) => {
+    const v = Math.max(0, Math.min(1, Number(e.target.value) || 0));
+    paintRange(v);
+    save({ qq: { voice_chance: v } }, '语音概率已保存：' + Math.round(v * 100) + '%');
   });
+
   $('voice_sel').addEventListener('change', () => {
-    const v = state.voices.find(x => x.ref_audio_path === $('voice_sel').value);
+    const v = state.voices.find((x) => x.ref_audio_path === $('voice_sel').value);
     if (!v) return;
     const voice = Object.assign({}, state.config.voice, {
       ref_audio_path: v.ref_audio_path,
       prompt_text: v.prompt_text || (state.config.voice && state.config.voice.prompt_text) || '',
     });
-    saveSection({ voice }, '音色已切换为「' + v.name + '」');
+    save({ voice }, '音色已切换为「' + v.name + '」').then((ok) => { if (ok) renderVoices(); });
   });
+
   $('voice_test').addEventListener('click', async () => {
-    const v = state.voices.find(x => x.ref_audio_path === $('voice_sel').value);
-    if (!v) return toast('先选一个音色', true);
+    const v = state.voices.find((x) => x.ref_audio_path === $('voice_sel').value);
+    if (!v) { toast('先选一个音色', true); return; }
+    const btn = $('voice_test');
+    btn.disabled = true;
     toast('合成中…');
     try {
       await api('/voice-test', { method: 'POST', body: JSON.stringify({ ref_audio_path: v.ref_audio_path, prompt_text: v.prompt_text }) });
       toast('已合成并发送到 QQ（看手机）');
-    } catch (e) { toast('试听失败：' + e.message, true); }
+    } catch (e) {
+      toast('试听失败：' + e.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  const ta = $('persona_text');
+  const syncPersonaState = () => {
+    $('personaCount').textContent = ta.value.length + ' 字';
+    const dirty = ta.value !== state.personaSaved;
+    $('personaDirty').hidden = !dirty;
+    $('save_persona').disabled = !dirty;
+    $('save_persona').textContent = dirty ? '保存角色设定' : '已保存';
+  };
+  ta.addEventListener('input', syncPersonaState);
+  ta.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      if (ta.value !== state.personaSaved) $('save_persona').click();
+    }
   });
 
   $('save_persona').addEventListener('click', async () => {
+    const btn = $('save_persona');
+    btn.disabled = true;
+    sync('busy');
     try {
-      await api('/persona', { method: 'POST', body: JSON.stringify({ text: $('persona').value }) });
-      toast('角色设定已保存');
-    } catch (e) { toast('保存失败：' + e.message, true); }
+      await api('/persona', { method: 'POST', body: JSON.stringify({ text: ta.value }) });
+      state.personaSaved = ta.value;
+      sync('ok');
+      toast('角色设定已保存，她下次醒来就照这个活');
+    } catch (e) {
+      sync('err', '写入失败：' + e.message);
+      toast('保存失败：' + e.message, true);
+    } finally {
+      btn.disabled = false;
+      syncPersonaState();
+    }
   });
 
   $('refresh_mem').addEventListener('click', loadMemory);
-}
+  $('reload').addEventListener('click', () => boot(true));
 
-function saveNight() {
-  const w = {
-    start: $('night_start').value.trim() || '20:00',
-    end: $('night_end').value.trim() || '24:00',
-    wakes: Math.max(1, Math.min(12, Number($('night_wakes').value) || 1)),
+  // 导航高亮：首屏所有段会同时相交，必须取文档序最靠前的那一段，
+  // 否则后到的回调把高亮盖到下一个分区上（实测首屏永远高亮「平台」）。
+  const links = Array.from(document.querySelectorAll('.nav a'));
+  const pairs = links
+    .map((a) => ({ a, el: document.querySelector(a.getAttribute('href')) }))
+    .filter((x) => x.el);
+  const visible = new Set();
+  const paint = () => {
+    const first = pairs.find((x) => visible.has(x.el)) || pairs[0];
+    for (const x of pairs) {
+      if (x === first) x.a.setAttribute('aria-current', 'true');
+      else x.a.removeAttribute('aria-current');
+    }
   };
-  // 只改第一个窗口，别把多窗口配置换成单元素
-  const wins = ((state.config.night && Array.isArray(state.config.night.windows)) ? state.config.night.windows : []).slice();
-  wins[0] = Object.assign({}, wins[0] || {}, w);
-  const night = Object.assign({}, state.config.night, { windows: wins });
-  saveSection({ night }, '作息已保存（' + w.start + '→' + w.end + '，' + w.wakes + ' 次）');
+  const io = new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      if (en.isIntersecting) visible.add(en.target);
+      else visible.delete(en.target);
+    }
+    paint();
+  }, { rootMargin: '-4% 0px -64% 0px', threshold: 0 });
+  for (const x of pairs) io.observe(x.el);
+  paint();
 }
 
+/* ── 记忆 ───────────────────────────────────────────────────────────── */
 async function loadMemory() {
+  const list = $('mem_list');
+  const stats = $('mem_stats');
   try {
     const j = await api('/memory');
-    $('mem_stats').textContent = `对话 ${j.stats.episodes} 条 · 世界设定 ${j.stats.lore} 条 · 主人事实 ${j.stats.facts} 条`;
-    const list = $('mem_list');
-    list.innerHTML = '';
-    for (const e of (j.recent || []).slice().reverse()) {
-      const div = document.createElement('div');
-      div.className = 'mem-item';
-      const who = e.role === 'assistant' ? '她' : '对方';
-      const plat = (e.chatId || '').split(':')[0] || e.platform || '';
-      div.innerHTML = `<b>${who}</b><span class="tag">${plat}</span> ${escapeHtml((e.text || '').slice(0, 90))}`;
-      list.appendChild(div);
+    const st = j.stats || {};
+    const by = st.byPlatform || {};
+    stats.innerHTML = [
+      ['对话', st.episodes || 0],
+      ['世界设定', st.lore || 0],
+      ['主人事实', st.facts || 0],
+    ].map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('')
+      + Object.keys(by).map((k) => `<span class="chip">${escapeHtml(k)} <b>${by[k]}</b></span>`).join('');
+
+    const rows = (j.recent || []).slice().reverse();
+    if (!rows.length) {
+      list.innerHTML = '<div class="mem-empty">还没有记忆。她第一次醒来、第一次跟你说话之后，这里会出现她记住的片段。</div>';
+      return;
     }
-    if (!list.children.length) list.innerHTML = '<div class="mem-item">还没有记忆 —— 她醒过之后会开始记</div>';
-  } catch (e) { toast('读记忆失败：' + e.message, true); }
+    list.innerHTML = rows.map((e) => {
+      const who = e.role === 'assistant' ? '她' : '对方';
+      const plat = String(e.chatId || '').split(':')[0] || e.platform || '';
+      return `<div class="mem-row"><div class="mem-who">${who}</div>
+        <div class="mem-body">${plat ? `<span class="mem-tag">${escapeHtml(plat)}</span>` : ''}${escapeHtml((e.text || '').slice(0, 160))}</div></div>`;
+    }).join('');
+  } catch (e) {
+    stats.innerHTML = '';
+    list.innerHTML = `<div class="mem-empty">读记忆失败：${escapeHtml(e.message)}<br>宿主可能刚重启，点「刷新」重试。</div>`;
+  }
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* ── 启动 ───────────────────────────────────────────────────────────── */
+function fatal(e) {
+  const box = $('fatal');
+  box.hidden = false;
+  box.className = 'fatal';
+  box.innerHTML = `<h3>载入失败：${escapeHtml(e.message)}</h3>
+    <p>确认插件已在 DSH 里加载（宿主半边 dsh_bot 活着），并且是从本机或可信反代访问。</p>
+    <button class="btn primary" type="button" id="fatalRetry">重试</button>`;
+  $('fatalRetry').addEventListener('click', () => boot(true));
 }
 
-async function boot() {
+async function boot(isReload) {
+  $('fatal').hidden = true;
+  if (!isReload) sync('busy', '读取配置…');
   try {
     const j = await api('/config');
     state.config = j.config || {};
     state.voices = j.voices || [];
-    state.configPath = j.configPath;
+    state.configPath = j.configPath || '';
+    $('cfgpath').textContent = state.configPath || 'bot.config.json';
     renderPlatforms();
     fillForm();
-    bind();
-    const p = await api('/persona').catch(() => ({ text: '' }));
-    $('persona').value = p.text || '';
-    loadMemory();
+    if (!isReload) bind();
+    sync('ok');
   } catch (e) {
-    document.body.insertAdjacentHTML('afterbegin',
-      `<div class="card" style="border-color:#a13b3b">加载失败：${escapeHtml(e.message)}<br>请确认插件已加载、且从本机访问。</div>`);
+    sync('err', '读取失败');
+    fatal(e);
+    return;
   }
+
+  const p = await api('/persona').catch(() => ({ text: '' }));
+  const ta = $('persona_text');
+  if (p.readError) toast('人格文件读取失败：' + p.readError, true);
+  ta.value = p.text || '';
+  state.personaSaved = ta.value;
+  $('personaCount').textContent = ta.value.length + ' 字';
+  $('personaDirty').hidden = true;
+  $('save_persona').disabled = true;
+  $('save_persona').textContent = p.exists ? '已保存' : '保存角色设定';
+  $('personaNote').textContent = p.exists
+    ? '改动下次醒来生效 · 旧版自动留档'
+    : '还没有人格文件，写下第一版';
+
+  loadStatus();
+  loadMemory();
+  // 状态里的心跳是"距今多少秒"，页开着时每 30 秒刷一次才不会说谎。
+  // 只注册一次：重载走 boot(true)，重复注册会累积计时器。
+  if (!state.ticker) state.ticker = setInterval(() => { if (!document.hidden) loadStatus(); }, 30000);
 }
-boot();
+
+boot(false);
 </script>
 </body>
 </html>
