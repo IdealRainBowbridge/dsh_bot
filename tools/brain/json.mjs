@@ -196,12 +196,28 @@ export function mutateJson(file, fallback, fn) {
     if (next === undefined) return cur
     return writeJsonAtomic(file, next)
   }
-  const g = acquireSameDirLock(file)
-  if (g.ok) {
-    try { return body() } finally { releaseSameDirLock(g.lock, g.token) }
+  // 2026-11-05 修缮：等锁失败不再立刻无锁裸写 —— 那是并发丢更新的最后一个洞
+  // （实测：10 进程并发 poke，约 20 次全套跑出现 1 次丢 0.3，正是超时降级撞的）。
+  // 改为退避重试 3 次（共多等 ~2.4s）；仍失败才降级并留下响亮的告警。
+  let whyLast = '?'
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const g = acquireSameDirLock(file)
+    if (g.ok) {
+      try { return body() } finally { releaseSameDirLock(g.lock, g.token) }
+    }
+    whyLast = g.why || '?'
+    if (attempt < 2) {
+      const until = Date.now() + 400 * (attempt + 1) + Math.floor(Math.random() * 200)
+      while (Date.now() < until) { /* spin：临界区毫秒级，短暂退避后通常就拿到了 */ }
+    }
   }
-  try { swallow(new Error('mutateJson 无锁降级：' + file + ' —— ' + g.why), 'json:mutateLock') } catch { /* ignore */ }
-  return body()
+  // 2026-11-05 二修：无锁降级**裸写**是并发丢更新的最后一个洞（atomic.mjs 里
+  // updateJson 的设计原则就是"拿不到锁不许盲写"，mutateJson 却一直违反它）。
+  // 实测：10 进程并发 poke，裸写降级路径隔几十次跑丢一整条 +0.3。
+  // 现在与 updateJson 对齐：重试耗尽 → 返回 null（调用方拿到 null 自己决定重试
+  // 或放弃），绝不越过锁去写。对情绪/状态类写入，"这次没加上"远好过"覆盖别人"。
+  try { swallow(new Error('mutateJson 放弃写入（重试3次仍拿不到锁，不再无锁降级）：' + file + ' —— ' + whyLast), 'json:mutateLock') } catch { /* ignore */ }
+  return null
 }
 
 /** 文件大小 / 行数（doctor 用）。 */
